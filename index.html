@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VetTooth - Odontograma Equino</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div class="mobile-app">
+        <!-- Header Mobile Limpo -->
+        <header class="mobile-header">
+            <div class="header-bar">
+                <button class="menu-btn">☰</button>
+                <div class="app-title">
+                    <span class="app-name">Vet Tooth</span>
+                    <div class="status-indicators">
+                        <span class="status-dot red"></span>
+                        <span class="status-dot yellow"></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Título da Seção -->
+        <div class="section-title">
+            <h1>Odontograma Equino</h1>
+        </div>
+
+        <!-- Navegação por Abas -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" data-tab="arcada-sup">Arcada Superior</button>
+            <button class="tab-btn" data-tab="arcada-inf">Arcada Inferior</button>
+            <button class="tab-btn" data-tab="dentes-inf">Dentes Inf. Fundo</button>
+        </div>
+
+        <!-- Área Principal do Odontograma -->
+        <div class="odontogram-container">
+            <div id="svg-display" class="svg-display"></div>
+        </div>
+
+        <!-- Paleta de Cores Simplificada -->
+        <div class="color-palette-mobile">
+            <div class="color-row">
+                <div class="color-option" data-color="#FF4757" title="Cárie Severa"></div>
+                <div class="color-option" data-color="#FF6B6B" title="Cárie Moderada"></div>
+                <div class="color-option" data-color="#FFA502" title="Inflamação"></div>
+                <div class="color-option" data-color="#FF7675" title="Gengivite"></div>
+            </div>
+            <div class="color-row">
+                <div class="color-option" data-color="#00D2D3" title="Tratamento Realizado"></div>
+                <div class="color-option" data-color="#0984E3" title="Tratamento Planejado"></div>
+                <div class="color-option" data-color="#6C5CE7" title="Medicação"></div>
+                <div class="color-option" data-color="#A29BFE" title="Observação"></div>
+            </div>
+            <div class="color-row">
+                <div class="color-option" data-color="#00B894" title="Saudável"></div>
+                <div class="color-option" data-color="#FDCB6E" title="Atenção"></div>
+                <div class="color-option" data-color="#E17055" title="Tártaro"></div>
+                <div class="color-option" data-color="#636E72" title="Ausente"></div>
+            </div>
+        </div>
+
+        <!-- Ferramentas -->
+        <div class="tools-mobile">
+            <button id="eraser-btn" class="tool-btn-mobile">🧽</button>
+            <button id="clear-btn" class="tool-btn-mobile">🗑️</button>
+            <div id="current-color" class="current-color-mobile"></div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-navigation">
+            <div class="nav-item active">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label">Início</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">👤</span>
+                <span class="nav-label">Pacientes</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Histórico</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">Ajustes</span>
+            </div>
+        </nav>
+
+        <!-- Botões de Ação Flutuantes -->
+        <div class="floating-actions">
+            <button id="pdf-btn" class="fab primary">📄</button>
+            <button id="save-btn" class="fab secondary">💾</button>
+        </div>
+
+        <!-- Modal para Dados do Paciente (oculto por padrão) -->
+        <div id="patient-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Dados do Paciente</h2>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="field-group">
+                        <label for="animal-name">Nome do Animal:</label>
+                        <input type="text" id="animal-name" placeholder="Digite o nome do animal">
+                    </div>
+                    <div class="field-group">
+                        <label for="animal-species">Espécie:</label>
+                        <select id="animal-species">
+                            <option value="">Selecione a espécie</option>
+                            <option value="Equino">Equino</option>
+                            <option value="Cão">Cão</option>
+                            <option value="Gato">Gato</option>
+                            <option value="Bovino">Bovino</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="owner-name">Proprietário:</label>
+                        <input type="text" id="owner-name" placeholder="Nome do proprietário">
+                    </div>
+                    <div class="field-group">
+                        <label for="exam-date">Data do Exame:</label>
+                        <input type="date" id="exam-date">
+                    </div>
+                    <div class="field-group">
+                        <label for="clinical-notes">Observações:</label>
+                        <textarea id="clinical-notes" placeholder="Observações clínicas..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-save">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,543 @@
+/* Reset e Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    line-height: 1.4;
+    overflow-x: hidden;
+}
+
+/* Container Principal Mobile */
+.mobile-app {
+    max-width: 414px;
+    margin: 0 auto;
+    background: #ffffff;
+    min-height: 100vh;
+    position: relative;
+    box-shadow: 0 0 30px rgba(0,0,0,0.1);
+}
+
+/* Header Mobile Limpo */
+.mobile-header {
+    background: #007AFF;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    padding-top: 50px; /* Espaço para status bar */
+}
+
+.menu-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    font-weight: 300;
+    cursor: pointer;
+}
+
+.app-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-name {
+    color: white;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+}
+
+.status-indicators {
+    display: flex;
+    gap: 4px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.red { background: #FF3B30; }
+.status-dot.yellow { background: #FFCC00; }
+
+/* Título da Seção */
+.section-title {
+    padding: 24px 20px 16px;
+    background: white;
+}
+
+.section-title h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1d1d1f;
+    letter-spacing: -0.6px;
+}
+
+/* Navegação por Abas */
+.tab-navigation {
+    display: flex;
+    background: white;
+    padding: 0 20px 16px;
+    gap: 8px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px 16px;
+    background: #f2f2f7;
+    border: none;
+    border-radius: 20px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #8e8e93;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+    background: #007AFF;
+    color: white;
+}
+
+/* Container do Odontograma */
+.odontogram-container {
+    background: white;
+    padding: 24px;
+    margin: 0 20px 20px;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    min-height: 300px;
+    border: 1px solid #f0f0f0;
+}
+
+.svg-display {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    border-radius: 16px;
+    min-height: 320px;
+    border: 1px solid #f5f5f5;
+}
+
+.svg-display svg {
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+}
+
+/* Paleta de Cores Mobile */
+.color-palette-mobile {
+    background: white;
+    margin: 0 20px 20px;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.color-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.color-row:last-child {
+    margin-bottom: 0;
+}
+
+.color-option {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.color-option[data-color="#FF4757"] { background: #FF4757; }
+.color-option[data-color="#FF6B6B"] { background: #FF6B6B; }
+.color-option[data-color="#FFA502"] { background: #FFA502; }
+.color-option[data-color="#FF7675"] { background: #FF7675; }
+.color-option[data-color="#00D2D3"] { background: #00D2D3; }
+.color-option[data-color="#0984E3"] { background: #0984E3; }
+.color-option[data-color="#6C5CE7"] { background: #6C5CE7; }
+.color-option[data-color="#A29BFE"] { background: #A29BFE; }
+.color-option[data-color="#00B894"] { background: #00B894; }
+.color-option[data-color="#FDCB6E"] { background: #FDCB6E; }
+.color-option[data-color="#E17055"] { background: #E17055; }
+.color-option[data-color="#636E72"] { background: #636E72; }
+
+.color-option:active {
+    transform: scale(0.95);
+}
+
+.color-option.selected {
+    border-color: #007AFF;
+    transform: scale(1.1);
+}
+
+/* Ferramentas Mobile */
+.tools-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    margin: 0 20px 20px;
+    padding: 16px 20px;
+    border-radius: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.tool-btn-mobile {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: none;
+    background: #f2f2f7;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tool-btn-mobile:active {
+    transform: scale(0.95);
+    background: #e5e5ea;
+}
+
+.current-color-mobile {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: 3px solid #e5e5ea;
+    background: #f2f2f7;
+}
+
+/* Bottom Navigation */
+.bottom-navigation {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 414px;
+    background: white;
+    border-top: 1px solid #e5e5ea;
+    display: flex;
+    padding: 8px 0 34px; /* Espaço para home indicator */
+    z-index: 100;
+}
+
+.nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.nav-item.active .nav-icon {
+    color: #007AFF;
+}
+
+.nav-item.active .nav-label {
+    color: #007AFF;
+}
+
+.nav-icon {
+    font-size: 24px;
+    margin-bottom: 2px;
+    color: #8e8e93;
+}
+
+.nav-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #8e8e93;
+    letter-spacing: -0.1px;
+}
+
+/* Botões Flutuantes */
+.floating-actions {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 90;
+}
+
+.fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    transition: all 0.2s ease;
+}
+
+.fab.primary {
+    background: #FF3B30;
+    color: white;
+}
+
+.fab.secondary {
+    background: #34C759;
+    color: white;
+}
+
+.fab:active {
+    transform: scale(0.95);
+}
+
+/* Loading animation */
+.loading {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 414px;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: white;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e5e5ea;
+}
+
+.modal-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #8e8e93;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.field-group {
+    margin-bottom: 20px;
+}
+
+.field-group label {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 8px;
+}
+
+.field-group input,
+.field-group select,
+.field-group textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e5e5ea;
+    border-radius: 12px;
+    font-size: 16px;
+    background: #fafafa;
+    transition: all 0.2s ease;
+}
+
+.field-group input:focus,
+.field-group select:focus,
+.field-group textarea:focus {
+    outline: none;
+    border-color: #007AFF;
+    background: white;
+}
+
+.field-group textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid #e5e5ea;
+}
+
+.btn-save {
+    width: 100%;
+    padding: 16px;
+    background: #007AFF;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-save:active {
+    transform: scale(0.98);
+    background: #0056CC;
+}
+
+/* Espaçamento para bottom navigation */
+.mobile-app {
+    padding-bottom: 100px;
+}
+
+/* Animações suaves */
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-content {
+    animation: slideUp 0.3s ease-out;
+}
+
+/* Success message */
+.success-message {
+    background: #48bb78;
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 10px 0;
+    text-align: center;
+    animation: slideIn 0.5s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Estados de Loading */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8e8e93;
+    font-size: 15px;
+}
+
+.loading::after {
+    content: '...';
+    animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Estilos para elementos pintáveis */
+.paintable {
+    transition: all 0.2s ease !important;
+    pointer-events: all !important;
+    cursor: pointer !important;
+}
+
+.paintable:hover {
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.3)) !important;
+}
+
+/* Garantir que SVGs capturem cliques em toda a área */
+#svg-display svg {
+    pointer-events: all;
+}
+
+#svg-display svg * {
+    pointer-events: all;
+}
+
+/* Indicador visual para modo borracha */
+.eraser-mode .paintable:hover {
+    filter: drop-shadow(0 0 5px rgba(255,0,0,0.5)) !important;
+}
+
+/* Animação de pintura */
+@keyframes paint-effect {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.painting {
+    animation: paint-effect 0.3s ease;
+}
