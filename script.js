@@ -1,7 +1,9 @@
 // Variáveis globais
 let currentColor = '#FF4757';
 let isEraserMode = false;
+let currentTool = 'paint'; // paint, pencil, arrow, circle, fill
 let paintedElements = new Map();
+let drawingElements = []; // Para armazenar elementos de desenho livre
 let currentTab = 'arcada-sup';
 
 // Mapeamento de abas para arquivos SVG
@@ -84,11 +86,12 @@ function setupTools() {
     if (eraserBtn) {
         eraserBtn.addEventListener('click', function() {
             isEraserMode = !isEraserMode;
+            currentTool = isEraserMode ? 'eraser' : 'paint';
             document.body.classList.toggle('eraser-mode', isEraserMode);
             
             // Remove seleção de cores quando ativa borracha
             if (isEraserMode) {
-                document.querySelectorAll('.color-option').forEach(opt => 
+                document.querySelectorAll('.color-option, .drawing-tool-btn').forEach(opt => 
                     opt.classList.remove('selected')
                 );
                 this.style.background = '#FF3B30';
@@ -98,6 +101,7 @@ function setupTools() {
                 this.style.color = '';
             }
             
+            updateCursor();
             console.log('Modo borracha:', isEraserMode);
         });
     }
@@ -108,6 +112,7 @@ function setupTools() {
         clearBtn.addEventListener('click', function() {
             if (confirm('Tem certeza que deseja limpar todas as pinturas?')) {
                 clearAllPaintings();
+                clearAllDrawings();
             }
         });
     }
@@ -127,6 +132,282 @@ function setupTools() {
             showPatientModal();
         });
     }
+    
+    // Inicializar ferramentas de desenho
+    initializeDrawingTools();
+}
+
+// Inicializar ferramentas de desenho
+function initializeDrawingTools() {
+    const drawingButtons = document.querySelectorAll('.drawing-tool-btn');
+    
+    drawingButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Remove active de todos os botões
+            document.querySelectorAll('.color-option, .drawing-tool-btn, .tool-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            
+            // Adiciona active ao botão clicado
+            this.classList.add('selected');
+            
+            // Atualiza ferramenta atual
+            currentTool = this.dataset.tool;
+            isEraserMode = false;
+            
+            // Atualiza cursor baseado na ferramenta
+            updateCursor();
+        });
+    });
+    
+    // Inicializar ferramenta de lápis
+    initializePencilTool();
+}
+
+// Atualizar cursor baseado na ferramenta
+function updateCursor() {
+    const svgDisplay = document.getElementById('svg-display');
+    if (!svgDisplay) return;
+    
+    svgDisplay.style.cursor = 'default';
+    
+    switch(currentTool) {
+        case 'paint':
+            svgDisplay.style.cursor = 'pointer';
+            break;
+        case 'eraser':
+            svgDisplay.style.cursor = 'crosshair';
+            break;
+        case 'pencil':
+            svgDisplay.style.cursor = 'crosshair';
+            break;
+        case 'arrow':
+            svgDisplay.style.cursor = 'crosshair';
+            break;
+        case 'circle':
+            svgDisplay.style.cursor = 'crosshair';
+            break;
+        case 'fill':
+            svgDisplay.style.cursor = 'pointer';
+            break;
+    }
+}
+
+// Implementar desenho livre (lápis)
+function initializePencilTool() {
+    const svgDisplay = document.getElementById('svg-display');
+    if (!svgDisplay) return;
+    
+    let isDrawing = false;
+    let currentPath = null;
+    let pathData = '';
+    
+    function startDrawing(e) {
+        if (currentTool !== 'pencil') return;
+        
+        isDrawing = true;
+        const svg = svgDisplay.querySelector('svg');
+        if (!svg) return;
+        
+        // Calcular coordenadas precisas do SVG
+        const rect = svg.getBoundingClientRect();
+        const scaleX = svg.viewBox.baseVal.width / rect.width;
+        const scaleY = svg.viewBox.baseVal.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
+        // Criar novo path
+        currentPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        currentPath.setAttribute('stroke', currentColor);
+        currentPath.setAttribute('stroke-width', '3');
+        currentPath.setAttribute('fill', 'none');
+        currentPath.setAttribute('stroke-linecap', 'round');
+        currentPath.setAttribute('stroke-linejoin', 'round');
+        currentPath.classList.add('drawing-element');
+        
+        pathData = `M ${x} ${y}`;
+        currentPath.setAttribute('d', pathData);
+        
+        svg.appendChild(currentPath);
+        drawingElements.push({
+            element: currentPath,
+            tab: currentTab,
+            type: 'pencil',
+            color: currentColor
+        });
+        
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    function draw(e) {
+        if (!isDrawing || currentTool !== 'pencil' || !currentPath) return;
+        
+        const svg = svgDisplay.querySelector('svg');
+        if (!svg) return;
+        
+        // Calcular coordenadas precisas do SVG
+        const rect = svg.getBoundingClientRect();
+        const scaleX = svg.viewBox.baseVal.width / rect.width;
+        const scaleY = svg.viewBox.baseVal.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
+        pathData += ` L ${x} ${y}`;
+        currentPath.setAttribute('d', pathData);
+        
+        e.preventDefault();
+    }
+    
+    function stopDrawing() {
+        if (isDrawing) {
+            isDrawing = false;
+            currentPath = null;
+            pathData = '';
+        }
+    }
+    
+    // Adicionar event listeners
+    svgDisplay.addEventListener('mousedown', startDrawing);
+    svgDisplay.addEventListener('mousemove', draw);
+    svgDisplay.addEventListener('mouseup', stopDrawing);
+    svgDisplay.addEventListener('mouseleave', stopDrawing);
+}
+
+// Implementar ferramenta de seta
+function addArrow(svg, x, y) {
+    // Converter coordenadas do browser para coordenadas do SVG
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    
+    // Calcular as coordenadas precisas do SVG
+    let svgX, svgY;
+    
+    if (viewBox.width > 0 && viewBox.height > 0) {
+        // Se há viewBox, usar escala baseada nele
+        const scaleX = viewBox.width / rect.width;
+        const scaleY = viewBox.height / rect.height;
+        svgX = viewBox.x + (x * scaleX);
+        svgY = viewBox.y + (y * scaleY);
+    } else {
+        // Se não há viewBox, usar coordenadas diretas
+        svgX = x;
+        svgY = y;
+    }
+    
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    arrow.classList.add('drawing-element');
+    
+    // Linha principal da seta
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', svgX);
+    line.setAttribute('y1', svgY);
+    line.setAttribute('x2', svgX + 30);
+    line.setAttribute('y2', svgY - 20);
+    line.setAttribute('stroke', currentColor);
+    line.setAttribute('stroke-width', '3');
+    line.setAttribute('marker-end', 'url(#arrowhead)');
+    
+    // Criar marcador de seta se não existir
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+        defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        svg.appendChild(defs);
+    }
+    
+    if (!svg.querySelector('#arrowhead')) {
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'arrowhead');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '7');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3.5');
+        marker.setAttribute('orient', 'auto');
+        
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+        polygon.setAttribute('fill', currentColor);
+        
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+    }
+    
+    arrow.appendChild(line);
+    svg.appendChild(arrow);
+    
+    drawingElements.push({
+        element: arrow,
+        tab: currentTab,
+        type: 'arrow',
+        color: currentColor
+    });
+}
+
+// Implementar ferramenta de círculo
+function addCircle(svg, x, y) {
+    // Converter coordenadas do browser para coordenadas do SVG
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    
+    // Calcular as coordenadas precisas do SVG
+    let svgX, svgY;
+    
+    if (viewBox.width > 0 && viewBox.height > 0) {
+        // Se há viewBox, usar escala baseada nele
+        const scaleX = viewBox.width / rect.width;
+        const scaleY = viewBox.height / rect.height;
+        svgX = viewBox.x + (x * scaleX);
+        svgY = viewBox.y + (y * scaleY);
+    } else {
+        // Se não há viewBox, usar coordenadas diretas
+        svgX = x;
+        svgY = y;
+    }
+    
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', svgX);
+    circle.setAttribute('cy', svgY);
+    circle.setAttribute('r', '15');
+    circle.setAttribute('stroke', currentColor);
+    circle.setAttribute('stroke-width', '3');
+    circle.setAttribute('fill', 'none');
+    circle.classList.add('drawing-element');
+    
+    svg.appendChild(circle);
+    drawingElements.push({
+        element: circle,
+        tab: currentTab,
+        type: 'circle',
+        color: currentColor
+    });
+}
+
+// Implementar ferramenta de preenchimento
+function fillArea(element) {
+    if (element && element.tagName) {
+        element.style.fill = currentColor;
+        element.setAttribute('data-filled', 'true');
+        element.setAttribute('data-fill-color', currentColor);
+    }
+}
+
+// Limpar todos os desenhos
+function clearAllDrawings() {
+    drawingElements.forEach(drawingData => {
+        if (drawingData.element && drawingData.element.parentNode) {
+            drawingData.element.parentNode.removeChild(drawingData.element);
+        }
+    });
+    drawingElements = [];
+    
+    // Limpar preenchimentos
+    document.querySelectorAll('[data-filled="true"]').forEach(element => {
+        element.style.fill = '';
+        element.removeAttribute('data-filled');
+        element.removeAttribute('data-fill-color');
+    });
 }
 
 function setupTabs() {
@@ -142,8 +423,7 @@ function setupTabs() {
             
             // Carrega SVG correspondente
             const tabName = this.dataset.tab;
-            currentTab = tabName;
-            loadSVG(tabName);
+            switchTab(tabName);
             
             console.log('Aba selecionada:', tabName);
         });
@@ -151,6 +431,93 @@ function setupTabs() {
     
     // Carregar SVG inicial
     loadSVG('arcada-sup');
+}
+
+// Função para trocar de aba
+function switchTab(tabName) {
+    console.log(`Trocando para aba: ${tabName}`);
+    
+    // Salvar estado da aba atual
+    saveTabState(currentTab);
+    
+    // Atualizar aba atual
+    currentTab = tabName;
+    
+    // Atualizar interface
+    updateTabButtons();
+    loadSVG(tabName);
+    
+    // Restaurar estado da nova aba
+    setTimeout(() => {
+        restoreTabState(tabName);
+        restoreDrawingsForTab(tabName);
+    }, 100);
+}
+
+// Restaurar desenhos para uma aba específica
+function restoreDrawingsForTab(tabName) {
+    // Limpar desenhos atuais
+    document.querySelectorAll('.drawing-element').forEach(el => {
+        if (el.parentNode) {
+            el.parentNode.removeChild(el);
+        }
+    });
+    
+    // Restaurar desenhos da aba
+    const svg = document.querySelector('#svg-display svg');
+    if (svg) {
+        drawingElements.forEach(drawingData => {
+            if (drawingData.tab === tabName) {
+                // Recriar o elemento de desenho
+                const newElement = drawingData.element.cloneNode(true);
+                svg.appendChild(newElement);
+                
+                // Atualizar referência
+                drawingData.element = newElement;
+            }
+        });
+    }
+}
+
+// Salvar estado da aba (incluindo desenhos)
+function saveTabState(tabName) {
+    // Salvar pinturas
+    const tabPaintings = new Map();
+    paintedElements.forEach((data, elementId) => {
+        if (data.tab === tabName) {
+            tabPaintings.set(elementId, data);
+        }
+    });
+    
+    // Armazenar no localStorage ou variável global
+    if (typeof(Storage) !== "undefined") {
+        localStorage.setItem(`vettooth_tab_${tabName}`, JSON.stringify(Array.from(tabPaintings)));
+    }
+}
+
+// Atualizar botões das abas
+function updateTabButtons() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === currentTab);
+    });
+}
+
+// Restaurar estado da aba
+function restoreTabState(tabName) {
+    if (typeof(Storage) !== "undefined") {
+        const saved = localStorage.getItem(`vettooth_tab_${tabName}`);
+        if (saved) {
+            try {
+                const tabPaintings = JSON.parse(saved);
+                tabPaintings.forEach(([elementId, data]) => {
+                    paintedElements.set(elementId, data);
+                });
+            } catch (error) {
+                console.error('Erro ao restaurar estado da aba:', error);
+            }
+        }
+    }
 }
 
 function setupModal() {
@@ -275,7 +642,40 @@ function setupSVGInteraction() {
         });
     });
     
+    // Adicionar listener para cliques diretos no SVG (para ferramentas de desenho)
+    svg.addEventListener('click', function(e) {
+        // Só processar se não clicou em um elemento específico
+        if (e.target === svg || e.target.tagName === 'svg') {
+            handleSVGDirectClick(e, svg);
+        }
+    });
+    
     console.log(`${paintableCount} elementos pintáveis detectados`);
+}
+
+// Função para lidar com cliques diretos no SVG (área vazia)
+function handleSVGDirectClick(event, svg) {
+    const rect = svg.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    switch(currentTool) {
+        case 'arrow':
+            addArrow(svg, x, y);
+            break;
+        case 'circle':
+            addCircle(svg, x, y);
+            break;
+        case 'pencil':
+            // O lápis já é tratado pelos eventos de mouse
+            break;
+        case 'fill':
+            // Fill só funciona em elementos específicos
+            break;
+    }
+    
+    event.preventDefault();
+    event.stopPropagation();
 }
 
 function makePaintable(element) {
@@ -301,7 +701,32 @@ function makePaintable(element) {
 
     element.addEventListener('click', (e) => {
         e.stopPropagation();
-        paintElement(element);
+        
+        // Obter coordenadas do clique para ferramentas de desenho
+        const svg = element.closest('svg');
+        const rect = svg.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        switch(currentTool) {
+            case 'paint':
+            case 'eraser':
+            case 'fill':
+                paintElement(element);
+                break;
+                
+            case 'arrow':
+                addArrow(svg, x, y);
+                break;
+                
+            case 'circle':
+                addCircle(svg, x, y);
+                break;
+                
+            case 'pencil':
+                // O desenho livre é tratado pelos eventos de mouse
+                break;
+        }
     });
 
     element.addEventListener('mouseenter', () => {
@@ -318,7 +743,7 @@ function makePaintable(element) {
 function paintElement(element) {
     const elementId = getElementId(element);
     
-    if (isEraserMode) {
+    if (currentTool === 'eraser') {
         // Restaurar cor original
         const originalFill = element.dataset.originalFill || '#D9D9D9';
         const originalStroke = element.dataset.originalStroke || '';
@@ -331,7 +756,7 @@ function paintElement(element) {
         // Remover do mapa de elementos pintados
         paintedElements.delete(elementId);
         console.log(`Elemento ${elementId} despintado`);
-    } else {
+    } else if (currentTool === 'paint') {
         // Pintar com a cor atual
         element.setAttribute('fill', currentColor);
         
@@ -346,6 +771,9 @@ function paintElement(element) {
         });
         
         console.log(`Elemento ${elementId} pintado com ${currentColor}`);
+    } else if (currentTool === 'fill') {
+        // Preencher área
+        fillArea(element);
     }
     
     // Feedback visual
@@ -399,6 +827,9 @@ function restorePaintings(tabName) {
             }
         }
     });
+    
+    // Restaurar desenhos para esta aba
+    restoreDrawingsForTab(tabName);
 }
 function clearAllPaintings() {
     // Restaurar cor original de todos os elementos pintados
@@ -469,7 +900,61 @@ function getPatientData() {
     };
 }
 
-function generatePDF() {
+// Função para capturar o SVG editado como imagem
+function captureSVGAsImage() {
+    return new Promise((resolve, reject) => {
+        const svgDisplay = document.getElementById('svg-display');
+        const svg = svgDisplay?.querySelector('svg');
+        
+        if (!svg) {
+            resolve(null);
+            return;
+        }
+        
+        try {
+            // Clonar o SVG para não afetar o original
+            const svgClone = svg.cloneNode(true);
+            
+            // Garantir que o SVG tenha dimensões definidas
+            const rect = svg.getBoundingClientRect();
+            svgClone.setAttribute('width', rect.width);
+            svgClone.setAttribute('height', rect.height);
+            
+            // Converter SVG para string
+            const svgData = new XMLSerializer().serializeToString(svgClone);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            // Criar canvas para converter para imagem
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                // Converter para base64
+                const imageData = canvas.toDataURL('image/png');
+                URL.revokeObjectURL(svgUrl);
+                resolve(imageData);
+            };
+            
+            img.onerror = function() {
+                URL.revokeObjectURL(svgUrl);
+                reject(new Error('Erro ao carregar SVG como imagem'));
+            };
+            
+            img.src = svgUrl;
+            
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+async function generatePDF() {
     try {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -513,6 +998,29 @@ function generatePDF() {
             yPos += 6;
         });
         
+        // Capturar e incluir o odontograma editado
+        yPos += 15;
+        pdf.setFontSize(14);
+        pdf.setTextColor(44, 62, 80);
+        pdf.text('Odontograma Editado', 20, yPos);
+        
+        try {
+            const svgImage = await captureSVGAsImage();
+            if (svgImage) {
+                yPos += 10;
+                // Adicionar a imagem do odontograma (ajustar tamanho conforme necessário)
+                pdf.addImage(svgImage, 'PNG', 20, yPos, 170, 100);
+                yPos += 110;
+            }
+        } catch (error) {
+            console.warn('Não foi possível capturar o odontograma:', error);
+            yPos += 10;
+            pdf.setFontSize(10);
+            pdf.setTextColor(200, 0, 0);
+            pdf.text('Erro ao capturar imagem do odontograma', 20, yPos);
+            yPos += 10;
+        }
+        
         // Diagnósticos encontrados
         yPos += 10;
         pdf.setFontSize(14);
@@ -521,17 +1029,27 @@ function generatePDF() {
         
         yPos += 10;
         pdf.setFontSize(10);
+        pdf.setTextColor(0, 0, 0);
         
-        if (paintedElements.size === 0) {
-            pdf.text('Nenhum diagnóstico registrado.', 20, yPos);
+        if (paintedElements.size === 0 && drawingElements.length === 0) {
+            pdf.text('Nenhum diagnóstico ou anotação registrada.', 20, yPos);
             yPos += 6;
         } else {
-            const diagnoses = groupDiagnosesByType();
+            // Diagnósticos por pintura
+            if (paintedElements.size > 0) {
+                const diagnoses = groupDiagnosesByType();
+                Object.entries(diagnoses).forEach(([diagnosis, count]) => {
+                    pdf.text(`• ${diagnosis}: ${count} dente(s)`, 20, yPos);
+                    yPos += 6;
+                });
+            }
             
-            Object.entries(diagnoses).forEach(([diagnosis, count]) => {
-                pdf.text(`• ${diagnosis}: ${count} dente(s)`, 20, yPos);
+            // Anotações de desenho
+            if (drawingElements.length > 0) {
+                yPos += 5;
+                pdf.text(`• Anotações de desenho: ${drawingElements.length} elemento(s)`, 20, yPos);
                 yPos += 6;
-            });
+            }
         }
         
         // Observações clínicas
@@ -570,7 +1088,7 @@ function generatePDF() {
         const fileName = `Odontograma_${patientData.animalName || 'Animal'}_${new Date().toISOString().split('T')[0]}.pdf`;
         pdf.save(fileName);
         
-        console.log('PDF gerado com sucesso!');
+        console.log('PDF gerado com sucesso com odontograma editado!');
         
     } catch (error) {
         console.error('Erro ao gerar PDF:', error);
