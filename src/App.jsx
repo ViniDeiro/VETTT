@@ -2,6 +2,7 @@ import React, { useState, createContext, useContext } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Attendance from './pages/Attendance'
 import Clients from './pages/Clients'
 import Horses from './pages/Horses'
 import Veterinarians from './pages/Veterinarians'
@@ -50,41 +51,45 @@ function App() {
     <AuthContext.Provider value={authValue}>
       <div className="min-h-screen bg-gray-50">
         <Routes>
-          <Route 
-            path="/login" 
-            element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} 
+          <Route
+            path="/login"
+            element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />}
           />
-          <Route 
-            path="/dashboard" 
-            element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} 
+          <Route
+            path="/dashboard"
+            element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/clients" 
-            element={isAuthenticated ? <Clients /> : <Navigate to="/login" />} 
+          <Route
+            path="/attendance"
+            element={isAuthenticated ? <Attendance /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/horses" 
-            element={isAuthenticated ? <Horses /> : <Navigate to="/login" />} 
+          <Route
+            path="/clients"
+            element={isAuthenticated ? <Clients /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/veterinarians" 
-            element={isAuthenticated ? <Veterinarians /> : <Navigate to="/login" />} 
+          <Route
+            path="/horses"
+            element={isAuthenticated ? <Horses /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/create-graphic" 
-            element={isAuthenticated ? <CreateGraphic /> : <Navigate to="/login" />} 
+          <Route
+            path="/veterinarians"
+            element={isAuthenticated ? <Veterinarians /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/archived-graphics" 
-            element={isAuthenticated ? <ArchivedGraphics /> : <Navigate to="/login" />} 
+          <Route
+            path="/create-graphic"
+            element={isAuthenticated ? <CreateGraphic /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/settings" 
-            element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} 
+          <Route
+            path="/archived-graphics"
+            element={isAuthenticated ? <ArchivedGraphics /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/" 
-            element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} 
+          <Route
+            path="/settings"
+            element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/"
+            element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />}
           />
         </Routes>
       </div>

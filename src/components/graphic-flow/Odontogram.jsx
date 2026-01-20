@@ -32,6 +32,7 @@ export default function Odontogram({ data, onUpdate }) {
   const [currentView, setCurrentView] = useState('centro') // 'esquerda', 'centro', 'direita'
   const [currentColor, setCurrentColor] = useState('#000000')
   const [overlays, setOverlays] = useState([])
+  const [fractures, setFractures] = useState(data.odontogram?.fractures || {})
   const [history, setHistory] = useState([])
   const [incisorViewOpen, setIncisorViewOpen] = useState(false)
   const [incisorsMode, setIncisorsMode] = useState('smile')
@@ -41,6 +42,7 @@ export default function Odontogram({ data, onUpdate }) {
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const groupRef = useRef(null)
+  const pathBBoxRef = useRef({})
 
   // SVG mapping
   const svgMap = {
@@ -92,6 +94,64 @@ export default function Odontogram({ data, onUpdate }) {
 
     const paintTools = new Set(['fill', ...tools.map(t => t.id)])
 
+    if (selectedTool === 'fracture') {
+      event.stopPropagation()
+      const key = `${currentView}_${pathId}`
+      const prevState = fractures[key]?.state || 0
+      const nextState = prevState === 0 ? 1 : prevState === 1 ? 2 : prevState === 2 ? 3 : 0
+      const clickedBox = pathBBoxRef.current[key]
+      let containerKey = key
+      if (clickedBox) {
+        const cx = clickedBox.x + clickedBox.width / 2
+        const cy = clickedBox.y + clickedBox.height / 2
+        let bestArea = 0
+        Object.entries(pathBBoxRef.current).forEach(([k, r]) => {
+          if (k.startsWith(`${currentView}_`)) {
+            const inside = cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height
+            const area = r.width * r.height
+            if (inside && area > bestArea) {
+              bestArea = area
+              containerKey = k
+            }
+          }
+        })
+      }
+      const containerBox = pathBBoxRef.current[containerKey]
+      const members = []
+      if (containerBox) {
+        Object.entries(pathBBoxRef.current).forEach(([k, r]) => {
+          if (k.startsWith(`${currentView}_`)) {
+            const fullyInside =
+              r.x >= containerBox.x &&
+              r.y >= containerBox.y &&
+              r.x + r.width <= containerBox.x + containerBox.width &&
+              r.y + r.height <= containerBox.y + containerBox.height
+            if (fullyInside) members.push(k)
+          }
+        })
+      }
+      let nextFractures
+      if (nextState === 0) {
+        nextFractures = { ...fractures }
+        delete nextFractures[containerKey]
+      } else {
+        nextFractures = {
+          ...fractures,
+          [containerKey]: {
+            state: nextState,
+            view: currentView,
+            timestamp: Date.now(),
+            container: containerKey,
+            members: members.length ? members : [key]
+          }
+        }
+      }
+      setFractures(nextFractures)
+      onUpdate({ odontogram: { markedTeeth, paintedTeeth, fractures: nextFractures, currentView } })
+      setHistory(prev => [...prev, { type: 'fracture_cycle', view: currentView, pathId, state: nextState }])
+      return
+    }
+
     if (selectedTool === 'eraser') {
       event.stopPropagation()
       const key = `${currentView}_${pathId}`
@@ -131,8 +191,9 @@ export default function Odontogram({ data, onUpdate }) {
     setMarkedTeeth({})
     setPaintedTeeth({})
     setOverlays([])
+    setFractures({})
     setHistory(prev => [...prev, { type: 'clear' }])
-    onUpdate({ odontogram: { markedTeeth: {}, paintedTeeth: {}, currentView } })
+    onUpdate({ odontogram: { markedTeeth: {}, paintedTeeth: {}, fractures: {}, currentView } })
   }
 
   const getConditionSummary = () => {
@@ -170,14 +231,80 @@ export default function Odontogram({ data, onUpdate }) {
 
     // Get all path elements
     const paths = svgElement.querySelectorAll('path')
+    const bboxMap = {}
+    Array.from(paths).forEach((p, i) => {
+      const b = p.getBBox()
+      bboxMap[`path_${i}`] = { x: b.x, y: b.y, width: b.width, height: b.height }
+    })
 
     // Convert to React elements with clickable areas
     const pathElements = []
+    pathElements.push(
+      <defs key="fracture_defs">
+        <filter id="fractureNoise" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" stitchTiles="stitch" />
+          <feDisplacementMap in="SourceGraphic" scale="2" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    )
 
     Array.from(paths).forEach((path, index) => {
       const pathId = `path_${index}`
       const paintedTooth = paintedTeeth[`${currentView}_${pathId}`]
       const pathData = path.getAttribute('d')
+      const key = `${currentView}_${pathId}`
+      let fracState
+      let ownerKey
+      Object.entries(fractures).forEach(([fk, fv]) => {
+        if (fv.view === currentView) {
+          if (fk === key || (fv.members && fv.members.includes(key))) {
+            fracState = fv.state
+            ownerKey = fk
+          }
+        }
+      })
+
+      let groupClipId
+      let bandId
+      if (fracState && ownerKey) {
+        const ownerIndex = ownerKey.split('_').pop()
+        const ownerBox = bboxMap[`path_${ownerIndex}`] || pathBBoxRef.current[ownerKey]
+        if (ownerBox) {
+          groupClipId = `gclip_${ownerKey}`.replace(/[^a-zA-Z0-9_]/g, '_')
+          const h = ownerBox.height
+          const y = ownerBox.y
+          const bandHpx = h * 0.06
+          const clipChildren = []
+          const bandChildren = []
+          if (fracState === 1) {
+            clipChildren.push(<rect key="c1" x={ownerBox.x} y={y + h * 0.35} width={ownerBox.width} height={h * 0.65} />)
+            bandChildren.push(<rect key="b1" x={ownerBox.x} y={y + h * 0.34} width={ownerBox.width} height={bandHpx} />)
+          } else if (fracState === 2) {
+            clipChildren.push(<rect key="c2" x={ownerBox.x} y={y + h * 0.35} width={ownerBox.width} height={h * 0.30} />)
+            bandChildren.push(<rect key="b2t" x={ownerBox.x} y={y + h * 0.34} width={ownerBox.width} height={bandHpx} />)
+            bandChildren.push(<rect key="b2b" x={ownerBox.x} y={y + h * 0.64} width={ownerBox.width} height={bandHpx} />)
+          } else if (fracState === 3) {
+            clipChildren.push(<rect key="c3t" x={ownerBox.x} y={y} width={ownerBox.width} height={h * 0.35} />)
+            clipChildren.push(<rect key="c3b" x={ownerBox.x} y={y + h * 0.65} width={ownerBox.width} height={h * 0.35} />)
+            bandChildren.push(<rect key="b3t" x={ownerBox.x} y={y + h * 0.34} width={ownerBox.width} height={bandHpx} />)
+            bandChildren.push(<rect key="b3b" x={ownerBox.x} y={y + h * 0.64} width={ownerBox.width} height={bandHpx} />)
+          } else if (fracState === 4) {
+            clipChildren.push(<rect key="c4" x={ownerBox.x} y={y} width={ownerBox.width} height={h * 0.65} />)
+            bandChildren.push(<rect key="b4" x={ownerBox.x} y={y + h * 0.64} width={ownerBox.width} height={bandHpx} />)
+          }
+          pathElements.push(
+            <clipPath id={groupClipId} clipPathUnits="userSpaceOnUse" key={`${groupClipId}_def`}>
+              {clipChildren}
+            </clipPath>
+          )
+          bandId = `band_${ownerKey}`.replace(/[^a-zA-Z0-9_]/g, '_')
+          pathElements.push(
+            <clipPath id={bandId} clipPathUnits="userSpaceOnUse" key={`${bandId}_def`}>
+              {bandChildren}
+            </clipPath>
+          )
+        }
+      }
 
       // Clickable invisible area (larger stroke width for better click detection)
       const paintToolsSet = new Set(['fill', ...tools.map(t => t.id), 'eraser'])
@@ -190,6 +317,7 @@ export default function Odontogram({ data, onUpdate }) {
           fill={paintedTooth ? paintedTooth.color : 'transparent'}
           style={{ cursor: paintToolsSet.has(selectedTool) ? 'pointer' : 'default' }}
           onClick={(e) => handlePathClick(e, pathId)}
+          clipPath={groupClipId ? `url(#${groupClipId})` : undefined}
         />
       )
 
@@ -202,8 +330,31 @@ export default function Odontogram({ data, onUpdate }) {
           strokeWidth={path.getAttribute('stroke-width') || '1'}
           fill={paintedTooth ? paintedTooth.color : 'none'}
           pointerEvents="none"
+          clipPath={groupClipId ? `url(#${groupClipId})` : undefined}
+          ref={(el) => {
+            if (el) {
+              const bbox = el.getBBox()
+              pathBBoxRef.current[key] = { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height }
+            }
+          }}
         />
       )
+
+      if (fracState && ownerKey === key && bandId) {
+        pathElements.push(
+          <path
+            key={`${pathId}_fractureStroke`}
+            d={pathData}
+            stroke="red"
+            strokeWidth={3}
+            fill="none"
+            pointerEvents="none"
+            clipPath={`url(#${bandId})`}
+            filter="url(#fractureNoise)"
+            style={{ opacity: 0.95 }}
+          />
+        )
+      }
     })
 
     const overlayEls = overlays.filter(o => o.view === currentView).map(o => {

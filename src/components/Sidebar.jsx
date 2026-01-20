@@ -2,34 +2,42 @@ import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/Button'
-import { 
-  Home, 
-  Users, 
-  Heart, 
-  UserCheck, 
-  FileText, 
-  Archive, 
-  Settings, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Users,
+  UserCircle,
+  Calendar,
+  Activity,
+  Stethoscope,
+  Package,
+  CreditCard,
+  FileBarChart,
+  Settings,
+  Bot,
+  Menu,
   X,
   LogOut
 } from 'lucide-react'
 import { useAuth } from '../App'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Clientes', href: '/clients', icon: Users },
-  { name: 'Cavalos', href: '/horses', icon: Heart },
-  { name: 'Veterinários', href: '/veterinarians', icon: UserCheck },
-  { name: 'Novo Gráfico', href: '/create-graphic', icon: FileText },
-  { name: 'Arquivados', href: '/archived-graphics', icon: Archive },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Atendimento', href: '/attendance', icon: Users }, // Changed from Pacientes to Atendimento
+  { name: 'Clientes', href: '/clients', icon: UserCircle },
+  { name: 'Agenda', href: '/agenda', icon: Calendar },
+  { name: 'Odontograma', href: '/create-graphic', icon: Activity },
+  { name: 'Tratamentos', href: '/treatments', icon: Stethoscope },
+  { name: 'Insumos', href: '/inventory', icon: Package },
+  { name: 'Finanças', href: '/finance', icon: CreditCard },
+  { name: 'Relatórios', href: '/reports', icon: FileBarChart },
   { name: 'Configurações', href: '/settings', icon: Settings },
+  { name: 'IA Assistente', href: '/ai-assistant', icon: Bot },
 ]
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const location = useLocation()
-  const { logout, user } = useAuth()
+  const { logout } = useAuth()
 
   const handleLogout = () => {
     logout()
@@ -51,7 +59,7 @@ export default function Sidebar() {
 
       {/* Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setIsOpen(false)}
         />
@@ -59,32 +67,26 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl border border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-[#0B2C4D] shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full text-white">
           {/* Logo */}
-          <div className="flex items-center justify-center h-16 px-4 border-b">
-            <h1 className="text-xl font-bold tracking-tight text-gray-900">Vet Tooth</h1>
-          </div>
-
-          {/* User info */}
-          <div className="p-4 border-b">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-100">
-                <span className="text-indigo-700 text-sm font-semibold">
-                  {user?.name?.charAt(0) || 'U'}
-                </span>
+          <div className="flex items-center h-20 px-6 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              {/* Simple Logo Placeholder */}
+              <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-[#0B2C4D] font-bold">
+                V
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs text-gray-600">{user?.email}</p>
+                <h1 className="text-xl font-bold tracking-tight">VETTOOTH</h1>
+                <p className="text-xs text-blue-300 font-medium tracking-wider">PRO</p>
               </div>
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-4 space-y-2">
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href
               return (
@@ -93,13 +95,13 @@ export default function Sidebar() {
                   to={item.href}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "flex items-center px-3 py-2 rounded-xl text-sm font-medium transition-colors",
+                    "flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                     isActive
-                      ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100"
-                      : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-white/10 text-white shadow-sm"
+                      : "text-blue-100 hover:bg-white/5 hover:text-white"
                   )}
                 >
-                  <item.icon className="mr-3 h-5 w-5" />
+                  <item.icon className={cn("mr-3 h-5 w-5", isActive ? "text-blue-300" : "text-blue-200")} />
                   {item.name}
                 </Link>
               )
@@ -107,10 +109,10 @@ export default function Sidebar() {
           </nav>
 
           {/* Logout button */}
-          <div className="p-4 border-t">
+          <div className="p-4 border-t border-white/10">
             <Button
               variant="ghost"
-              className="w-full justify-start rounded-xl text-gray-700 hover:bg-gray-100"
+              className="w-full justify-start rounded-lg text-blue-100 hover:bg-white/5 hover:text-white"
               onClick={handleLogout}
             >
               <LogOut className="mr-3 h-5 w-5" />
