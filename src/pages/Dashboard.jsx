@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -13,6 +14,8 @@ import {
 } from 'lucide-react'
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+
   const stats = [
     {
       title: 'Atendimentos hoje',
@@ -137,19 +140,31 @@ export default function Dashboard() {
               <CardContent className="p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Button className="h-14 text-lg bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-xl justify-start px-6">
+                  <Button 
+                    onClick={() => navigate('/clients')}
+                    className="h-14 text-lg bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-xl justify-start px-6"
+                  >
                     <Plus className="mr-3 h-6 w-6" />
                     Novo paciente
                   </Button>
-                  <Button className="h-14 text-lg bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-xl justify-start px-6">
+                  <Button 
+                    onClick={() => navigate('/attendance')}
+                    className="h-14 text-lg bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-xl justify-start px-6"
+                  >
                     <Activity className="mr-3 h-6 w-6" />
                     Abrir odontograma
                   </Button>
-                  <Button className="h-14 text-lg bg-teal-600 hover:bg-teal-700 text-white rounded-xl justify-start px-6">
+                  <Button 
+                    onClick={() => navigate('/finance/expenses')}
+                    className="h-14 text-lg bg-teal-600 hover:bg-teal-700 text-white rounded-xl justify-start px-6"
+                  >
                     <DollarSign className="mr-3 h-6 w-6" />
                     Registrar custo
                   </Button>
-                  <Button className="h-14 text-lg bg-teal-600 hover:bg-teal-700 text-white rounded-xl justify-start px-6">
+                  <Button 
+                    onClick={() => navigate('/inventory')}
+                    className="h-14 text-lg bg-teal-600 hover:bg-teal-700 text-white rounded-xl justify-start px-6"
+                  >
                     <Box className="mr-3 h-6 w-6" />
                     Entrada de insumo
                   </Button>

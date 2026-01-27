@@ -9,6 +9,13 @@ import Veterinarians from './pages/Veterinarians'
 import CreateGraphic from './pages/CreateGraphic'
 import ArchivedGraphics from './pages/ArchivedGraphics'
 import Settings from './pages/Settings'
+import OwnerCreate from './pages/OwnerCreate'
+import Agenda from './pages/Agenda'
+import Inventory from './pages/Inventory'
+import Finance from './pages/Finance'
+import FinanceRevenue from './pages/FinanceRevenue'
+import FinanceExpenses from './pages/FinanceExpenses'
+import FinanceReports from './pages/FinanceReports'
 
 // Authentication Context
 const AuthContext = createContext()
@@ -86,6 +93,34 @@ function App() {
           <Route
             path="/settings"
             element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/owners/new"
+            element={isAuthenticated ? <OwnerCreate /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/agenda"
+            element={isAuthenticated ? <Agenda /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/inventory"
+            element={isAuthenticated ? <Inventory /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/finance"
+            element={isAuthenticated ? <Finance /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/finance/revenue"
+            element={isAuthenticated ? <FinanceRevenue /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/finance/expenses"
+            element={isAuthenticated ? <FinanceExpenses /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/finance/reports"
+            element={isAuthenticated ? <FinanceReports /> : <Navigate to="/login" />}
           />
           <Route
             path="/"
