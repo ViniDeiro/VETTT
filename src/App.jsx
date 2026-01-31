@@ -1,5 +1,6 @@
-import React, { useState, createContext, useContext } from 'react'
+import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './modules/auth/AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Attendance from './pages/Attendance'
@@ -17,118 +18,60 @@ import FinanceRevenue from './pages/FinanceRevenue'
 import FinanceExpenses from './pages/FinanceExpenses'
 import FinanceReports from './pages/FinanceReports'
 
-// Authentication Context
-const AuthContext = createContext()
+// New Modules
+import { RegistrationWizard } from './modules/patients/RegistrationWizard'
+import { AttendancePage } from './modules/attendance/AttendancePage'
+import { InventoryList } from './modules/inventory/InventoryList'
+import { ReceivablesList } from './modules/finance/ReceivablesList'
 
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
+// Re-export useAuth for legacy components that might still reference App
+export { useAuth }
+
+function PrivateRoute({ children }) {
+  const { user } = useAuth()
+  return user ? children : <Navigate to="/login" />
+}
+
+function LoginWrapper() {
+  const { user } = useAuth()
+  return user ? <Navigate to="/dashboard" /> : <Login />
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState(null)
-
-  const login = (credentials) => {
-    // Mock authentication
-    if (credentials.email && credentials.password) {
-      setIsAuthenticated(true)
-      setUser({ email: credentials.email, name: 'Dr. Veterinário' })
-      return true
-    }
-    return false
-  }
-
-  const logout = () => {
-    setIsAuthenticated(false)
-    setUser(null)
-  }
-
-  const authValue = {
-    isAuthenticated,
-    user,
-    login,
-    logout
-  }
-
   return (
-    <AuthContext.Provider value={authValue}>
+    <AuthProvider>
       <div className="min-h-screen bg-gray-50">
         <Routes>
-          <Route
-            path="/login"
-            element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />}
-          />
-          <Route
-            path="/dashboard"
-            element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/attendance"
-            element={isAuthenticated ? <Attendance /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/clients"
-            element={isAuthenticated ? <Clients /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/horses"
-            element={isAuthenticated ? <Horses /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/veterinarians"
-            element={isAuthenticated ? <Veterinarians /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/create-graphic"
-            element={isAuthenticated ? <CreateGraphic /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/archived-graphics"
-            element={isAuthenticated ? <ArchivedGraphics /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/settings"
-            element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/owners/new"
-            element={isAuthenticated ? <OwnerCreate /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/agenda"
-            element={isAuthenticated ? <Agenda /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/inventory"
-            element={isAuthenticated ? <Inventory /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/finance"
-            element={isAuthenticated ? <Finance /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/finance/revenue"
-            element={isAuthenticated ? <FinanceRevenue /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/finance/expenses"
-            element={isAuthenticated ? <FinanceExpenses /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/finance/reports"
-            element={isAuthenticated ? <FinanceReports /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/"
-            element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />}
-          />
+          <Route path="/login" element={<LoginWrapper />} />
+          
+          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          
+          {/* New Routes */}
+          <Route path="/register" element={<PrivateRoute><RegistrationWizard /></PrivateRoute>} />
+          <Route path="/attendance-new" element={<PrivateRoute><AttendancePage /></PrivateRoute>} />
+          <Route path="/inventory-new" element={<PrivateRoute><InventoryList /></PrivateRoute>} />
+          <Route path="/finance-receivables" element={<PrivateRoute><ReceivablesList /></PrivateRoute>} />
+
+          {/* Legacy Routes */}
+          <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
+          <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
+          <Route path="/horses" element={<PrivateRoute><Horses /></PrivateRoute>} />
+          <Route path="/veterinarians" element={<PrivateRoute><Veterinarians /></PrivateRoute>} />
+          <Route path="/create-graphic" element={<PrivateRoute><CreateGraphic /></PrivateRoute>} />
+          <Route path="/archived-graphics" element={<PrivateRoute><ArchivedGraphics /></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/owners/new" element={<PrivateRoute><OwnerCreate /></PrivateRoute>} />
+          <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
+          <Route path="/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
+          <Route path="/finance" element={<PrivateRoute><Finance /></PrivateRoute>} />
+          <Route path="/finance/revenue" element={<PrivateRoute><FinanceRevenue /></PrivateRoute>} />
+          <Route path="/finance/expenses" element={<PrivateRoute><FinanceExpenses /></PrivateRoute>} />
+          <Route path="/finance/reports" element={<PrivateRoute><FinanceReports /></PrivateRoute>} />
+          
+          <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>
       </div>
-    </AuthContext.Provider>
+    </AuthProvider>
   )
 }
 

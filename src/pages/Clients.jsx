@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -9,94 +9,112 @@ import { Modal } from '../components/ui/Modal'
 import { Plus, Search } from 'lucide-react'
 import ClientDetailsSidebar from '../components/ClientDetailsSidebar'
 import { cn } from '@/lib/utils'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { mockDB } from '../services/mockDatabase'
+import { Autocomplete } from '../shared/Autocomplete'
 
 export default function Clients() {
-  const [clients] = useState([
-    {
-      id: 1,
-      name: 'Maria Silva',
-      cpf: '123.456.789-00',
-      email: 'maria@email.com',
-      phone: '(11) 98765-4321',
-      address: 'Rua das Flores, 123',
-      city: 'São Paulo, SP',
-      pets: [{ name: 'Rex', type: 'Cavalo' }, { name: 'Luna', type: 'Cavalo' }],
-      lastVisit: '15/10/2023',
-      status: 'active'
-    },
-    {
-      id: 2,
-      name: 'João Santos',
-      cpf: '987.654.321-11',
-      email: 'joao@email.com',
-      phone: '(21) 91234-5678',
-      address: 'Av. Principal, 456',
-      city: 'Rio de Janeiro, RJ',
-      pets: [{ name: 'Thor', type: 'Cavalo' }],
-      lastVisit: '12/10/2023',
-      status: 'active'
-    },
-    {
-      id: 3,
-      name: 'Ana Costa',
-      cpf: '456.789.123-22',
-      email: 'ana@email.com',
-      phone: '(31) 99876-5432',
-      address: 'Rua do Campo, 789',
-      city: 'Belo Horizonte, MG',
-      pets: [{ name: 'Bella', type: 'Cavalo' }, { name: 'Max', type: 'Cavalo' }],
-      lastVisit: '10/10/2023',
-      status: 'overdue' // Inadimplente
-    },
-    {
-      id: 4,
-      name: 'Carlos Oliveira',
-      cpf: '12.345.678/0001-90',
-      email: 'carlos@empresa.com',
-      phone: '(41) 3333-4444',
-      address: 'Av. Comercial, 1000',
-      city: 'Curitiba, PR',
-      pets: [{ name: 'Diversos', type: 'Haras' }],
-      lastVisit: '05/10/2023',
-      status: 'new'
-    },
-    {
-      id: 5,
-      name: 'Fernanda Lima',
-      cpf: '789.123.456-33',
-      email: 'fernanda@email.com',
-      phone: '(51) 99123-4567',
-      address: 'Rua da Paz, 50',
-      city: 'Porto Alegre, RS',
-      pets: [{ name: 'Nala', type: 'Cavalo' }],
-      lastVisit: '01/10/2023',
-      status: 'active'
-    }
-  ])
-
+  const navigate = useNavigate()
+  const location = useLocation()
+  
+  // Data State
+  const [clients, setClients] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
+  
+  // Filter State
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeFilter, setActiveFilter] = useState('all') // 'all', 'active', 'overdue', 'new'
+  const [activeFilter, setActiveFilter] = useState('all')
+
+  // Modals State
   const [openPatientModal, setOpenPatientModal] = useState(false)
   const [openOwnerModal, setOpenOwnerModal] = useState(false)
   const [openPropertyCreateModal, setOpenPropertyCreateModal] = useState(false)
-  const [openPropertyUpdateModal, setOpenPropertyUpdateModal] = useState(false)
+  
+  // Registration Form State (Inside Modal)
+  const [owners, setOwners] = useState([])
+  const [properties, setProperties] = useState([])
+  
+  const [selectedOwner, setSelectedOwner] = useState(null)
+  const [selectedProperty, setSelectedProperty] = useState(null)
+  
+  // --- Property Registration Logic ---
+  const [newProperty, setNewProperty] = useState({})
 
-  // Filter Logic
+  const handleCreateProperty = () => {
+    if (newProperty.name && newProperty.city && newProperty.state) {
+      const created = mockDB.createProperty({
+        ...newProperty,
+        address: newProperty.address || ''
+      })
+      setProperties([...properties, created])
+      alert('Propriedade cadastrada com sucesso!')
+      setOpenPropertyCreateModal(false)
+      setNewProperty({})
+    } else {
+      alert('Preencha Nome, Cidade e Estado.')
+    }
+  }
+
+  const [newPatient, setNewPatient] = useState({ species: 'Equine' })
+  const [useBirthDate, setUseBirthDate] = useState(true)
+  const [birthDateInput, setBirthDateInput] = useState('')
+
+  useEffect(() => {
+    // Load data
+    const ownersData = mockDB.getOwners()
+    setOwners(ownersData)
+    setClients(ownersData) // In this mock, clients list is owners list
+    setProperties(mockDB.getAllProperties()) // Updated method name
+
+    // Check query params for auto-open
+    const params = new URLSearchParams(location.search)
+    if (params.get('action') === 'new') {
+      setOpenPatientModal(true)
+    }
+  }, [location.search])
+
+  // --- Registration Logic ---
+  const handleCreatePatient = () => {
+    if (selectedOwner && newPatient.name) {
+       // Validate Equine Property
+       if (newPatient.species === 'Equine' && !selectedProperty) {
+         alert('Cavalos precisam de uma propriedade vinculada!')
+         return
+       }
+
+       let finalAge = Number(newPatient.age)
+       if (useBirthDate && birthDateInput) {
+           const birth = new Date(birthDateInput)
+           const now = new Date()
+           let age = now.getFullYear() - birth.getFullYear()
+           const m = now.getMonth() - birth.getMonth()
+           if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
+               age--
+           }
+           finalAge = age
+       }
+
+       mockDB.createPatient({
+         ...newPatient,
+         ownerId: selectedOwner.id,
+         propertyId: selectedProperty?.id,
+         age: finalAge,
+         birthDate: birthDateInput,
+         weight: Number(newPatient.weight)
+       })
+
+       alert('Paciente cadastrado com sucesso!')
+       setOpenPatientModal(false)
+       navigate('/attendance-new')
+    } else {
+      alert('Selecione um tutor e preencha o nome do paciente.')
+    }
+  }
+
+  // --- Filtering Logic ---
   const filteredClients = clients.filter(client => {
-    const matchesSearch =
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.cpf.includes(searchTerm) ||
-      client.city.toLowerCase().includes(searchTerm.toLowerCase())
-
+    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase())
     if (!matchesSearch) return false
-
-    if (activeFilter === 'all') return true
-    if (activeFilter === 'active') return client.status === 'active'
-    if (activeFilter === 'overdue') return client.status === 'overdue'
-    if (activeFilter === 'new') return client.status === 'new'
-
     return true
   })
 
@@ -117,201 +135,174 @@ export default function Clients() {
               Cadastro Paciente
             </Button>
             <Link to="/owners/new">
-              <Button
-                variant="outline"
-                className="rounded-full px-6"
-              >
+              <Button variant="outline" className="rounded-full px-6">
                 Novo Proprietário
               </Button>
             </Link>
-            <Button
-              variant="outline"
-              className="rounded-full px-6"
-              onClick={() => setOpenOwnerModal(true)}
-            >
+            <Button variant="outline" className="rounded-full px-6" onClick={() => setOpenOwnerModal(true)}>
               Alteração de proprietário
             </Button>
-            <Button
-              variant="outline"
-              className="rounded-full px-6"
-              onClick={() => setOpenPropertyCreateModal(true)}
-            >
+            <Button variant="outline" className="rounded-full px-6" onClick={() => setOpenPropertyCreateModal(true)}>
               Cadastro da propriedade
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full px-6"
-              onClick={() => setOpenPropertyUpdateModal(true)}
-            >
-              Alteração da propriedade
             </Button>
           </div>
         </div>
 
-        {/* Modais do fluxo de pacientes */}
+        {/* --- MODAL CADASTRO PACIENTE (REFACTORED) --- */}
         <Modal
           isOpen={openPatientModal}
           onClose={() => setOpenPatientModal(false)}
           title="Cadastro de Paciente"
-          className="max-w-2xl"
+          className="max-w-4xl" // Wider to fit everything
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="petName">Nome</Label>
-              <Input id="petName" placeholder="Ex.: Thor" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Left Column: Owner & Property Selection */}
+            <div className="space-y-4 border-r pr-4">
+                <h3 className="font-semibold text-gray-700">1. Vínculos</h3>
+                
+                <div>
+                    <Label>Proprietário (Tutor)</Label>
+                    <Autocomplete 
+                        options={owners.map(o => ({ id: o.id, label: o.name }))}
+                        onSelect={(opt) => {
+                            const o = owners.find(owner => owner.id === opt.id)
+                            setSelectedOwner(o || null)
+                        }}
+                        placeholder="Buscar tutor..."
+                        value={selectedOwner?.name}
+                    />
+                </div>
+
+                <div>
+                    <Label>Propriedade (Obrigatório para Equinos)</Label>
+                    <Autocomplete 
+                        options={properties.map(p => ({ id: p.id, label: `${p.name} - ${p.city}` }))}
+                        onSelect={(opt) => {
+                            const p = properties.find(prop => prop.id === opt.id)
+                            setSelectedProperty(p || null)
+                        }}
+                        placeholder="Buscar propriedade..."
+                        value={selectedProperty?.name}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Cães e Gatos herdam endereço do tutor se vazio.</p>
+                </div>
+
+                {selectedOwner && (
+                    <div className="bg-blue-50 p-3 rounded text-sm">
+                        <p><strong>Tutor:</strong> {selectedOwner.name}</p>
+                        <p><strong>Propriedade:</strong> {selectedProperty?.name || 'N/A'}</p>
+                    </div>
+                )}
             </div>
-            <div>
-              <Label htmlFor="species">Espécie</Label>
-              <Select id="species" defaultValue="Equino">
-                <option>Equino</option>
-                <option>Canino</option>
-                <option>Felino</option>
-                <option>Outros</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="breed">Raça</Label>
-              <Input id="breed" placeholder="Ex.: Mangalarga" />
-            </div>
-            <div>
-              <Label htmlFor="sex">Sexo</Label>
-              <Select id="sex">
-                <option>Macho</option>
-                <option>Fêmea</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="neutered">Castrado</Label>
-              <Select id="neutered">
-                <option>Sim</option>
-                <option>Não</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="birth">Nascimento</Label>
-              <Input id="birth" type="date" />
-            </div>
-            <div>
-              <Label htmlFor="age">Idade (anos)</Label>
-              <Input id="age" type="number" min="0" />
-            </div>
-            <div>
-              <Label htmlFor="weight">Peso (kg)</Label>
-              <Input id="weight" type="number" step="0.1" min="0" />
-            </div>
-            <div>
-              <Label htmlFor="coat">Pelagem</Label>
-              <Input id="coat" placeholder="Ex.: Alazão" />
-            </div>
-            <div>
-              <Label htmlFor="microchip">Microchip</Label>
-              <Input id="microchip" placeholder="Código do microchip" />
+
+            {/* Right Column: Patient Details */}
+            <div className="space-y-4">
+                <h3 className="font-semibold text-gray-700">2. Dados do Animal</h3>
+
+                <div>
+                  <Label htmlFor="petName">Nome</Label>
+                  <Input 
+                    id="petName" 
+                    placeholder="Ex.: Thor" 
+                    onChange={e => setNewPatient({...newPatient, name: e.target.value})}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                    <Label htmlFor="species">Espécie</Label>
+                    <Select 
+                        id="species" 
+                        defaultValue="Equino"
+                        onChange={e => setNewPatient({...newPatient, species: e.target.value})}
+                    >
+                        <option value="Equine">Equino</option>
+                        <option value="Canine">Canino</option>
+                        <option value="Feline">Felino</option>
+                        <option value="Bovine">Bovino</option>
+                    </Select>
+                    </div>
+                    <div>
+                    <Label htmlFor="sex">Sexo</Label>
+                    <Select id="sex" onChange={e => setNewPatient({...newPatient, gender: e.target.value})}>
+                        <option value="M">Macho</option>
+                        <option value="F">Fêmea</option>
+                    </Select>
+                    </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="breed">Raça</Label>
+                  <Input 
+                    id="breed" 
+                    placeholder="Ex.: Mangalarga" 
+                    onChange={e => setNewPatient({...newPatient, breed: e.target.value})}
+                  />
+                </div>
+
+                {/* Age Logic */}
+                <div className="bg-gray-50 p-3 rounded border">
+                    <div className="flex justify-between mb-2">
+                        <Label>Idade / Nascimento</Label>
+                        <div className="text-xs space-x-2">
+                            <span 
+                                className={`cursor-pointer ${useBirthDate ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                onClick={() => setUseBirthDate(true)}
+                            >
+                                Data
+                            </span>
+                            <span>|</span>
+                            <span 
+                                className={`cursor-pointer ${!useBirthDate ? 'text-blue-600 font-bold' : 'text-gray-400'}`}
+                                onClick={() => setUseBirthDate(false)}
+                            >
+                                Manual
+                            </span>
+                        </div>
+                    </div>
+                    {useBirthDate ? (
+                        <Input type="date" onChange={e => setBirthDateInput(e.target.value)} />
+                    ) : (
+                        <Input 
+                            type="number" 
+                            placeholder="Anos" 
+                            onChange={e => setNewPatient({...newPatient, age: Number(e.target.value)})}
+                        />
+                    )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="weight">Peso (kg)</Label>
+                        <Input 
+                            id="weight" 
+                            type="number" 
+                            onChange={e => setNewPatient({...newPatient, weight: Number(e.target.value)})}
+                        />
+                    </div>
+                    <div>
+                         <Label htmlFor="color">Pelagem</Label>
+                         <Input 
+                            id="color" 
+                            onChange={e => setNewPatient({...newPatient, color: e.target.value})}
+                        />
+                    </div>
+                </div>
             </div>
           </div>
-          <div className="mt-6 flex justify-end gap-2">
+          <div className="mt-6 flex justify-end gap-2 border-t pt-4">
             <Button variant="outline" onClick={() => setOpenPatientModal(false)}>Cancelar</Button>
-            <Button onClick={() => setOpenPatientModal(false)}>Salvar</Button>
+            <Button onClick={handleCreatePatient} className="bg-blue-600 text-white">Salvar e Atender</Button>
           </div>
         </Modal>
 
-        <Modal
-          isOpen={openOwnerModal}
-          onClose={() => setOpenOwnerModal(false)}
-          title="Alteração de Proprietário"
-          className="max-w-xl"
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="ownerName">Nome do Proprietário</Label>
-                <Input id="ownerName" defaultValue={selectedClient?.name || ''} />
-              </div>
-              <div>
-                <Label htmlFor="ownerCpf">CPF/CNPJ</Label>
-                <Input id="ownerCpf" defaultValue={selectedClient?.cpf || ''} />
-              </div>
-              <div>
-                <Label htmlFor="ownerBirth">Nascimento</Label>
-                <Input id="ownerBirth" type="date" />
-              </div>
-              <div>
-                <Label htmlFor="ownerPhone">Telefone</Label>
-                <Input id="ownerPhone" defaultValue={selectedClient?.phone || ''} />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="ownerAddress">Endereço</Label>
-              <Input id="ownerAddress" defaultValue={selectedClient ? `${selectedClient.address}, ${selectedClient.city}` : ''} />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpenOwnerModal(false)}>Cancelar</Button>
-            <Button onClick={() => setOpenOwnerModal(false)}>Salvar</Button>
-          </div>
+        {/* Other Modals (Placeholders for now) */}
+        <Modal isOpen={openOwnerModal} onClose={() => setOpenOwnerModal(false)} title="Alteração de Proprietário">
+            <p>Formulário de alteração...</p>
         </Modal>
-
-        <Modal
-          isOpen={openPropertyCreateModal}
-          onClose={() => setOpenPropertyCreateModal(false)}
-          title="Cadastro da Propriedade"
-          className="max-w-xl"
-        >
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="farmName">Nome da Propriedade</Label>
-              <Input id="farmName" placeholder="Ex.: Haras Boa Vista" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="farmCity">Cidade</Label>
-                <Input id="farmCity" />
-              </div>
-              <div>
-                <Label htmlFor="farmState">Estado</Label>
-                <Input id="farmState" />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="farmAddress">Endereço</Label>
-              <Input id="farmAddress" />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpenPropertyCreateModal(false)}>Cancelar</Button>
-            <Button onClick={() => setOpenPropertyCreateModal(false)}>Salvar</Button>
-          </div>
-        </Modal>
-
-        <Modal
-          isOpen={openPropertyUpdateModal}
-          onClose={() => setOpenPropertyUpdateModal(false)}
-          title="Alteração da Propriedade"
-          className="max-w-xl"
-        >
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="farmNameUpd">Nome da Propriedade</Label>
-              <Input id="farmNameUpd" placeholder="Ex.: Haras Boa Vista" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="farmCityUpd">Cidade</Label>
-                <Input id="farmCityUpd" />
-              </div>
-              <div>
-                <Label htmlFor="farmStateUpd">Estado</Label>
-                <Input id="farmStateUpd" />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="farmAddressUpd">Endereço</Label>
-              <Input id="farmAddressUpd" />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpenPropertyUpdateModal(false)}>Cancelar</Button>
-            <Button onClick={() => setOpenPropertyUpdateModal(false)}>Salvar</Button>
-          </div>
+        <Modal isOpen={openPropertyCreateModal} onClose={() => setOpenPropertyCreateModal(false)} title="Cadastro de Propriedade">
+            <p>Formulário de propriedade...</p>
         </Modal>
 
         {/* Filters and Search */}
@@ -325,30 +316,9 @@ export default function Clients() {
               className="pl-10 rounded-full border-gray-200"
             />
           </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
-            <FilterButton
-              label="Ativos"
-              active={activeFilter === 'active'}
-              onClick={() => setActiveFilter(activeFilter === 'active' ? 'all' : 'active')}
-              colorClass="bg-[#00BFA5] text-white"
-            />
-            <FilterButton
-              label="Inadimplentes"
-              active={activeFilter === 'overdue'}
-              onClick={() => setActiveFilter(activeFilter === 'overdue' ? 'all' : 'overdue')}
-              colorClass="bg-[#1E3A8A] text-white" // Using a dark blue from the image palette approx
-            />
-            <FilterButton
-              label="Novos"
-              active={activeFilter === 'new'}
-              onClick={() => setActiveFilter(activeFilter === 'new' ? 'all' : 'new')}
-              colorClass="bg-[#B2DFDB] text-[#00695C]"
-            />
-          </div>
         </div>
 
-        {/* Clients Table */}
+        {/* Clients Table (Simplified for Mock) */}
         <Card className="border-0 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -359,8 +329,6 @@ export default function Clients() {
                     <th className="p-4">CPF/CNPJ</th>
                     <th className="p-4">Telefone</th>
                     <th className="p-4">Cidade</th>
-                    <th className="p-4">Pets</th>
-                    <th className="p-4 pr-6">Último atendimento</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -374,50 +342,30 @@ export default function Clients() {
                       onClick={() => setSelectedClient(client)}
                     >
                       <td className="p-4 pl-6 font-medium text-gray-900">{client.name}</td>
-                      <td className="p-4">{client.cpf}</td>
+                      <td className="p-4">{client.document || '-'}</td>
                       <td className="p-4">{client.phone}</td>
-                      <td className="p-4">{client.city}</td>
-                      <td className="p-4">
-                        {client.pets.map(p => p.name).join(', ')}
-                      </td>
-                      <td className="p-4 pr-6">{client.lastVisit}</td>
+                      <td className="p-4">{client.address}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
-            {filteredClients.length === 0 && (
-              <div className="p-12 text-center text-gray-500">
-                Nenhum cliente encontrado com os filtros selecionados.
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Details Sidebar */}
-      <ClientDetailsSidebar
-        isOpen={!!selectedClient}
-        onClose={() => setSelectedClient(null)}
-        client={selectedClient}
-      />
-    </Layout>
-  )
-}
-
-function FilterButton({ label, active, onClick, colorClass }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap",
-        active
-          ? colorClass
-          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+      {selectedClient && (
+          <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-lg p-6 transform transition-transform z-50">
+              <div className="flex justify-between mb-4">
+                  <h2 className="font-bold text-xl">{selectedClient.name}</h2>
+                  <button onClick={() => setSelectedClient(null)}>X</button>
+              </div>
+              <p>Email: {selectedClient.email}</p>
+              <p>Telefone: {selectedClient.phone}</p>
+              <p>Endereço: {selectedClient.address}</p>
+          </div>
       )}
-    >
-      {label}
-    </button>
+    </Layout>
   )
 }

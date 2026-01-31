@@ -17,19 +17,20 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
-import { useAuth } from '../App'
+import { useAuth } from '../modules/auth/AuthContext'
 
 const navigation = [
   { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Pacientes', href: '/clients', icon: Users },
-  { name: 'Atendimento', href: '/attendance', icon: Stethoscope },
+  { name: 'Atendimento', href: '/attendance-new', icon: Stethoscope },
   { name: 'Agendamento', href: '/agenda', icon: Calendar },
-  { name: 'Estoque', href: '/inventory', icon: Package },
+  { name: 'Estoque', href: '/inventory-new', icon: Package },
   { 
     name: 'Financeiro', 
     href: '/finance', 
     icon: CreditCard,
     submenu: [
+      { name: 'A Receber', href: '/finance-receivables' },
       { name: 'Receitas', href: '/finance/revenue' },
       { name: 'Custos', href: '/finance/expenses' },
       { name: 'Relatórios', href: '/finance/reports' },
@@ -42,6 +43,7 @@ const navigation = [
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [financeOpen, setFinanceOpen] = useState(false)
+  const [patientsOpen, setPatientsOpen] = useState(false)
   const location = useLocation()
   const { logout } = useAuth()
 
@@ -97,10 +99,13 @@ export default function Sidebar() {
               const isActive = location.pathname === item.href || (item.submenu && location.pathname.startsWith(item.href))
               
               if (item.submenu) {
+                const isSubmenuOpen = item.name === 'Financeiro' ? financeOpen : patientsOpen;
+                const setSubmenuOpen = item.name === 'Financeiro' ? setFinanceOpen : setPatientsOpen;
+
                 return (
                   <div key={item.name}>
                     <button
-                      onClick={() => setFinanceOpen(!financeOpen)}
+                      onClick={() => setSubmenuOpen(!isSubmenuOpen)}
                       className={cn(
                         "w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
@@ -112,10 +117,10 @@ export default function Sidebar() {
                         <item.icon className={cn("mr-3 h-5 w-5", isActive ? "text-blue-300" : "text-blue-200")} />
                         {item.name}
                       </div>
-                      {financeOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      {isSubmenuOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     
-                    {financeOpen && (
+                    {isSubmenuOpen && (
                       <div className="ml-12 mt-1 space-y-1 border-l border-white/10 pl-2">
                         {item.submenu.map((subItem) => {
                            const isSubActive = location.pathname === subItem.href
