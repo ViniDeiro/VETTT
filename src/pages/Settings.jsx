@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -28,6 +28,18 @@ export default function Settings() {
     logo: null
   })
 
+  const [systemSettings, setSystemSettings] = useState({
+    theme: 'light',
+    dateFormat: 'dd/mm/yyyy',
+    currency: 'BRL',
+    language: 'pt-BR',
+    notifications: {
+      newAppointment: true,
+      pendingPayment: true,
+      autoBackup: false
+    }
+  })
+
   const [procedures, setProcedures] = useState([
     { id: 1, name: 'Limpeza Dental', cost: 150.00, duration: '30 min' },
     { id: 2, name: 'Extração Simples', cost: 200.00, duration: '45 min' },
@@ -55,12 +67,44 @@ export default function Settings() {
     }))
   }
 
+  useEffect(() => {
+    const saved = localStorage.getItem('vet_settings')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed.clinic) setClinicData(parsed.clinic)
+      if (parsed.system) setSystemSettings(parsed.system)
+    }
+    // Apply theme on load
+    const savedTheme = localStorage.getItem('vet_theme') || 'light'
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
   const handleSaveSettings = async () => {
     setIsSaving(true)
     // Simulate saving
     await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // Save to LocalStorage
+    localStorage.setItem('vet_settings', JSON.stringify({
+      clinic: clinicData,
+      system: systemSettings
+    }))
+    
+    // Apply Theme Immediately
+    if (systemSettings.theme === 'dark') {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('vet_theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('vet_theme', 'light')
+    }
+
     setIsSaving(false)
-    alert('Configurações salvas com sucesso!')
+    alert('Configurações salvas e aplicadas com sucesso!')
   }
 
   const addProcedure = () => {
@@ -262,24 +306,36 @@ export default function Settings() {
               <div>
                 <Label>Tema da Interface</Label>
                 <div className="mt-2 space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="theme" value="light" defaultChecked />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name="theme" 
+                        value="light" 
+                        checked={systemSettings.theme === 'light'}
+                        onChange={(e) => setSystemSettings(prev => ({ ...prev, theme: e.target.value }))}
+                    />
                     <span className="text-sm">Claro</span>
                   </label>
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="theme" value="dark" />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name="theme" 
+                        value="dark" 
+                        checked={systemSettings.theme === 'dark'}
+                        onChange={(e) => setSystemSettings(prev => ({ ...prev, theme: e.target.value }))}
+                    />
                     <span className="text-sm">Escuro</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="radio" name="theme" value="auto" />
-                    <span className="text-sm">Automático</span>
                   </label>
                 </div>
               </div>
 
               <div>
                 <Label>Formato de Data</Label>
-                <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground">
+                <select 
+                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
+                    value={systemSettings.dateFormat}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, dateFormat: e.target.value }))}
+                >
                   <option value="dd/mm/yyyy">DD/MM/AAAA</option>
                   <option value="mm/dd/yyyy">MM/DD/AAAA</option>
                   <option value="yyyy-mm-dd">AAAA-MM-DD</option>
@@ -288,7 +344,11 @@ export default function Settings() {
 
               <div>
                 <Label>Moeda</Label>
-                <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground">
+                <select 
+                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
+                    value={systemSettings.currency}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, currency: e.target.value }))}
+                >
                   <option value="BRL">Real Brasileiro (R$)</option>
                   <option value="USD">Dólar Americano ($)</option>
                   <option value="EUR">Euro (€)</option>
@@ -297,7 +357,11 @@ export default function Settings() {
 
               <div>
                 <Label>Idioma</Label>
-                <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground">
+                <select 
+                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
+                    value={systemSettings.language}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, language: e.target.value }))}
+                >
                   <option value="pt-BR">Português (Brasil)</option>
                   <option value="en-US">English (US)</option>
                   <option value="es-ES">Español</option>
@@ -306,16 +370,28 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>Notificações</Label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" defaultChecked />
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={systemSettings.notifications.newAppointment}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, newAppointment: e.target.checked } }))}
+                  />
                   <span className="text-sm">Notificar sobre novos agendamentos</span>
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" defaultChecked />
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={systemSettings.notifications.pendingPayment}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, pendingPayment: e.target.checked } }))}
+                  />
                   <span className="text-sm">Lembrar de pagamentos pendentes</span>
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" />
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={systemSettings.notifications.autoBackup}
+                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, autoBackup: e.target.checked } }))}
+                  />
                   <span className="text-sm">Backup automático diário</span>
                 </label>
               </div>

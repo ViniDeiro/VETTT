@@ -18,8 +18,10 @@ import {
   Heart,
   Wind,
   Search,
-  ArrowLeft
+  ArrowLeft,
+  Package
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { pdfService } from '../../services/pdfService';
 
 export const AttendancePage: React.FC = () => {
@@ -35,6 +37,7 @@ export const AttendancePage: React.FC = () => {
 
   // ... existing code ...
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   
   // State
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);

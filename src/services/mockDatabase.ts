@@ -29,6 +29,7 @@ class MockDatabaseService {
   private inventory: InventoryItem[] = [];
   private attendances: Attendance[] = [];
   private receivables: Receivable[] = [];
+  private appointments: any[] = [];
 
   constructor() {
     this.load();
@@ -52,6 +53,9 @@ class MockDatabaseService {
 
     const loadedReceivables = localStorage.getItem('vet_receivables');
     this.receivables = loadedReceivables ? JSON.parse(loadedReceivables) : [];
+
+    const loadedAppointments = localStorage.getItem('vet_appointments');
+    this.appointments = loadedAppointments ? JSON.parse(loadedAppointments) : [];
   }
 
   private save(key: string, data: any) {
@@ -88,8 +92,30 @@ class MockDatabaseService {
     return newPatient;
   }
 
+  // --- Appointments ---
+  getAppointments() {
+    return this.appointments;
+  }
+
+  createAppointment(appt: any) {
+    const newAppt = { ...appt, id: Math.random().toString(36).substr(2, 9) };
+    this.appointments.push(newAppt);
+    this.save('vet_appointments', this.appointments);
+    return newAppt;
+  }
+
+  updateAppointment(id: string, updates: any) {
+    const index = this.appointments.findIndex(a => a.id === id);
+    if (index !== -1) {
+      this.appointments[index] = { ...this.appointments[index], ...updates };
+      this.save('vet_appointments', this.appointments);
+      return this.appointments[index];
+    }
+    return null;
+  }
   // --- Inventory ---
   getInventory() { return this.inventory; }
+  
   updateStock(itemId: string, quantityChange: number) {
     const item = this.inventory.find(i => i.id === itemId);
     if (item) {

@@ -19,161 +19,15 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-// Helper para gerar datas relativas à semana atual
-const getCurrentWeekDate = (dayIndex, hour, duration = 1) => {
-  const now = new Date()
-  const currentDay = now.getDay() // 0 = Domingo
-  const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay
-  
-  const date = new Date(now)
-  date.setDate(now.getDate() + distanceToMonday + dayIndex)
-  date.setHours(hour, 0, 0, 0)
-  
-  const endDate = new Date(date)
-  endDate.setHours(hour + duration, 0, 0, 0)
-  
-  return { start: date.toISOString(), end: endDate.toISOString() }
-}
-
-// Gerar agendamentos dinâmicos para a semana atual
-const generateInitialAppointments = () => [
-  {
-    id: 1,
-    title: 'Belinha (Cavalo) - Profilaxia Dentária',
-    tutor: 'Ana Paula Costa',
-    tutorPhone: '(11) 98765-4321',
-    patient: 'Belinha',
-    patientDetails: 'Cavalo, Égua, 8 anos',
-    procedure: 'Profilaxia Dentária',
-    doctor: 'Dr. Silva',
-    room: 'Sala de Cirurgia 1',
-    ...getCurrentWeekDate(0, 10), // Segunda 10h
-    type: 'Equino',
-    status: 'confirmado',
-    notes: 'Paciente necessita de jejum de 12h.',
-    color: 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  },
-  {
-    id: 2,
-    title: 'Thor (Cão) - Extração de Dente',
-    tutor: 'Carlos Souza',
-    tutorPhone: '(11) 91234-5678',
-    patient: 'Thor',
-    patientDetails: 'Cão, Golden Retriever, 5 anos',
-    procedure: 'Extração de Dente Molar',
-    doctor: 'Dra. Santos',
-    room: 'Sala de Cirurgia 2',
-    ...getCurrentWeekDate(0, 12), // Segunda 12h
-    type: 'Canino',
-    status: 'confirmado',
-    notes: 'Paciente necessita de jejum de 12h.',
-    color: 'bg-[#00BFA5] border-[#00BFA5] text-white'
-  },
-  {
-    id: 3,
-    title: 'Mia (Gato) - Limpeza de Tártaro',
-    tutor: 'Fernanda Lima',
-    tutorPhone: '(11) 99876-5432',
-    patient: 'Mia',
-    patientDetails: 'Gato, Siamês, 3 anos',
-    procedure: 'Limpeza de Tártaro',
-    doctor: 'Dr. Silva',
-    room: 'Consultório 1',
-    ...getCurrentWeekDate(0, 15), // Segunda 15h
-    type: 'Felino',
-    status: 'pendente',
-    notes: 'Trazer exames anteriores.',
-    color: 'bg-[#60A5FA] border-[#60A5FA] text-white'
-  },
-  {
-    id: 4,
-    title: 'Belinha (Cavalo) - Profilaxia',
-    patient: 'Belinha',
-    type: 'Equino',
-    ...getCurrentWeekDate(1, 10), // Terça 10h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  },
-  {
-    id: 5,
-    title: 'Thor (Cão) - Extração',
-    patient: 'Thor',
-    type: 'Canino',
-    ...getCurrentWeekDate(1, 12), // Terça 12h
-    doctor: 'Dra. Santos',
-    color: 'bg-[#00BFA5] border-[#00BFA5] text-white'
-  },
-  {
-    id: 6,
-    title: 'Thor (Cão) - Extração',
-    patient: 'Thor',
-    type: 'Equino',
-    ...getCurrentWeekDate(2, 15, 1), // Quarta 15h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  },
-  {
-    id: 7,
-    title: 'Besta (Cão) - Extração',
-    patient: 'Besta',
-    type: 'Equino', 
-    ...getCurrentWeekDate(2, 10), // Quarta 10h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  },
-  {
-    id: 8,
-    title: 'Thor (Cão) - Extração',
-    patient: 'Thor',
-    type: 'Canino',
-    ...getCurrentWeekDate(2, 12), // Quarta 12h
-    doctor: 'Dra. Santos',
-    color: 'bg-[#00BFA5] border-[#00BFA5] text-white'
-  },
-  {
-    id: 9,
-    title: 'Belinha (Cavalo) - Profilaxia',
-    patient: 'Belinha',
-    type: 'Equino',
-    ...getCurrentWeekDate(3, 10), // Quinta 10h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  },
-  {
-    id: 10,
-    title: 'Thor (Cão) - Extração',
-    patient: 'Thor',
-    type: 'Canino',
-    ...getCurrentWeekDate(3, 12), // Quinta 12h
-    doctor: 'Dra. Santos',
-    color: 'bg-[#00BFA5] border-[#00BFA5] text-white'
-  },
-  {
-    id: 11,
-    title: 'Mia (Gato) - Limpeza',
-    patient: 'Mia',
-    type: 'Felino',
-    ...getCurrentWeekDate(4, 14), // Sexta 14h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#60A5FA] border-[#60A5FA] text-white'
-  },
-  {
-    id: 12,
-    title: 'Mia (Gato) - Limpeza',
-    patient: 'Mia',
-    type: 'Felino',
-    ...getCurrentWeekDate(4, 15), // Sexta 15h
-    doctor: 'Dr. Silva',
-    color: 'bg-[#60A5FA] border-[#60A5FA] text-white'
-  },
-]
+import { mockDB } from '../services/mockDatabase'
 
 export default function Agenda() {
   const [view, setView] = useState('Semana') // Hoje, Semana, Mês
-  const [selectedDate, setSelectedDate] = useState(new Date()) // Inicia com a data de hoje
-  const [appointments, setAppointments] = useState(generateInitialAppointments())
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [appointments, setAppointments] = useState([]) // Initialize empty, load from DB
   const [selectedAppointment, setSelectedAppointment] = useState(null)
+  
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [newAppointment, setNewAppointment] = useState({
     patient: '',
@@ -186,17 +40,50 @@ export default function Agenda() {
     notes: ''
   })
 
-  // Set default selected appointment on load
   useEffect(() => {
-    if (appointments.length > 0) {
-      setSelectedAppointment(appointments[0])
-    }
+    // Load from mockDB on mount
+    const loaded = mockDB.getAppointments()
+    setAppointments(loaded)
+    // Removed automatic selection of the first appointment
   }, [])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
     setNewAppointment(prev => ({ ...prev, [name]: value }))
   }
+
+  const handleConfirmAppointment = () => {
+    if (!selectedAppointment) return;
+    const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
+    if (updated) {
+        setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
+        setSelectedAppointment(updated);
+        alert('Agendamento confirmado com sucesso!');
+    }
+  };
+
+  const handleReschedule = () => {
+    if (!selectedAppointment) return;
+    const start = new Date(selectedAppointment.start);
+    const end = new Date(selectedAppointment.end);
+    
+    setNewAppointment({
+        patient: selectedAppointment.patient,
+        type: selectedAppointment.type,
+        doctor: selectedAppointment.doctor,
+        date: start.toISOString().split('T')[0],
+        startTime: start.toTimeString().substr(0, 5),
+        endTime: end.toTimeString().substr(0, 5),
+        procedure: selectedAppointment.procedure.split(' - ')[1] || selectedAppointment.procedure,
+        notes: selectedAppointment.notes
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSendMessage = () => {
+    if (!selectedAppointment) return;
+    alert(`Mensagem enviada para o tutor de ${selectedAppointment.patient}: "Olá, lembramos do seu agendamento para amanhã."`);
+  };
 
   const handleSaveAppointment = () => {
     if (!newAppointment.patient || !newAppointment.date || !newAppointment.startTime || !newAppointment.endTime) return
@@ -205,7 +92,6 @@ export default function Agenda() {
     const end = `${newAppointment.date}T${newAppointment.endTime}:00`
 
     const appointment = {
-      id: Math.max(...appointments.map(a => a.id), 0) + 1,
       title: `${newAppointment.patient} - ${newAppointment.procedure}`,
       patient: newAppointment.patient,
       type: newAppointment.type,
@@ -220,8 +106,11 @@ export default function Agenda() {
              'bg-[#60A5FA] border-[#60A5FA] text-white'
     }
 
-    setAppointments([...appointments, appointment])
+    const created = mockDB.createAppointment(appointment)
+    setAppointments([...appointments, created])
     setIsModalOpen(false)
+    
+    // Reset form
     setNewAppointment({
       patient: '',
       type: 'Canino',
@@ -399,7 +288,7 @@ export default function Agenda() {
         </div>
 
         {/* Coluna Central - Calendário */}
-        <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="flex-[3] flex flex-col bg-white rounded-xl shadow-sm overflow-hidden">
           {/* Header Calendário */}
           <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
@@ -434,9 +323,9 @@ export default function Agenda() {
 
           {/* Grid do Calendário */}
           <div className="flex-1 overflow-auto">
-            <div className="min-w-[800px]">
+            <div className="min-w-full">
               {/* Header Dias da Semana */}
-              <div className="grid grid-cols-8 border-b border-gray-100">
+              <div className="grid grid-cols-8 border-b border-gray-100 min-h-[50px]">
                 <div className="p-4 border-r border-gray-50"></div> {/* Coluna Hora */}
                 {daysOfWeek.map((day, index) => {
                   // Calcular a data exata da coluna para exibir (opcional, mas ajuda na orientação)
@@ -448,7 +337,7 @@ export default function Agenda() {
 
                   return (
                     <div key={day} className={cn(
-                      "p-4 text-center text-sm font-semibold border-r border-gray-50 last:border-r-0",
+                      "p-4 text-center text-sm font-semibold border-r border-gray-50 last:border-r-0 flex items-center justify-center",
                       isToday ? "text-[#00BFA5]" : "text-gray-700"
                     )}>
                       {day} <span className="text-xs font-normal ml-1">{date.getDate()}</span>
@@ -460,7 +349,7 @@ export default function Agenda() {
               {/* Linhas de Horário */}
               <div className="relative">
                 {hours.map(hour => (
-                  <div key={hour} className="grid grid-cols-8 h-24 border-b border-gray-50">
+                  <div key={hour} className="grid grid-cols-8 h-32 border-b border-gray-50">
                     <div className="p-2 text-xs text-gray-400 text-right border-r border-gray-50 relative -top-3">
                       {hour}:00
                     </div>
@@ -471,7 +360,31 @@ export default function Agenda() {
                           const aptDate = new Date(apt.start)
                           const aptHour = aptDate.getHours()
                           
-                          // Lógica de mapeamento dinâmico
+                          // --- FILTRAGEM ---
+                          
+                          // 1. Filtro de Espécie
+                          const speciesKey = apt.type.toLowerCase();
+                          if (filters.species[speciesKey] === false) return false;
+                          if (!['equino', 'canino', 'felino'].includes(speciesKey) && !filters.species.outros && !filters.species[speciesKey]) {
+                             // Lógica para 'outros' se não for um dos tipos padrão
+                             // Se type não for um dos chaves conhecidos, e 'outros' estiver off, filtra.
+                             // Simplificação: assumindo tipos mapeiam direto ou caem em outros.
+                             // Vamos assumir mapeamento direto por enquanto baseado no mock.
+                          }
+
+                          // 2. Filtro de Veterinário
+                          // Mock data doctor names: "Dr. Silva", "Dra. Santos"
+                          const docName = apt.doctor || '';
+                          if (docName.includes('Silva') && !filters.veterinarian.silva) return false;
+                          if (docName.includes('Santos') && !filters.veterinarian.santos) return false;
+                          
+                          // 3. Filtro de Status
+                          // Mock status: 'pendente', 'confirmado'
+                          const statusKey = apt.status?.toLowerCase() || 'pendente';
+                          if (filters.status[statusKey] === false) return false;
+
+
+                          // --- LÓGICA DE DATA/HORA ---
                           // Verifica se o agendamento pertence a esta semana e a este dia/hora
                           const currentDay = selectedDate.getDay() // 0-6
                           const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay
@@ -505,7 +418,7 @@ export default function Agenda() {
                             }}
                           >
                             <div className="font-bold truncate">{apt.type}</div>
-                            <div className="truncate font-medium">{apt.patient} ({apt.patientDetails?.split(',')[0]}) -</div>
+                            <div className="truncate font-medium">{apt.patient} ({apt.patientDetails?.split(',')[0] || ''}) -</div>
                             <div className="truncate">{apt.procedure}</div>
                             <div className="truncate opacity-90 mt-1">{apt.doctor}</div>
                           </div>
@@ -520,7 +433,7 @@ export default function Agenda() {
         </div>
 
         {/* Sidebar Direita - Detalhes */}
-        <div className="w-full lg:w-80 bg-white rounded-xl shadow-sm p-6 flex flex-col h-full overflow-y-auto">
+        <div className="hidden xl:flex w-80 bg-white rounded-xl shadow-sm p-6 flex-col h-full overflow-y-auto">
           <h2 className="text-xl font-bold text-gray-900 mb-6">Detalhes do Agendamento</h2>
           
           {selectedAppointment ? (
@@ -598,15 +511,24 @@ export default function Agenda() {
 
               {/* Botões de Ação */}
               <div className="space-y-3 mt-6 pt-6 border-t border-gray-100">
-                <Button className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base">
+                <Button 
+                    onClick={handleConfirmAppointment}
+                    className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
+                >
                   <CheckCircle className="mr-2 h-5 w-5" />
                   Confirmar
                 </Button>
-                <Button className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base">
+                <Button 
+                    onClick={handleReschedule}
+                    className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
+                >
                   <Clock className="mr-2 h-5 w-5" />
                   Reagendar
                 </Button>
-                <Button className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white rounded-full h-12 text-base">
+                <Button 
+                    onClick={handleSendMessage}
+                    className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white rounded-full h-12 text-base"
+                >
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Enviar mensagem
                 </Button>

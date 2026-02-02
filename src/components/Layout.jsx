@@ -9,7 +9,7 @@ export default function Layout({ children }) {
       <main className="flex-1 flex flex-col overflow-hidden lg:ml-0">
         <TopBar />
         <div className="flex-1 overflow-auto p-4 lg:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="max-w-[1920px] mx-auto space-y-6">
             {children}
           </div>
         </div>

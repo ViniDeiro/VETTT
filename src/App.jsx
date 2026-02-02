@@ -1,6 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './modules/auth/AuthContext'
+import ErrorBoundary from './components/system/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Attendance from './pages/Attendance'
@@ -19,7 +20,7 @@ import FinanceExpenses from './pages/FinanceExpenses'
 import FinanceReports from './pages/FinanceReports'
 
 // New Modules
-import { RegistrationWizard } from './modules/patients/RegistrationWizard'
+import { PatientWizard } from './modules/patients/PatientWizard'
 import { AttendancePage } from './modules/attendance/AttendancePage'
 import { InventoryList } from './modules/inventory/InventoryList'
 import { ReceivablesList } from './modules/finance/ReceivablesList'
@@ -39,39 +40,42 @@ function LoginWrapper() {
 
 function App() {
   return (
-    <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
-          <Route path="/login" element={<LoginWrapper />} />
-          
-          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          
-          {/* New Routes */}
-          <Route path="/register" element={<PrivateRoute><RegistrationWizard /></PrivateRoute>} />
-          <Route path="/attendance-new" element={<PrivateRoute><AttendancePage /></PrivateRoute>} />
-          <Route path="/inventory-new" element={<PrivateRoute><InventoryList /></PrivateRoute>} />
-          <Route path="/finance-receivables" element={<PrivateRoute><ReceivablesList /></PrivateRoute>} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route path="/login" element={<LoginWrapper />} />
+            
+            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            
+            {/* New Routes */}
+            <Route path="/register" element={<PrivateRoute><PatientWizard /></PrivateRoute>} />
+            <Route path="/attendance-new" element={<PrivateRoute><AttendancePage /></PrivateRoute>} />
+            <Route path="/inventory-new" element={<PrivateRoute><InventoryList /></PrivateRoute>} />
+            <Route path="/finance-receivables" element={<PrivateRoute><ReceivablesList /></PrivateRoute>} />
 
-          {/* Legacy Routes */}
-          <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
-          <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
-          <Route path="/horses" element={<PrivateRoute><Horses /></PrivateRoute>} />
-          <Route path="/veterinarians" element={<PrivateRoute><Veterinarians /></PrivateRoute>} />
-          <Route path="/create-graphic" element={<PrivateRoute><CreateGraphic /></PrivateRoute>} />
-          <Route path="/archived-graphics" element={<PrivateRoute><ArchivedGraphics /></PrivateRoute>} />
-          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-          <Route path="/owners/new" element={<PrivateRoute><OwnerCreate /></PrivateRoute>} />
-          <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
-          <Route path="/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
-          <Route path="/finance" element={<PrivateRoute><Finance /></PrivateRoute>} />
-          <Route path="/finance/revenue" element={<PrivateRoute><FinanceRevenue /></PrivateRoute>} />
-          <Route path="/finance/expenses" element={<PrivateRoute><FinanceExpenses /></PrivateRoute>} />
-          <Route path="/finance/reports" element={<PrivateRoute><FinanceReports /></PrivateRoute>} />
-          
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </div>
-    </AuthProvider>
+            {/* Legacy Routes */}
+            <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
+            <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
+            <Route path="/horses" element={<PrivateRoute><Horses /></PrivateRoute>} />
+            <Route path="/veterinarians" element={<PrivateRoute><Veterinarians /></PrivateRoute>} />
+            <Route path="/create-graphic" element={<PrivateRoute><CreateGraphic /></PrivateRoute>} />
+            <Route path="/archived-graphics" element={<PrivateRoute><ArchivedGraphics /></PrivateRoute>} />
+            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            <Route path="/owners/new" element={<PrivateRoute><OwnerCreate /></PrivateRoute>} />
+            <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
+            <Route path="/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
+            <Route path="/finance" element={<PrivateRoute><Finance /></PrivateRoute>} />
+            <Route path="/finance/revenue" element={<PrivateRoute><FinanceRevenue /></PrivateRoute>} />
+            <Route path="/finance/expenses" element={<PrivateRoute><FinanceExpenses /></PrivateRoute>} />
+            <Route path="/finance/reports" element={<PrivateRoute><FinanceReports /></PrivateRoute>} />
+            
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </div>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

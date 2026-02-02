@@ -6,8 +6,9 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import { Select } from '../components/ui/Select'
 import { Modal } from '../components/ui/Modal'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Users, PawPrint } from 'lucide-react'
 import ClientDetailsSidebar from '../components/ClientDetailsSidebar'
+import PatientDetailsModal from '../components/PatientDetailsModal'
 import { cn } from '@/lib/utils'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { mockDB } from '../services/mockDatabase'
@@ -19,7 +20,11 @@ export default function Clients() {
   
   // Data State
   const [clients, setClients] = useState([])
+  const [patients, setPatients] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
+  
+  // View Mode: 'owners' (default) or 'patients'
+  const [viewMode, setViewMode] = useState('owners')
   
   // Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -29,6 +34,10 @@ export default function Clients() {
   const [openPatientModal, setOpenPatientModal] = useState(false)
   const [openOwnerModal, setOpenOwnerModal] = useState(false)
   const [openPropertyCreateModal, setOpenPropertyCreateModal] = useState(false)
+  
+  // Patient Details Modal State
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [isPatientDetailsOpen, setIsPatientDetailsOpen] = useState(false)
   
   // Registration Form State (Inside Modal)
   const [owners, setOwners] = useState([])
@@ -64,6 +73,10 @@ export default function Clients() {
     const ownersData = mockDB.getOwners()
     setOwners(ownersData)
     setClients(ownersData) // In this mock, clients list is owners list
+    
+    const patientsData = mockDB.getPatients()
+    setPatients(patientsData)
+
     setProperties(mockDB.getAllProperties()) // Updated method name
 
     // Check query params for auto-open
@@ -105,6 +118,9 @@ export default function Clients() {
 
        alert('Paciente cadastrado com sucesso!')
        setOpenPatientModal(false)
+       
+       // Reload patients
+       setPatients(mockDB.getPatients())
        navigate('/attendance-new')
     } else {
       alert('Selecione um tutor e preencha o nome do paciente.')
@@ -118,18 +134,61 @@ export default function Clients() {
     return true
   })
 
+  const filteredPatients = patients.filter(patient => {
+    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!matchesSearch) return false
+    return true
+  })
+
+  const handlePatientClick = (patient) => {
+      // Find owner name for display
+      const owner = owners.find(o => o.id === patient.ownerId)
+      const patientWithDetails = {
+          ...patient,
+          ownerName: owner?.name || 'Desconhecido'
+      }
+      setSelectedPatient(patientWithDetails)
+      setIsPatientDetailsOpen(true)
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-[#0B2C4D]">Clientes</h1>
+            <h1 className="text-3xl font-bold text-[#0B2C4D]">
+                {viewMode === 'owners' ? 'Clientes (Tutores)' : 'Pacientes'}
+            </h1>
           </div>
           <div className="flex flex-wrap gap-2">
+             {/* View Toggle */}
+             <div className="bg-gray-100 p-1 rounded-lg flex items-center mr-4">
+                <button
+                    onClick={() => setViewMode('owners')}
+                    className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                        viewMode === 'owners' ? "bg-white text-[#0B2C4D] shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    )}
+                >
+                    <Users className="h-4 w-4" />
+                    Tutores
+                </button>
+                <button
+                    onClick={() => setViewMode('patients')}
+                    className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                        viewMode === 'patients' ? "bg-white text-[#0B2C4D] shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    )}
+                >
+                    <PawPrint className="h-4 w-4" />
+                    Pacientes
+                </button>
+             </div>
+
             <Button
               className="flex items-center gap-2 bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white rounded-full px-6"
-              onClick={() => setOpenPatientModal(true)}
+              onClick={() => navigate('/register')}
             >
               <Plus className="h-4 w-4" />
               Cadastro Paciente
@@ -214,7 +273,7 @@ export default function Clients() {
                     <Label htmlFor="species">Espécie</Label>
                     <Select 
                         id="species" 
-                        defaultValue="Equino"
+                        defaultValue="Equine"
                         onChange={e => setNewPatient({...newPatient, species: e.target.value})}
                     >
                         <option value="Equine">Equino</option>
@@ -304,13 +363,20 @@ export default function Clients() {
         <Modal isOpen={openPropertyCreateModal} onClose={() => setOpenPropertyCreateModal(false)} title="Cadastro de Propriedade">
             <p>Formulário de propriedade...</p>
         </Modal>
+        
+        {/* PATIENT DETAILS MODAL */}
+        <PatientDetailsModal 
+            isOpen={isPatientDetailsOpen}
+            onClose={() => setIsPatientDetailsOpen(false)}
+            patient={selectedPatient}
+        />
 
         {/* Filters and Search */}
         <div className="flex flex-col md:flex-row gap-4 items-center">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Pesquisar cliente"
+              placeholder={viewMode === 'owners' ? "Pesquisar tutor" : "Pesquisar paciente"}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 rounded-full border-gray-200"
@@ -325,28 +391,66 @@ export default function Clients() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100 text-sm font-semibold text-gray-900">
-                    <th className="p-4 pl-6">Nome do tutor</th>
-                    <th className="p-4">CPF/CNPJ</th>
-                    <th className="p-4">Telefone</th>
-                    <th className="p-4">Cidade</th>
+                    {viewMode === 'owners' ? (
+                        <>
+                            <th className="p-4 pl-6">Nome do tutor</th>
+                            <th className="p-4">CPF/CNPJ</th>
+                            <th className="p-4">Telefone</th>
+                            <th className="p-4">Cidade</th>
+                        </>
+                    ) : (
+                        <>
+                            <th className="p-4 pl-6">Nome do Paciente</th>
+                            <th className="p-4">Espécie</th>
+                            <th className="p-4">Raça</th>
+                            <th className="p-4">Tutor</th>
+                            <th className="p-4">Ações</th>
+                        </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filteredClients.map((client) => (
-                    <tr
-                      key={client.id}
-                      className={cn(
-                        "hover:bg-gray-50 cursor-pointer transition-colors text-sm text-gray-600",
-                        selectedClient?.id === client.id ? "bg-blue-50/50" : ""
-                      )}
-                      onClick={() => setSelectedClient(client)}
-                    >
-                      <td className="p-4 pl-6 font-medium text-gray-900">{client.name}</td>
-                      <td className="p-4">{client.document || '-'}</td>
-                      <td className="p-4">{client.phone}</td>
-                      <td className="p-4">{client.address}</td>
-                    </tr>
-                  ))}
+                  {viewMode === 'owners' ? (
+                      filteredClients.map((client) => (
+                        <tr
+                          key={client.id}
+                          className={cn(
+                            "hover:bg-gray-50 cursor-pointer transition-colors text-sm text-gray-600",
+                            selectedClient?.id === client.id ? "bg-blue-50/50" : ""
+                          )}
+                          onClick={() => setSelectedClient(client)}
+                        >
+                          <td className="p-4 pl-6 font-medium text-gray-900">{client.name}</td>
+                          <td className="p-4">{client.document || '-'}</td>
+                          <td className="p-4">{client.phone}</td>
+                          <td className="p-4">{client.address}</td>
+                        </tr>
+                      ))
+                  ) : (
+                      filteredPatients.map((patient) => {
+                          const owner = owners.find(o => o.id === patient.ownerId)
+                          return (
+                            <tr
+                              key={patient.id}
+                              className="hover:bg-gray-50 cursor-pointer transition-colors text-sm text-gray-600"
+                              onClick={() => handlePatientClick(patient)}
+                            >
+                              <td className="p-4 pl-6 font-medium text-gray-900 flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                                      {patient.name.charAt(0)}
+                                  </div>
+                                  {patient.name}
+                              </td>
+                              <td className="p-4">{patient.species}</td>
+                              <td className="p-4">{patient.breed}</td>
+                              <td className="p-4">{owner?.name || 'Desconhecido'}</td>
+                              <td className="p-4">
+                                  <Button variant="ghost" size="sm" className="text-blue-600">Ver Prontuário</Button>
+                              </td>
+                            </tr>
+                          )
+                      })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -354,16 +458,38 @@ export default function Clients() {
         </Card>
       </div>
 
-      {/* Details Sidebar */}
-      {selectedClient && (
-          <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-lg p-6 transform transition-transform z-50">
+      {/* Details Sidebar (Only for Owners) */}
+      {selectedClient && viewMode === 'owners' && (
+          <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-lg p-6 transform transition-transform z-50 overflow-y-auto">
               <div className="flex justify-between mb-4">
                   <h2 className="font-bold text-xl">{selectedClient.name}</h2>
                   <button onClick={() => setSelectedClient(null)}>X</button>
               </div>
-              <p>Email: {selectedClient.email}</p>
-              <p>Telefone: {selectedClient.phone}</p>
-              <p>Endereço: {selectedClient.address}</p>
+              <div className="space-y-2 text-sm text-gray-600 mb-6">
+                  <p><strong>Email:</strong> {selectedClient.email}</p>
+                  <p><strong>Telefone:</strong> {selectedClient.phone}</p>
+                  <p><strong>Endereço:</strong> {selectedClient.address}</p>
+              </div>
+
+              <h3 className="font-bold text-lg mb-3 border-t pt-4">Pacientes (Animais)</h3>
+              <div className="space-y-2">
+                  {patients.filter(p => p.ownerId === selectedClient.id).map(p => (
+                      <div 
+                        key={p.id} 
+                        className="p-3 border rounded hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                        onClick={() => handlePatientClick(p)}
+                      >
+                          <div>
+                              <p className="font-bold text-gray-900">{p.name}</p>
+                              <p className="text-xs text-gray-500">{p.species} - {p.breed}</p>
+                          </div>
+                          <PawPrint className="h-4 w-4 text-gray-400" />
+                      </div>
+                  ))}
+                  {patients.filter(p => p.ownerId === selectedClient.id).length === 0 && (
+                      <p className="text-sm text-gray-400 italic">Nenhum animal cadastrado.</p>
+                  )}
+              </div>
           </div>
       )}
     </Layout>

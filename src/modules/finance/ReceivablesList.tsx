@@ -74,10 +74,55 @@ export const ReceivablesList: React.FC = () => {
     }
   ];
 
-  const filteredReceivables = receivables.filter(r => 
-    r.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    r.ownerName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handlePrintReceipt = (rec: Receivable) => {
+      alert(`Imprimindo recibo para ${rec.patientName} - Valor: R$ ${rec.amount.toFixed(2)}`);
+  };
+
+  const handleExport = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text('Relatório de Contas a Receber', 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 28);
+
+      let y = 40;
+      filteredReceivables.forEach((rec, i) => {
+          if (y > 280) {
+              doc.addPage();
+              y = 20;
+          }
+          const status = rec.status === 'paid' ? 'PAGO' : rec.status === 'overdue' ? 'ATRASADO' : 'PENDENTE';
+          doc.text(`${new Date(rec.dueDate).toLocaleDateString()} - ${rec.ownerName} (${rec.patientName}) - R$ ${rec.amount.toFixed(2)} - ${status}`, 14, y);
+          y += 10;
+      });
+
+      doc.save('contas_a_receber.pdf');
+    } catch (error) {
+      console.error('Erro ao exportar PDF', error);
+      alert('Erro ao gerar PDF');
+    }
+  };
+
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'paid'>('all');
+
+  const handleFilterClick = () => {
+      // Toggle filter for demo purposes
+      if (filterStatus === 'all') setFilterStatus('pending');
+      else if (filterStatus === 'pending') setFilterStatus('overdue');
+      else if (filterStatus === 'overdue') setFilterStatus('paid');
+      else setFilterStatus('all');
+  };
+
+  const filteredReceivables = receivables.filter(r => {
+    const matchesSearch = r.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          r.ownerName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || r.status === filterStatus;
+    
+    return matchesSearch && matchesFilter;
+  });
 
   return (
     <Layout>
@@ -137,12 +182,20 @@ export const ReceivablesList: React.FC = () => {
         )}>
             <CardContent className="p-6">
             <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Lançamentos</h3>
+                <h3 className="text-lg font-bold text-gray-900">Lançamentos {filterStatus !== 'all' && <span className="text-sm font-normal text-gray-500 ml-2">(Filtro: {filterStatus === 'paid' ? 'Pagos' : filterStatus === 'overdue' ? 'Atrasados' : 'Pendentes'})</span>}</h3>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2 text-gray-600 border-gray-200">
-                        <Filter className="h-4 w-4" /> Filtrar
+                    <Button 
+                        variant="outline" 
+                        className="gap-2 text-gray-600 border-gray-200"
+                        onClick={handleFilterClick}
+                    >
+                        <Filter className="h-4 w-4" /> {filterStatus === 'all' ? 'Filtrar' : 'Próximo Filtro'}
                     </Button>
-                    <Button variant="outline" className="gap-2 text-gray-600 border-gray-200">
+                    <Button 
+                        variant="outline" 
+                        className="gap-2 text-gray-600 border-gray-200"
+                        onClick={handleExport}
+                    >
                         <FileText className="h-4 w-4" /> Exportar
                     </Button>
                 </div>

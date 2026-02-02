@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -16,6 +16,106 @@ import {
 import { cn } from '@/lib/utils'
 
 export default function FinanceReports() {
+  const [period, setPeriod] = useState('last30')
+
+  // Mock Data for different periods
+  const reportData = {
+    'last30': {
+      title: 'Últimos 30 dias',
+      revenue: '45.280,00',
+      expense: '12.450,00',
+      profit: '32.830,00',
+      growth: { rev: '+12%', exp: '-5%', prof: '+28%' },
+      chartData: [40, 65, 45, 80, 55, 90, 70, 85, 60, 75, 50, 95],
+      topExpenses: [
+        { name: 'Fornecedor Dental Med', value: 'R$ 2.450,00', date: '12/06' },
+        { name: 'Aluguel Clínica', value: 'R$ 3.500,00', date: '05/06' },
+        { name: 'Folha de Pagamento', value: 'R$ 4.200,00', date: '05/06' }
+      ]
+    },
+    'currentMonth': {
+      title: 'Mês Atual',
+      revenue: '18.500,00',
+      expense: '5.200,00',
+      profit: '13.300,00',
+      growth: { rev: '+5%', exp: '+2%', prof: '+8%' },
+      chartData: [0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0], // Just June
+      topExpenses: [
+        { name: 'Conta de Luz', value: 'R$ 850,00', date: '10/06' },
+        { name: 'Internet', value: 'R$ 200,00', date: '05/06' }
+      ]
+    },
+    'lastMonth': {
+      title: 'Mês Anterior',
+      revenue: '42.100,00',
+      expense: '11.800,00',
+      profit: '30.300,00',
+      growth: { rev: '-2%', exp: '-1%', prof: '-3%' },
+      chartData: [0, 0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0], // Just May
+      topExpenses: [
+        { name: 'Manutenção Ar Cond.', value: 'R$ 1.200,00', date: '20/05' },
+        { name: 'Compra Estoque', value: 'R$ 3.000,00', date: '15/05' }
+      ]
+    },
+    'currentYear': {
+      title: 'Ano Atual',
+      revenue: '245.000,00',
+      expense: '85.000,00',
+      profit: '160.000,00',
+      growth: { rev: '+15%', exp: '+10%', prof: '+18%' },
+      chartData: [40, 55, 45, 60, 55, 65, 0, 0, 0, 0, 0, 0],
+      topExpenses: [
+        { name: 'Equipamento Raio-X', value: 'R$ 15.000,00', date: '10/02' },
+        { name: 'Reforma Recepção', value: 'R$ 8.500,00', date: '15/03' }
+      ]
+    }
+  }
+
+  const currentData = reportData[period]
+
+  const handleExport = () => {
+    import('jspdf').then(({ default: jsPDF }) => {
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFillColor(11, 44, 77); // #0B2C4D
+        doc.rect(0, 0, 210, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.text('Relatório Financeiro', 10, 20);
+        doc.setFontSize(10);
+        doc.text(`Período: ${currentData.title}`, 10, 26);
+        
+        // Summary
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(14);
+        doc.text('Resumo', 10, 45);
+        
+        doc.setFontSize(12);
+        doc.text(`Receita Total: R$ ${currentData.revenue}`, 10, 55);
+        doc.text(`Despesas Totais: R$ ${currentData.expense}`, 10, 62);
+        doc.text(`Lucro Líquido: R$ ${currentData.profit}`, 10, 69);
+        
+        // Top Expenses
+        doc.setFontSize(14);
+        doc.text('Maiores Despesas', 10, 85);
+        
+        let y = 95;
+        doc.setFontSize(10);
+        currentData.topExpenses.forEach((item, index) => {
+            doc.text(`${index + 1}. ${item.name} (${item.date}) - ${item.value}`, 10, y);
+            y += 7;
+        });
+
+        // Footer
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Gerado em ${new Date().toLocaleDateString()} pelo VetTooth`, 10, 280);
+
+        doc.save(`relatorio_financeiro_${period}.pdf`);
+    });
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -25,15 +125,19 @@ export default function FinanceReports() {
           <div className="flex items-center gap-3">
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <select className="pl-10 h-10 rounded-lg border-gray-200 text-sm focus:ring-[#0B2C4D] focus:border-[#0B2C4D]">
-                <option>Últimos 30 dias</option>
-                <option>Mês atual</option>
-                <option>Mês anterior</option>
-                <option>Ano atual</option>
+              <select 
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="pl-10 h-10 rounded-lg border-gray-200 text-sm focus:ring-[#0B2C4D] focus:border-[#0B2C4D]"
+              >
+                <option value="last30">Últimos 30 dias</option>
+                <option value="currentMonth">Mês atual</option>
+                <option value="lastMonth">Mês anterior</option>
+                <option value="currentYear">Ano atual</option>
               </select>
             </div>
-            <Button className="bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white gap-2">
-              <Download className="h-4 w-4" /> Exportar Relatório
+            <Button onClick={handleExport} className="bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white gap-2">
+              <Download className="h-4 w-4" /> Exportar Relatório (PDF)
             </Button>
           </div>
         </div>
@@ -46,10 +150,10 @@ export default function FinanceReports() {
                 <div className="p-3 bg-teal-100 rounded-xl">
                   <TrendingUp className="h-6 w-6 text-teal-600" />
                 </div>
-                <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-1 rounded-full">+12%</span>
+                <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-1 rounded-full">{currentData.growth.rev}</span>
               </div>
               <p className="text-sm text-gray-600 font-medium">Receita Total</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ 45.280,00</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.revenue}</h3>
             </CardContent>
           </Card>
 
@@ -59,10 +163,10 @@ export default function FinanceReports() {
                 <div className="p-3 bg-red-100 rounded-xl">
                   <TrendingDown className="h-6 w-6 text-red-600" />
                 </div>
-                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full">-5%</span>
+                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full">{currentData.growth.exp}</span>
               </div>
               <p className="text-sm text-gray-600 font-medium">Despesas Totais</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ 12.450,00</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.expense}</h3>
             </CardContent>
           </Card>
 
@@ -72,10 +176,10 @@ export default function FinanceReports() {
                 <div className="p-3 bg-blue-100 rounded-xl">
                   <DollarSign className="h-6 w-6 text-blue-600" />
                 </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">+28%</span>
+                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">{currentData.growth.prof}</span>
               </div>
               <p className="text-sm text-gray-600 font-medium">Lucro Líquido</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ 32.830,00</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.profit}</h3>
             </CardContent>
           </Card>
         </div>
@@ -90,7 +194,7 @@ export default function FinanceReports() {
               </div>
               
               <div className="h-64 flex items-end justify-between gap-2 px-2">
-                {[40, 65, 45, 80, 55, 90, 70, 85, 60, 75, 50, 95].map((h, i) => (
+                {currentData.chartData.map((h, i) => (
                   <div key={i} className="flex-1 flex flex-col justify-end gap-1 group">
                     <div className="w-full bg-[#00BFA5] rounded-t-sm opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${h}%` }}></div>
                     <div className="w-full bg-red-300 rounded-t-sm opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${h * 0.4}%` }}></div>
@@ -145,11 +249,7 @@ export default function FinanceReports() {
               <div className="mt-8 pt-6 border-t border-gray-100">
                 <h4 className="text-sm font-bold text-gray-900 mb-4">Maiores Despesas do Mês</h4>
                 <div className="space-y-3">
-                  {[
-                    { name: 'Fornecedor Dental Med', value: 'R$ 2.450,00', date: '12/06' },
-                    { name: 'Aluguel Clínica', value: 'R$ 3.500,00', date: '05/06' },
-                    { name: 'Folha de Pagamento', value: 'R$ 4.200,00', date: '05/06' }
-                  ].map((expense, i) => (
+                  {currentData.topExpenses.map((expense, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-600 font-bold text-xs">

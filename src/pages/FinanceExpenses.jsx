@@ -276,15 +276,24 @@ export default function FinanceExpenses() {
           <div className="bg-[#00BFA5] rounded-xl p-6 text-white">
             <h3 className="font-bold text-lg mb-4">Exportar</h3>
             <div className="flex gap-4">
-               <button className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
+               <button 
+                onClick={() => handleExport('csv')}
+                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
+               >
                  <FileText className="h-6 w-6" />
                  <span className="text-xs font-bold">CSV</span>
                </button>
-               <button className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
+               <button 
+                onClick={() => handleExport('pdf')}
+                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
+               >
                  <FileIcon className="h-6 w-6" />
                  <span className="text-xs font-bold">PDF</span>
                </button>
-               <button className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
+               <button 
+                onClick={() => handleExport('excel')}
+                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
+               >
                  <FileSpreadsheet className="h-6 w-6" />
                  <span className="text-xs font-bold">Excel</span>
                </button>
