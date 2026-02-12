@@ -193,17 +193,6 @@ export default function Clients() {
               <Plus className="h-4 w-4" />
               Cadastro Paciente
             </Button>
-            <Link to="/owners/new">
-              <Button variant="outline" className="rounded-full px-6">
-                Novo Proprietário
-              </Button>
-            </Link>
-            <Button variant="outline" className="rounded-full px-6" onClick={() => setOpenOwnerModal(true)}>
-              Alteração de proprietário
-            </Button>
-            <Button variant="outline" className="rounded-full px-6" onClick={() => setOpenPropertyCreateModal(true)}>
-              Cadastro da propriedade
-            </Button>
           </div>
         </div>
 

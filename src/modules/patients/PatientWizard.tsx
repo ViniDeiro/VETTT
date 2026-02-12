@@ -236,6 +236,27 @@ export const PatientWizard: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Pelagem / Cor</Label>
+                    <Input 
+                      value={patientData.color || ''} 
+                      onChange={e => setPatientData({...patientData, color: e.target.value})}
+                      placeholder="Ex: Baio, Branco..."
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2 pt-8">
+                    <input
+                      type="checkbox"
+                      id="neutered"
+                      className="h-4 w-4 rounded border-gray-300 text-[#0B2C4D] focus:ring-[#0B2C4D]"
+                      checked={patientData.neutered || false}
+                      onChange={e => setPatientData({...patientData, neutered: e.target.checked})}
+                    />
+                    <Label htmlFor="neutered" className="mb-0 cursor-pointer">Castrado?</Label>
+                  </div>
+                </div>
+
                 <div className="bg-gray-50 p-4 rounded-lg border">
                     <div className="flex justify-between mb-2">
                         <Label>Idade / Nascimento</Label>
@@ -333,17 +354,77 @@ export const PatientWizard: React.FC = () => {
                     />
                     <div className="grid grid-cols-2 gap-4">
                       <Input 
-                        placeholder="Telefone *" 
+                        placeholder="Telefone Principal *" 
                         value={newOwnerData.phone || ''}
                         onChange={e => setNewOwnerData({...newOwnerData, phone: e.target.value})}
                       />
                       <Input 
-                        placeholder="CPF" 
+                        placeholder="Telefone Secundário" 
+                        value={newOwnerData.secondaryPhone || ''}
+                        onChange={e => setNewOwnerData({...newOwnerData, secondaryPhone: e.target.value})}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input 
+                        placeholder="CPF/CNPJ" 
                         value={newOwnerData.document || ''}
                         onChange={e => setNewOwnerData({...newOwnerData, document: e.target.value})}
                       />
+                      <Input 
+                        placeholder="E-mail" 
+                        value={newOwnerData.email || ''}
+                        onChange={e => setNewOwnerData({...newOwnerData, email: e.target.value})}
+                      />
                     </div>
-                    <div className="flex gap-2">
+                    
+                    <div className="border-t pt-2 mt-2">
+                        <Label className="text-xs text-gray-500 mb-2 block">Endereço</Label>
+                        <div className="grid grid-cols-3 gap-4 mb-2">
+                            <Input 
+                                placeholder="CEP" 
+                                value={newOwnerData.zipCode || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, zipCode: e.target.value})}
+                            />
+                            <div className="col-span-2">
+                                <Input 
+                                    placeholder="Rua / Logradouro" 
+                                    value={newOwnerData.street || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, street: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4 mb-2">
+                            <Input 
+                                placeholder="Número" 
+                                value={newOwnerData.number || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, number: e.target.value})}
+                            />
+                            <div className="col-span-2">
+                                <Input 
+                                    placeholder="Bairro" 
+                                    value={newOwnerData.neighborhood || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, neighborhood: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="col-span-2">
+                                <Input 
+                                    placeholder="Cidade" 
+                                    value={newOwnerData.city || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, city: e.target.value})}
+                                />
+                            </div>
+                            <Input 
+                                placeholder="UF" 
+                                maxLength={2}
+                                value={newOwnerData.state || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, state: e.target.value})}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
                       <Button variant="outline" onClick={() => setIsCreatingOwner(false)} disabled={isLoading}>
                         Cancelar
                       </Button>
@@ -425,6 +506,11 @@ export const PatientWizard: React.FC = () => {
                       value={newPropertyData.name || ''}
                       onChange={e => setNewPropertyData({...newPropertyData, name: e.target.value})}
                     />
+                    <Input 
+                      placeholder="CNPJ (Opcional)" 
+                      value={newPropertyData.document || ''}
+                      onChange={e => setNewPropertyData({...newPropertyData, document: e.target.value})}
+                    />
                     <div className="grid grid-cols-2 gap-4">
                       <Input 
                         placeholder="Cidade *" 
@@ -439,7 +525,7 @@ export const PatientWizard: React.FC = () => {
                       />
                     </div>
                     <Input 
-                        placeholder="Endereço" 
+                        placeholder="Endereço Completo" 
                         value={newPropertyData.address || ''}
                         onChange={e => setNewPropertyData({...newPropertyData, address: e.target.value})}
                       />

@@ -4,7 +4,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { mockDB } from '../../services/mockDatabase';
-import { Patient, Attendance, InventoryItem, ConsumptionItem } from '../../domain/types';
+import { Patient, Attendance, InventoryItem, ConsumptionItem, Vitals, ProcedureTemplate } from '../../domain/types';
 import { 
   Calendar, 
   Activity, 
@@ -19,13 +19,20 @@ import {
   Wind,
   Search,
   ArrowLeft,
-  Package
+  Package,
+  Weight,
+  Syringe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pdfService } from '../../services/pdfService';
+import { useLocation } from 'react-router-dom';
+import { Input } from '../../components/ui/Input';
+import { Label } from '../../components/ui/Label';
+import { Select } from '../../components/ui/Select';
 
 export const AttendancePage: React.FC = () => {
-  // ... existing code ...
+  const location = useLocation();
+  const initialPatient = location.state?.patient as Patient | null;
 
   const handlePrintRecord = () => {
     if (currentAttendance && selectedPatient) {
@@ -35,12 +42,12 @@ export const AttendancePage: React.FC = () => {
     }
   };
 
-  // ... existing code ...
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [procedures, setProcedures] = useState<ProcedureTemplate[]>([]);
   
   // State
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient);
   const [activeTab, setActiveTab] = useState('overview');
   
   // Attendance Form State
@@ -52,10 +59,17 @@ export const AttendancePage: React.FC = () => {
   const [selectedItemToAdd, setSelectedItemToAdd] = useState<InventoryItem | null>(null);
   const [qtyToAdd, setQtyToAdd] = useState(0);
 
+  // Vitals State
+  const [vitals, setVitals] = useState<Vitals>({});
+
   useEffect(() => {
     setPatients(mockDB.getPatients());
     setInventory(mockDB.getInventory());
-  }, []);
+    setProcedures(mockDB.getProcedures());
+    if (initialPatient) {
+        setSelectedPatient(initialPatient);
+    }
+  }, [initialPatient]);
 
   const handleStartAttendance = () => {
     if (selectedPatient) {
@@ -65,12 +79,43 @@ export const AttendancePage: React.FC = () => {
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
         reason: 'Consulta',
-        consumedItems: []
+        consumedItems: [],
+        vitals: {} // Initialize
       });
       setCurrentAttendance(newAttendance);
       setActiveTab('attendance_active');
     }
   };
+
+  const handleSelectProcedure = (procId: string) => {
+      const proc = procedures.find(p => p.id === procId);
+      if (proc) {
+          // Set Fee
+          setServiceFee(proc.baseCost);
+          
+          // Add Items
+          const newItems: ConsumptionItem[] = [];
+          proc.items.forEach(pItem => {
+              const invItem = inventory.find(i => i.id === pItem.inventoryItemId);
+              if (invItem) {
+                  newItems.push({
+                      inventoryItemId: invItem.id,
+                      itemName: invItem.name,
+                      quantityUsed: pItem.quantity,
+                      unit: invItem.unit,
+                      costAtMoment: invItem.costPrice,
+                      priceAtMoment: invItem.salePrice
+                  });
+              }
+          });
+          
+          // Merge or Replace? Let's append but check for duplicates? 
+          // For simplicity, we'll append.
+          setConsumedItems(prev => [...prev, ...newItems]);
+          alert(`Procedimento "${proc.name}" aplicado! Honorários e materiais atualizados.`);
+      }
+  };
+
 
   const handleAddItem = () => {
     if (selectedItemToAdd && qtyToAdd > 0) {
@@ -97,10 +142,12 @@ export const AttendancePage: React.FC = () => {
   const handleFinish = () => {
     if (currentAttendance) {
       try {
+        currentAttendance.vitals = vitals; // Attach vitals before finishing
         mockDB.finishAttendance(currentAttendance.id, serviceFee, consumedItems);
         alert('Atendimento finalizado com sucesso!');
         setCurrentAttendance(null);
         setConsumedItems([]);
+        setVitals({});
         setActiveTab('overview');
       } catch (e) {
         alert('Erro ao finalizar atendimento.');
@@ -256,6 +303,185 @@ export const AttendancePage: React.FC = () => {
 
             {activeTab === 'attendance_active' && currentAttendance && (
                 <div className="space-y-6">
+                    
+                    {/* --- Vitals Section --- */}
+                    <Card className="border-none shadow-sm">
+                        <CardContent className="p-6">
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                <Syringe className="h-5 w-5 text-purple-600" />
+                                Procedimento (Pacote)
+                            </h3>
+                            <div className="flex gap-4 items-end">
+                                <div className="flex-1">
+                                    <Label>Selecionar Procedimento Padrão</Label>
+                                    <Select 
+                                        onChange={(e) => {
+                                            if (e.target.value) handleSelectProcedure(e.target.value);
+                                        }}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {procedures.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name} - R$ {p.baseCost}</option>
+                                        ))}
+                                    </Select>
+                                </div>
+                                <div className="text-xs text-gray-500 pb-2">
+                                    Ao selecionar, os honorários e materiais serão adicionados automaticamente.
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-none shadow-sm">
+                        <CardContent className="p-6">
+                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                <Activity className="h-5 w-5 text-red-500" />
+                                Sinais Vitais & Pré-Atendimento
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <Label>Peso (kg)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="0.0"
+                                            value={vitals.weight || ''}
+                                            onChange={e => setVitals({...vitals, weight: Number(e.target.value)})}
+                                            className="pl-8"
+                                        />
+                                        <Weight className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Freq. Cardíaca (bpm)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={vitals.heartRate || ''}
+                                            onChange={e => setVitals({...vitals, heartRate: Number(e.target.value)})}
+                                            className="pl-8"
+                                        />
+                                        <Heart className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Freq. Respiratória (rpm)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={vitals.respiratoryRate || ''}
+                                            onChange={e => setVitals({...vitals, respiratoryRate: Number(e.target.value)})}
+                                            className="pl-8"
+                                        />
+                                        <Wind className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Temperatura (°C)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="0.0"
+                                            value={vitals.temperature || ''}
+                                            onChange={e => setVitals({...vitals, temperature: Number(e.target.value)})}
+                                            className="pl-8"
+                                        />
+                                        <Thermometer className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>TPC (seg)</Label>
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Ex: 2"
+                                        value={vitals.tpc || ''}
+                                        onChange={e => setVitals({...vitals, tpc: Number(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Pressão Sistólica</Label>
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Ex: 120"
+                                        value={vitals.pressureSystolic || ''}
+                                        onChange={e => setVitals({...vitals, pressureSystolic: Number(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Pressão Diastólica</Label>
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Ex: 80"
+                                        value={vitals.pressureDiastolic || ''}
+                                        onChange={e => setVitals({...vitals, pressureDiastolic: Number(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Equine Specific: Motility */}
+                            {selectedPatient.species === 'Equine' && (
+                                <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-100">
+                                    <h4 className="font-semibold text-orange-800 mb-3 text-sm uppercase">Motilidade Intestinal (Equinos)</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <Label className="text-xs">Superior Esq.</Label>
+                                            <Input 
+                                                type="number" 
+                                                placeholder="0-4"
+                                                value={vitals.motility?.upperLeft || ''}
+                                                onChange={e => setVitals({...vitals, motility: {...(vitals.motility || { upperRight:0, lowerLeft:0, lowerRight:0 }), upperLeft: Number(e.target.value)}})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs">Superior Dir.</Label>
+                                            <Input 
+                                                type="number" 
+                                                placeholder="0-4"
+                                                value={vitals.motility?.upperRight || ''}
+                                                onChange={e => setVitals({...vitals, motility: {...(vitals.motility || { upperLeft:0, lowerLeft:0, lowerRight:0 }), upperRight: Number(e.target.value)}})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs">Inferior Esq.</Label>
+                                            <Input 
+                                                type="number" 
+                                                placeholder="0-4"
+                                                value={vitals.motility?.lowerLeft || ''}
+                                                onChange={e => setVitals({...vitals, motility: {...(vitals.motility || { upperLeft:0, upperRight:0, lowerRight:0 }), lowerLeft: Number(e.target.value)}})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs">Inferior Dir.</Label>
+                                            <Input 
+                                                type="number" 
+                                                placeholder="0-4"
+                                                value={vitals.motility?.lowerRight || ''}
+                                                onChange={e => setVitals({...vitals, motility: {...(vitals.motility || { upperLeft:0, upperRight:0, lowerLeft:0 }), lowerRight: Number(e.target.value)}})}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            <div className="flex justify-end mt-4">
+                                <Button 
+                                    variant="outline" 
+                                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                    onClick={() => {
+                                        if (currentAttendance) {
+                                            currentAttendance.vitals = vitals;
+                                            alert("Pré-atendimento salvo! Sinais vitais registrados.");
+                                        }
+                                    }}
+                                >
+                                    Salvar Pré-atendimento
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card className="border-none shadow-sm">
                         <CardContent className="p-6">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">

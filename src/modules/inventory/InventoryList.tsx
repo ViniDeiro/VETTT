@@ -48,7 +48,7 @@ export const InventoryList: React.FC = () => {
       setFormData({
         name: '', category: 'Medication', quantity: 0, unit: 'un',
         minStock: 10, validity: '', supplier: '', costPrice: 0, salePrice: 0, status: 'ok',
-        image: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=60'
+        image: '' // Default to empty to trigger fallback
       })
     } else if (item) {
       setFormData({ ...item })
@@ -213,7 +213,13 @@ export const InventoryList: React.FC = () => {
                   >
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <img src={item.image || 'https://via.placeholder.com/40'} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                        {item.image ? (
+                            <img src={item.image} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" onError={(e) => e.currentTarget.src=''} />
+                        ) : (
+                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                                <Package className="h-5 w-5 text-blue-500" />
+                            </div>
+                        )}
                         <span className="font-medium text-gray-900">{item.name}</span>
                       </div>
                     </td>
@@ -250,7 +256,13 @@ export const InventoryList: React.FC = () => {
           {selectedItem ? (
             <>
               <div className="flex flex-col items-center text-center mb-6">
-                <img src={selectedItem.image || 'https://via.placeholder.com/150'} alt="" className="w-32 h-32 rounded-xl object-cover bg-gray-100 mb-4 shadow-sm" />
+                {selectedItem.image ? (
+                    <img src={selectedItem.image} alt="" className="w-32 h-32 rounded-xl object-cover bg-gray-100 mb-4 shadow-sm" />
+                ) : (
+                    <div className="w-32 h-32 rounded-xl bg-blue-50 flex items-center justify-center mb-4 shadow-sm">
+                        <Package className="h-16 w-16 text-blue-500" />
+                    </div>
+                )}
                 <h3 className="text-lg font-bold text-gray-900">{selectedItem.name}</h3>
                 <div className="mt-2">
                   {getStatusBadge(selectedItem.status || 'ok')}

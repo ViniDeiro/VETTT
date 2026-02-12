@@ -12,8 +12,15 @@ export interface Owner {
   name: string;
   document: string; // CPF/CNPJ
   phone: string;
+  secondaryPhone?: string;
   email: string;
   address: string;
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface Property {
@@ -39,6 +46,7 @@ export interface Patient {
   propertyId?: string; // Required if Equine
   gender: 'M' | 'F';
   color?: string;
+  neutered?: boolean;
   weight?: number;
   photoUrl?: string;
 }
@@ -74,12 +82,29 @@ export interface ConsumptionItem {
 
 export type AttendanceStatus = 'scheduled' | 'in_progress' | 'finished' | 'canceled';
 
+export interface Vitals {
+  heartRate?: number; // bpm
+  respiratoryRate?: number; // rpm
+  temperature?: number; // Celsius
+  tpc?: number; // seconds
+  pressureSystolic?: number;
+  pressureDiastolic?: number;
+  weight?: number; // kg
+  // Equine specific
+  motility?: {
+    upperLeft: number;
+    upperRight: number;
+    lowerLeft: number;
+    lowerRight: number;
+  };
+}
+
 export interface Attendance {
   id: string;
   patientId: string;
   patientName: string;
   vetId: string;
-  date: string;
+  date: string; // ISO Date for start
   reason: string;
   anamnesis?: string;
   diagnosis?: string;
@@ -89,10 +114,18 @@ export interface Attendance {
   totalCost: number; // Cost of materials
   totalService: number; // Vet service fee
   totalTotal: number; // Final price
+  vitals?: Vitals;
 }
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue';
 export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'transfer';
+
+export interface PaymentDetails {
+  method: PaymentMethod;
+  installments?: number; // 1-12
+  taxRate?: number; // %
+  netValue?: number; // Value after tax
+}
 
 export interface Receivable {
   id: string;
@@ -104,6 +137,7 @@ export interface Receivable {
   status: PaymentStatus;
   paymentDate?: string;
   paymentMethod?: PaymentMethod;
+  paymentDetails?: PaymentDetails; // Detailed info
   description: string;
 }
 
@@ -115,4 +149,15 @@ export interface CashFlowEntry {
   amount: number;
   description: string;
   referenceId?: string; // e.g., receivableId or purchaseId
+}
+
+export interface ProcedureTemplate {
+  id: string;
+  name: string;
+  baseCost: number; // Suggested service fee
+  duration?: string;
+  items: {
+    inventoryItemId: string;
+    quantity: number;
+  }[];
 }

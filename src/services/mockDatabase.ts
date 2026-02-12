@@ -1,9 +1,27 @@
 import { 
   Patient, Owner, Property, InventoryItem, 
-  Attendance, Receivable, User, ConsumptionItem 
+  Attendance, Receivable, User, ConsumptionItem,
+  ProcedureTemplate, CashFlowEntry
 } from '../domain/types';
 
 // Initial Mock Data
+const INITIAL_PROCEDURES: ProcedureTemplate[] = [
+  { 
+    id: '1', 
+    name: 'Consulta Simples', 
+    baseCost: 150, 
+    items: [] 
+  },
+  { 
+    id: '2', 
+    name: 'Vacinação V10', 
+    baseCost: 80, 
+    items: [
+      { inventoryItemId: '2', quantity: 1 } // Seringa
+    ] 
+  }
+];
+
 const INITIAL_OWNERS: Owner[] = [
   { id: '1', name: 'John Doe', document: '12345678900', phone: '5511999999999', email: 'john@example.com', address: 'Main St, 1' },
 ];
@@ -30,9 +48,12 @@ class MockDatabaseService {
   private attendances: Attendance[] = [];
   private receivables: Receivable[] = [];
   private appointments: any[] = [];
+  private procedures: ProcedureTemplate[] = [];
 
   constructor() {
     this.load();
+    this.ensureMockAppointments();
+    this.ensureMockProcedures();
   }
 
   private load() {
@@ -56,6 +77,12 @@ class MockDatabaseService {
 
     const loadedAppointments = localStorage.getItem('vet_appointments');
     this.appointments = loadedAppointments ? JSON.parse(loadedAppointments) : [];
+
+    const loadedProcedures = localStorage.getItem('vet_procedures');
+    this.procedures = loadedProcedures ? JSON.parse(loadedProcedures) : [];
+
+    const loadedCashFlow = localStorage.getItem('vet_cashflow');
+    this.cashFlow = loadedCashFlow ? JSON.parse(loadedCashFlow) : [];
   }
 
   private save(key: string, data: any) {
@@ -96,6 +123,27 @@ class MockDatabaseService {
   getAppointments() {
     return this.appointments;
   }
+  
+  // Mock appointments if empty for demo
+  ensureMockAppointments() {
+      if (this.appointments.length === 0) {
+          const today = new Date();
+          today.setHours(9, 0, 0, 0);
+          
+          const appt1 = {
+              id: 'apt1',
+              title: 'Consulta Thor',
+              start: today.toISOString(),
+              end: new Date(today.getTime() + 60*60*1000).toISOString(),
+              patientId: '1',
+              doctor: 'Dr. Silva',
+              type: 'canino',
+              status: 'confirmed'
+          };
+          this.appointments.push(appt1);
+          this.save('vet_appointments', this.appointments);
+      }
+  }
 
   createAppointment(appt: any) {
     const newAppt = { ...appt, id: Math.random().toString(36).substr(2, 9) };
@@ -113,6 +161,32 @@ class MockDatabaseService {
     }
     return null;
   }
+  // --- Procedures ---
+  getProcedures() { return this.procedures; }
+  
+  ensureMockProcedures() {
+      if (this.procedures.length === 0) {
+          this.procedures = INITIAL_PROCEDURES;
+          this.save('vet_procedures', this.procedures);
+      }
+  }
+
+  createProcedure(proc: ProcedureTemplate) {
+      this.procedures.push(proc);
+      this.save('vet_procedures', this.procedures);
+      return proc;
+  }
+
+  updateProcedure(id: string, updates: Partial<ProcedureTemplate>) {
+      const index = this.procedures.findIndex(p => p.id === id);
+      if (index !== -1) {
+          this.procedures[index] = { ...this.procedures[index], ...updates };
+          this.save('vet_procedures', this.procedures);
+          return this.procedures[index];
+      }
+      return null;
+  }
+
   // --- Inventory ---
   getInventory() { return this.inventory; }
   
@@ -132,7 +206,8 @@ class MockDatabaseService {
       status: 'in_progress',
       totalCost: 0,
       totalService: 0,
-      totalTotal: 0
+      totalTotal: 0,
+      vitals: attendance.vitals || {}
     };
     this.attendances.push(newAttendance);
     this.save('vet_attendances', this.attendances);
@@ -190,14 +265,53 @@ class MockDatabaseService {
 
   getReceivables() { return this.receivables; }
   
-  payReceivable(id: string, method: any) {
+  payReceivable(id: string, details: { method: any, installments?: number, taxRate?: number }) {
     const rec = this.receivables.find(r => r.id === id);
     if (rec) {
       rec.status = 'paid';
       rec.paymentDate = new Date().toISOString();
-      rec.paymentMethod = method;
+      rec.paymentMethod = details.method;
+      
+      const netValue = details.taxRate ? rec.amount * (1 - (details.taxRate / 100)) : rec.amount;
+      
+      rec.paymentDetails = {
+          method: details.method,
+          installments: details.installments || 1,
+          taxRate: details.taxRate || 0,
+          netValue: netValue
+      };
+
+      // Create CashFlow Entry
+      const entry: CashFlowEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          date: new Date().toLocaleDateString('pt-BR'), // Should match system format
+          type: 'income',
+          category: 'Serviços Veterinários',
+          amount: netValue, // Use net value for cash flow? Or Gross? Usually Gross for revenue, Expense for fees. 
+                            // Let's use Net for simple cash flow or Gross + Expense entry.
+                            // For simplicity: Gross Income.
+          description: `Recebimento: ${rec.description} (${details.method})`,
+          referenceId: rec.id
+      };
+      
+      // We don't have a direct cashFlow array in this mockDB, but we have `revenueHistory` in FinanceRevenue page.
+      // Ideally we should centralize. I'll push to a new `cashFlow` array if I had one, 
+      // but the requirement says "aparece automaticamente em Receitas". 
+      // The `FinanceRevenue` page uses `revenueHistory` from a local mock or mockDB?
+      // Let's check `FinanceRevenue.jsx`. It seems to have local state `revenueHistory`.
+      // I should add a `getCashFlow()` method here and update `FinanceRevenue` to use it.
+      
+      this.cashFlow.push(entry);
+      this.save('vet_cashflow', this.cashFlow);
       this.save('vet_receivables', this.receivables);
     }
+  }
+
+  // --- Cash Flow ---
+  private cashFlow: CashFlowEntry[] = [];
+  
+  getCashFlow() {
+      return this.cashFlow;
   }
 }
 

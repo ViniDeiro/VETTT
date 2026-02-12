@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -17,60 +17,52 @@ import {
   Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { mockDB } from '../services/mockDatabase'
 
 export default function FinanceRevenue() {
-  const [revenueHistory] = useState([
-    {
-      id: 1,
-      date: '14/06/2024',
-      category: 'Consultas',
-      desc: 'Consulta Dr. Ana',
-      value: 'R$ 450,00',
-      method: 'Cartão Crédito',
-      status: 'Recebido',
-      statusColor: 'bg-teal-100 text-teal-700'
-    },
-    {
-      id: 2,
-      date: '13/06/2024',
-      category: 'Vacinas',
-      desc: 'Vacina V8 Cão',
-      value: 'R$ 120,00',
-      method: 'PIX',
-      status: 'Pendente',
-      statusColor: 'bg-yellow-100 text-yellow-700'
-    },
-    {
-      id: 3,
-      date: '12/06/2024',
-      category: 'Exames',
-      desc: 'Ultrassom Abdominal',
-      value: 'R$ 350,00',
-      method: 'Cartão Débito',
-      status: 'Recebido',
-      statusColor: 'bg-teal-100 text-teal-700'
-    },
-    {
-      id: 4,
-      date: '11/06/2024',
-      category: 'Vendas',
-      desc: 'Ração Royal Canin',
-      value: 'R$ 250,00',
-      method: 'Boleto',
-      status: 'Recebido',
-      statusColor: 'bg-teal-100 text-teal-700'
-    },
-    {
-      id: 5,
-      date: '10/06/2024',
-      category: 'Consultas',
-      desc: 'Consulta Retorno',
-      value: 'R$ 0,00',
-      method: '-',
-      status: 'Isento',
-      statusColor: 'bg-gray-100 text-gray-700'
+  const [revenueHistory, setRevenueHistory] = useState([])
+  const [activeFilter, setActiveFilter] = useState('Mês')
+
+  useEffect(() => {
+    // Load from mockDB cashflow
+    // We filter for 'income' type
+    const flows = mockDB.getCashFlow().filter(c => c.type === 'income');
+    
+    // Map to view format if needed or use directly
+    const formatted = flows.map(f => ({
+        id: f.id,
+        date: f.date,
+        category: f.category,
+        desc: f.description,
+        value: f.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        rawValue: f.amount, // for filtering/sorting
+        method: '-', // CashFlowEntry might not have method directly if not stored, but we stored description with method
+        status: 'Recebido',
+        statusColor: 'bg-teal-100 text-teal-700'
+    }));
+    
+    // Merge with static mock data if empty? Or just replace.
+    // For this session, let's prefer the dynamic data but keep some static for demo if empty
+    if (formatted.length > 0) {
+        setRevenueHistory(formatted);
+    } else {
+        // Fallback to static if no dynamic data yet
+        setRevenueHistory([
+            {
+              id: 1,
+              date: '14/06/2024',
+              category: 'Consultas',
+              desc: 'Consulta Dr. Ana',
+              value: 'R$ 450,00',
+              rawValue: 450,
+              method: 'Cartão Crédito',
+              status: 'Recebido',
+              statusColor: 'bg-teal-100 text-teal-700'
+            },
+            // ... keep other static items if needed or just empty
+        ]);
     }
-  ])
+  }, []); // Reload on mount. Ideally should subscribe to changes.
 
   const [formData, setFormData] = useState({
     date: '',
@@ -130,8 +122,6 @@ export default function FinanceRevenue() {
       
       alert("Receita salva com sucesso!");
   };
-
-  const [activeFilter, setActiveFilter] = useState('Mês')
 
   const handleExport = async (type) => {
       console.log('Exporting as', type);
@@ -195,7 +185,10 @@ export default function FinanceRevenue() {
     const now = new Date();
     // Mock date parsing for dd/mm/yyyy
     const parseDate = (dateStr) => {
+        if (!dateStr) return new Date();
         const [d, m, y] = dateStr.split('/');
+        // Handle cases where year might be 2 digits or date is ISO
+        if (dateStr.includes('-')) return new Date(dateStr); 
         return new Date(y, m - 1, d);
     };
 

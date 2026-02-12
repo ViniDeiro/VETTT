@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
+import { Label } from '../../components/ui/Label';
+import { Select } from '../../components/ui/Select';
 import { mockDB } from '../../services/mockDatabase';
 import { Receivable } from '../../domain/types';
 import { 
@@ -13,7 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  CreditCard
+  CreditCard,
+  DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,16 +26,37 @@ export const ReceivablesList: React.FC = () => {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [animate, setAnimate] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Payment Modal State
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [installments, setInstallments] = useState(1);
+  const [taxRate, setTaxRate] = useState(0);
 
   useEffect(() => {
     setReceivables(mockDB.getReceivables());
     setAnimate(true);
   }, []);
 
-  const handlePay = (id: string) => {
-    if (confirm('Confirmar recebimento deste valor?')) {
-      mockDB.payReceivable(id, 'cash');
-      setReceivables([...mockDB.getReceivables()]);
+  const handleOpenPayModal = (rec: Receivable) => {
+      setSelectedReceivable(rec);
+      setPaymentMethod('cash');
+      setInstallments(1);
+      setTaxRate(0);
+      setIsPayModalOpen(true);
+  };
+
+  const handleConfirmPay = () => {
+    if (selectedReceivable) {
+        mockDB.payReceivable(selectedReceivable.id, {
+            method: paymentMethod,
+            installments: paymentMethod === 'credit_card' ? installments : 1,
+            taxRate: taxRate
+        });
+        setReceivables([...mockDB.getReceivables()]);
+        setIsPayModalOpen(false);
+        setSelectedReceivable(null);
     }
   };
 
@@ -236,10 +262,10 @@ export const ReceivablesList: React.FC = () => {
                             <td className="py-4 text-right pr-2">
                                 {rec.status === 'pending' ? (
                                     <Button 
-                                        onClick={() => handlePay(rec.id)}
+                                        onClick={() => handleOpenPayModal(rec)}
                                         className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
                                     >
-                                        Receber
+                                        <DollarSign className="h-3 w-3 mr-1" /> Receber
                                     </Button>
                                 ) : (
                                     <Button 
@@ -276,6 +302,72 @@ export const ReceivablesList: React.FC = () => {
 
             </CardContent>
         </Card>
+
+        {/* Payment Modal */}
+        <Modal isOpen={isPayModalOpen} onClose={() => setIsPayModalOpen(false)} title="Registrar Pagamento">
+            {selectedReceivable && (
+                <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
+                        <div>
+                            <p className="text-sm text-gray-500">Valor Original</p>
+                            <p className="text-xl font-bold text-gray-900">R$ {selectedReceivable.amount.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm text-gray-500">Valor Líquido Estimado</p>
+                            <p className="text-xl font-bold text-green-600">
+                                R$ {(selectedReceivable.amount * (1 - (taxRate / 100))).toFixed(2)}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label>Forma de Pagamento</Label>
+                        <Select 
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                        >
+                            <option value="cash">Dinheiro</option>
+                            <option value="pix">Pix</option>
+                            <option value="debit_card">Cartão de Débito</option>
+                            <option value="credit_card">Cartão de Crédito</option>
+                            <option value="transfer">Transferência</option>
+                        </Select>
+                    </div>
+
+                    {paymentMethod === 'credit_card' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Parcelas</Label>
+                                <Select 
+                                    value={installments}
+                                    onChange={(e) => setInstallments(Number(e.target.value))}
+                                >
+                                    {[1,2,3,4,5,6,10,12].map(i => (
+                                        <option key={i} value={i}>{i}x</option>
+                                    ))}
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>Taxa / Juros (%)</Label>
+                                <Input 
+                                    type="number"
+                                    value={taxRate}
+                                    onChange={(e) => setTaxRate(Number(e.target.value))}
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="pt-4 flex justify-end gap-2 border-t mt-4">
+                        <Button variant="outline" onClick={() => setIsPayModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleConfirmPay} className="bg-green-600 hover:bg-green-700 text-white">
+                            Confirmar Recebimento
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </Modal>
       </div>
     </Layout>
   );

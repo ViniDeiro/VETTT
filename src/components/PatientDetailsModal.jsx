@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
+import { Autocomplete } from '../shared/Autocomplete'
+import { mockDB } from '../services/mockDatabase'
 import { 
   Heart, 
   Activity, 
@@ -16,14 +18,51 @@ import {
   MoreVertical,
   Mail,
   Printer,
-  Plus
+  Plus,
+  Edit2,
+  Home
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function PatientDetailsModal({ isOpen, onClose, patient }) {
   const [activeTab, setActiveTab] = useState('overview')
+  const [isChangingOwner, setIsChangingOwner] = useState(false)
+  const [isChangingProperty, setIsChangingProperty] = useState(false)
+  const [owners, setOwners] = useState([])
+  const [properties, setProperties] = useState([])
+  const [newOwner, setNewOwner] = useState(null)
+  const [newProperty, setNewProperty] = useState(null)
+
+  useEffect(() => {
+    if (isOpen) {
+        setOwners(mockDB.getOwners())
+        setProperties(mockDB.getAllProperties())
+    }
+  }, [isOpen])
 
   if (!patient) return null
+
+  const handleSaveOwnerChange = () => {
+      if (newOwner) {
+          // In a real app, we would call an API to update the patient
+          // For now, we simulate updating the local patient object (which is a prop, so this is a bit hacky but works for UI feedback in this session)
+          patient.ownerId = newOwner.id;
+          patient.ownerName = newOwner.name;
+          alert(`Tutor alterado para: ${newOwner.name}`);
+          setIsChangingOwner(false);
+          setNewOwner(null);
+      }
+  }
+
+  const handleSavePropertyChange = () => {
+      if (newProperty) {
+          patient.propertyId = newProperty.id;
+          // Assuming patient object has propertyName or we just rely on ID in backend
+          alert(`Propriedade alterada para: ${newProperty.name}`);
+          setIsChangingProperty(false);
+          setNewProperty(null);
+      }
+  }
 
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
@@ -105,15 +144,38 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                 </div>
               </div>
               
-              <div className="flex items-center gap-4 text-gray-600">
+              <div className="flex items-center gap-4 text-gray-600 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{patient.species || 'Canino'}</span>
                 </div>
                 <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 group relative">
                   <User className="h-4 w-4" />
                   <span>Tutor: {patient.ownerName || 'Ana Souza'}</span>
+                  <button 
+                    onClick={() => setIsChangingOwner(true)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded text-blue-600"
+                    title="Alterar Tutor"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </button>
                 </div>
+                {patient.species === 'Equine' && (
+                  <>
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <div className="flex items-center gap-2 group relative">
+                      <Home className="h-4 w-4" />
+                      <span>Propriedade: {properties.find(p => p.id === patient.propertyId)?.name || 'N/A'}</span>
+                      <button 
+                        onClick={() => setIsChangingProperty(true)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded text-blue-600"
+                        title="Alterar Propriedade"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex gap-2 mt-2">
@@ -335,6 +397,46 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
           </div>
         </div>
       </div>
+      
+      {/* Change Owner Modal */}
+      <Modal isOpen={isChangingOwner} onClose={() => setIsChangingOwner(false)} title="Alterar Tutor">
+          <div className="space-y-4 p-1">
+              <p className="text-sm text-gray-500">Selecione o novo tutor para este paciente.</p>
+              <Autocomplete 
+                  options={owners.map(o => ({ id: o.id, label: o.name }))}
+                  onSelect={(opt) => {
+                      const o = owners.find(owner => owner.id === opt.id)
+                      setNewOwner(o || null)
+                  }}
+                  placeholder="Buscar novo tutor..."
+                  value={newOwner?.name}
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" onClick={() => setIsChangingOwner(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveOwnerChange} disabled={!newOwner}>Salvar Alteração</Button>
+              </div>
+          </div>
+      </Modal>
+
+      {/* Change Property Modal */}
+      <Modal isOpen={isChangingProperty} onClose={() => setIsChangingProperty(false)} title="Alterar Propriedade">
+          <div className="space-y-4 p-1">
+              <p className="text-sm text-gray-500">Selecione a nova propriedade para este paciente.</p>
+              <Autocomplete 
+                  options={properties.map(p => ({ id: p.id, label: `${p.name} - ${p.city}` }))}
+                  onSelect={(opt) => {
+                      const p = properties.find(prop => prop.id === opt.id)
+                      setNewProperty(p || null)
+                  }}
+                  placeholder="Buscar nova propriedade..."
+                  value={newProperty?.name}
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" onClick={() => setIsChangingProperty(false)}>Cancelar</Button>
+                  <Button onClick={handleSavePropertyChange} disabled={!newProperty}>Salvar Alteração</Button>
+              </div>
+          </div>
+      </Modal>
     </div>
   )
 }

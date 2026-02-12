@@ -1,7 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Autocomplete } from '@/shared/Autocomplete'
+import { mockDB } from '@/services/mockDatabase'
 import { 
   Calendar, 
   Activity, 
@@ -14,234 +17,286 @@ import {
   Thermometer,
   Heart,
   Wind,
-  Search
+  Search,
+  User,
+  MapPin,
+  Play
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import PatientDetailsModal from '@/components/PatientDetailsModal'
+import { useNavigate } from 'react-router-dom'
 
 export default function Attendance() {
-  const [activeTab, setActiveTab] = useState('overview') // overview, odontogram, treatments, exams, photos
-  const [mainTab, setMainTab] = useState('patients') // patients, treatments
+  const navigate = useNavigate()
+  const [viewState, setViewState] = useState('dashboard') // dashboard, profile
+  const [appointments, setAppointments] = useState([])
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [patients, setPatients] = useState([])
+
+  useEffect(() => {
+    // Load appointments
+    const allAppts = mockDB.getAppointments()
+    const allPatients = mockDB.getPatients()
+    const owners = mockDB.getOwners()
+    
+    // Filter for today (mock logic)
+    const today = new Date().toDateString()
+    const todaysAppts = allAppts.filter(a => new Date(a.start).toDateString() === today).map(appt => {
+        const patient = allPatients.find(p => p.id === appt.patientId)
+        const owner = owners.find(o => o.id === patient?.ownerId)
+        return {
+            ...appt,
+            patientName: patient?.name || 'Unknown',
+            ownerName: owner?.name || 'Unknown',
+            species: patient?.species,
+            patient: patient // Keep full patient ref
+        }
+    })
+    
+    setAppointments(todaysAppts)
+    setPatients(allPatients)
+  }, [])
+
+  const handlePatientSelect = (patient) => {
+      // Find full patient details including owner name
+      const owner = mockDB.getOwners().find(o => o.id === patient.ownerId)
+      setSelectedPatient({
+          ...patient,
+          ownerName: owner?.name || 'Desconhecido'
+      })
+      setViewState('profile')
+  }
+
+  const handleStartAttendance = () => {
+      // Navigate to attendance wizard/form
+      // For now we assume a route or just log it
+      navigate('/attendance-new', { state: { patient: selectedPatient } })
+  }
+
+  if (viewState === 'profile' && selectedPatient) {
+      return (
+        <Layout>
+             <div className="mb-4">
+                <Button variant="ghost" onClick={() => setViewState('dashboard')}>&larr; Voltar para Painel</Button>
+             </div>
+             {/* Reusing the Modal Content logic but as a full page or just opening the modal? 
+                 The requirement says "abrir uma tela com...". 
+                 Let's use the PatientDetailsModal but trigger it or embed it.
+                 Actually, reusing the component might be tricky if it's strictly a modal.
+                 Let's render a specific Profile View here.
+             */}
+             
+             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm">
+                    <div className="flex items-center gap-6">
+                         <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-lg">
+                            <img 
+                                src={`https://api.dicebear.com/7.x/fun-emoji/svg?seed=${selectedPatient.name}`} 
+                                alt={selectedPatient.name}
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-bold text-[#0B2C4D]">{selectedPatient.name}</h1>
+                            <div className="flex items-center gap-4 text-gray-600 mt-2">
+                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">{selectedPatient.species}</span>
+                                <span className="flex items-center gap-1"><User className="h-4 w-4" /> {selectedPatient.ownerName}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <Button 
+                            className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg shadow-lg shadow-green-900/20"
+                            onClick={handleStartAttendance}
+                        >
+                            <Play className="mr-2 h-5 w-5" /> Iniciar Atendimento
+                        </Button>
+                    </div>
+                </div>
+
+                {/* History Summary */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card>
+                            <CardContent className="p-6">
+                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                    <Clock className="h-5 w-5 text-gray-500" />
+                                    Último Atendimento (Resumo)
+                                </h3>
+                                {/* Mock History Data */}
+                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2">
+                                    <div className="flex justify-between text-sm text-gray-500 mb-2">
+                                        <span>10/05/2026</span>
+                                        <span>Dr. Silva</span>
+                                    </div>
+                                    <p className="font-medium text-gray-900">Queixa: Dor de dente e falta de apetite.</p>
+                                    <p className="text-gray-600">Diagnóstico: Periodontite grau 2.</p>
+                                    <p className="text-gray-600">Tratamento: Limpeza e antibiótico.</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        
+                        {/* Vitals History Graph Placeholder */}
+                        <Card>
+                            <CardContent className="p-6">
+                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                    <Activity className="h-5 w-5 text-blue-600" />
+                                    Evolução de Peso e Sinais Vitais
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 text-gray-600 font-medium border-b">
+                                            <tr>
+                                                <th className="p-3">Data</th>
+                                                <th className="p-3">Peso (kg)</th>
+                                                <th className="p-3">FC (bpm)</th>
+                                                <th className="p-3">Temp (°C)</th>
+                                                <th className="p-3">PA</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {/* Mock Data - In real app, map from patient history */}
+                                            <tr className="border-b hover:bg-gray-50">
+                                                <td className="p-3">10/05/2026</td>
+                                                <td className="p-3 font-bold">32.5</td>
+                                                <td className="p-3">88</td>
+                                                <td className="p-3">38.5</td>
+                                                <td className="p-3">120/80</td>
+                                            </tr>
+                                            <tr className="border-b hover:bg-gray-50">
+                                                <td className="p-3">15/04/2026</td>
+                                                <td className="p-3 font-bold">31.8</td>
+                                                <td className="p-3">92</td>
+                                                <td className="p-3">38.7</td>
+                                                <td className="p-3">118/78</td>
+                                            </tr>
+                                            <tr className="border-b hover:bg-gray-50">
+                                                <td className="p-3">02/02/2026</td>
+                                                <td className="p-3 font-bold">30.2</td>
+                                                <td className="p-3">95</td>
+                                                <td className="p-3">39.0</td>
+                                                <td className="p-3">--</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="space-y-6">
+                         <Card className="bg-blue-50 border-blue-100">
+                            <CardContent className="p-6">
+                                <h3 className="font-bold text-blue-900 mb-2">Dados Cadastrais</h3>
+                                <div className="space-y-2 text-sm text-blue-800">
+                                    <p><strong>Raça:</strong> {selectedPatient.breed}</p>
+                                    <p><strong>Idade:</strong> {selectedPatient.age} anos</p>
+                                    <p><strong>Sexo:</strong> {selectedPatient.gender === 'M' ? 'Macho' : 'Fêmea'}</p>
+                                    {selectedPatient.weight && <p><strong>Peso Atual:</strong> {selectedPatient.weight} kg</p>}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+             </div>
+        </Layout>
+      )
+  }
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Top Navigation */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setMainTab('patients')}
-            className={cn(
-              "px-6 py-2 rounded-lg text-sm font-medium transition-all",
-              mainTab === 'patients' ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            Pacientes
-          </button>
-          <button
-            onClick={() => setMainTab('treatments')}
-            className={cn(
-              "px-6 py-2 rounded-lg text-sm font-medium transition-all",
-              mainTab === 'treatments' ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            Tratamentos
-          </button>
+      <div className="space-y-8">
+        <div>
+            <h1 className="text-3xl font-bold text-[#0B2C4D] mb-2">Painel de Atendimentos</h1>
+            <p className="text-gray-500">Gerencie os atendimentos do dia e inicie novas consultas.</p>
         </div>
 
-        {/* Patient Header Card */}
-        <Card className="border-none shadow-sm overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-              {/* Avatar */}
-              <div className="w-24 h-24 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden border-4 border-white shadow-sm">
-                <img 
-                  src="https://images.unsplash.com/photo-1552053831-71594a27632d?ixlib=rb-1.2.1&auto=format&fit=crop&w=150&q=80" 
-                  alt="Thor" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left: Schedule */}
+            <div className="lg:col-span-2 space-y-6">
+                <Card className="border-t-4 border-t-[#00BFA5] shadow-sm">
+                    <CardContent className="p-6">
+                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            <Calendar className="h-5 w-5 text-[#00BFA5]" />
+                            Pré-agendados de Hoje
+                        </h2>
 
-              {/* Info */}
-              <div className="flex-1 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <h1 className="text-3xl font-bold text-gray-900">Thor</h1>
-                  <div className="flex items-center gap-2 text-gray-500 text-sm bg-gray-50 px-3 py-1 rounded-full">
-                    <Calendar className="h-4 w-4" />
-                    <span>Próxima Consulta: 15/11/2024 - 10:30</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span className="font-medium">Canino</span>
-                  <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                  <span>Tutor: Ana Souza</span>
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">
-                    Alergias: Penicilina
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-100">
-                    Risco Anestésico: ASA III
-                  </span>
-                </div>
-              </div>
+                        <div className="space-y-4">
+                            {appointments.length === 0 ? (
+                                <div className="text-center py-8 text-gray-400">
+                                    Nenhum agendamento encontrado para hoje.
+                                </div>
+                            ) : (
+                                appointments.map(appt => (
+                                    <div key={appt.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-white rounded-lg shadow-sm border border-gray-200">
+                                                <span className="text-lg font-bold text-gray-900">
+                                                    {new Date(appt.start).getHours()}:{new Date(appt.start).getMinutes().toString().padStart(2, '0')}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-lg text-gray-900">{appt.patientName}</h3>
+                                                <div className="flex items-center gap-3 text-sm text-gray-500">
+                                                    <span className="flex items-center gap-1"><User className="h-3 w-3" /> {appt.ownerName}</span>
+                                                    <span>•</span>
+                                                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Consultório 1</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Button 
+                                            onClick={() => handlePatientSelect(appt.patient)}
+                                            className="bg-[#0B2C4D] text-white hover:bg-[#0B2C4D]/90 shadow-md"
+                                        >
+                                            <Play className="h-4 w-4 mr-2" /> Atender
+                                        </Button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Inner Tabs */}
-        <div className="flex overflow-x-auto gap-2 pb-2 md:pb-0">
-          {[
-            { id: 'overview', label: 'Visão Geral' },
-            { id: 'odontogram', label: 'Odontograma' },
-            { id: 'treatments', label: 'Tratamentos' },
-            { id: 'exams', label: 'Exames' },
-            { id: 'photos', label: 'Fotos' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
-                activeTab === tab.id 
-                  ? "bg-[#0B2C4D] text-white shadow-md" 
-                  : "bg-white text-gray-600 hover:bg-gray-50 shadow-sm"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+            {/* Right: Manual Start */}
+            <div>
+                <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 shadow-sm h-full">
+                    <CardContent className="p-6">
+                        <h2 className="text-xl font-bold text-[#0B2C4D] mb-4 flex items-center gap-2">
+                            <Search className="h-5 w-5" />
+                            Atendimento Avulso
+                        </h2>
+                        <p className="text-sm text-gray-600 mb-6">
+                            Para pacientes sem agendamento prévio (emergências ou encaixes).
+                        </p>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Left Column (2/3) */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Sinais Vitais */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="border-none shadow-sm bg-teal-50/30 md:col-span-2 lg:col-span-1">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-5 w-5 text-teal-600" />
-                      <h3 className="font-bold text-gray-900">Sinais Vitais</h3>
-                    </div>
-                    <span className="text-xs text-teal-600 font-medium">(Última medição: 10/05/2024)</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Freq. Cardíaca</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold text-gray-900">110</span>
-                        <span className="text-sm text-gray-500">bpm</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Pressão Arterial</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold text-gray-900">130/80</span>
-                        <span className="text-sm text-gray-500">mmHg</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Freq. Respiratória</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold text-gray-900">24</span>
-                        <span className="text-sm text-gray-500">rpm</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Temperatura</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold text-gray-900">38.5</span>
-                        <span className="text-sm text-gray-500">°C</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Anamnese */}
-              <Card className="border-none shadow-sm bg-blue-50/30 md:col-span-2 lg:col-span-1">
-                <CardContent className="p-6 h-full">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Stethoscope className="h-5 w-5 text-blue-600" />
-                    <h3 className="font-bold text-gray-900">Anamnese</h3>
-                  </div>
-                  
-                  <div className="space-y-4 text-sm">
-                    <div>
-                      <span className="font-bold text-gray-900 block mb-1">Queixa Principal:</span>
-                      <p className="text-gray-600 leading-relaxed">Halitose intensa, relutância em mastigar.</p>
-                    </div>
-                    <div>
-                      <span className="font-bold text-gray-900 block mb-1">Histórico:</span>
-                      <p className="text-gray-600 leading-relaxed">Diagnosticado com doença periodontal estágio 2 há 6 meses.</p>
-                    </div>
-                    <div>
-                      <span className="font-bold text-gray-900 block mb-1">Alimentação:</span>
-                      <p className="text-gray-600">Ração seca.</p>
-                    </div>
-                    <div>
-                      <span className="font-bold text-gray-900 block mb-1">Comportamento:</span>
-                      <p className="text-gray-600">Apatia leve, sensibilidade oral.</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 mb-1 block">Buscar Paciente</label>
+                                <Autocomplete 
+                                    options={patients.map(p => ({ id: p.id, label: p.name }))}
+                                    onSelect={(opt) => {
+                                        const p = patients.find(pat => pat.id === opt.id)
+                                        if (p) handlePatientSelect(p)
+                                    }}
+                                    placeholder="Nome do paciente..."
+                                />
+                            </div>
+                            
+                            <div className="pt-4 border-t border-blue-100">
+                                <Button 
+                                    variant="outline" 
+                                    className="w-full justify-start text-blue-700 border-blue-200 hover:bg-blue-50"
+                                    onClick={() => navigate('/register')}
+                                >
+                                    <Plus className="h-4 w-4 mr-2" /> Cadastrar Novo Paciente
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
-          </div>
-
-          {/* Right Column (Sidebar Actions) */}
-          <div className="space-y-6">
-            
-            {/* Ações Rápidas */}
-            <Card className="border-none shadow-sm bg-[#0B2C4D] text-white overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Activity className="w-24 h-24" />
-              </div>
-              <CardContent className="p-6 relative z-10">
-                <h3 className="text-lg font-bold mb-6">Ações Rápidas</h3>
-                
-                <div className="space-y-3">
-                  <Button className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white border-none justify-center h-12 text-base font-semibold shadow-lg shadow-teal-900/20">
-                    Abrir Odontograma
-                  </Button>
-                  <Button className="w-full bg-white/10 hover:bg-white/20 text-white border-none justify-center h-10 backdrop-blur-sm">
-                    Novo Procedimento
-                  </Button>
-                  <Button className="w-full bg-white/10 hover:bg-white/20 text-white border-none justify-center h-10 backdrop-blur-sm">
-                    <FileText className="mr-2 h-4 w-4" /> Gerar PDF do Prontuário
-                  </Button>
-                  <Button className="w-full bg-white/10 hover:bg-white/20 text-white border-none justify-center h-10 backdrop-blur-sm">
-                    <Mail className="mr-2 h-4 w-4" /> Enviar ao Tutor (E-mail)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Alertas */}
-            <Card className="border-none shadow-sm bg-red-50 border-l-4 border-red-400">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertCircle className="h-5 w-5 text-red-600" />
-                  <h3 className="font-bold text-red-900">Alertas</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="text-sm text-red-800">
-                    <p className="font-semibold mb-1">Hoje, 09:15</p>
-                    <p className="opacity-90 leading-relaxed">
-                      Confirmação pendente para cirurgia de 15/11/2024.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-          </div>
         </div>
       </div>
     </Layout>
