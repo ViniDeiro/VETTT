@@ -119,6 +119,36 @@ class MockDatabaseService {
     return newPatient;
   }
 
+  updatePatient(id: string, updates: Partial<Patient>) {
+      const index = this.patients.findIndex(p => p.id === id);
+      if (index !== -1) {
+          this.patients[index] = { ...this.patients[index], ...updates };
+          this.save('vet_patients', this.patients);
+          return this.patients[index];
+      }
+      return null;
+  }
+
+  updateOwner(id: string, updates: Partial<Owner>) {
+      const index = this.owners.findIndex(o => o.id === id);
+      if (index !== -1) {
+          this.owners[index] = { ...this.owners[index], ...updates };
+          this.save('vet_owners', this.owners);
+          return this.owners[index];
+      }
+      return null;
+  }
+  
+  updateProperty(id: string, updates: Partial<Property>) {
+      const index = this.properties.findIndex(p => p.id === id);
+      if (index !== -1) {
+          this.properties[index] = { ...this.properties[index], ...updates };
+          this.save('vet_properties', this.properties);
+          return this.properties[index];
+      }
+      return null;
+  }
+
   // --- Appointments ---
   getAppointments() {
     return this.appointments;
@@ -214,7 +244,26 @@ class MockDatabaseService {
     return newAttendance;
   }
 
-  finishAttendance(attendanceId: string, serviceFee: number, items: ConsumptionItem[]) {
+  getAttendancesByPatientId(patientId: string) {
+    return this.attendances.filter(a => a.patientId === patientId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
+
+  updateAttendance(id: string, updates: Partial<Attendance>, user: string) {
+    const index = this.attendances.findIndex(a => a.id === id);
+    if (index !== -1) {
+      this.attendances[index] = { 
+        ...this.attendances[index], 
+        ...updates,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user
+      };
+      this.save('vet_attendances', this.attendances);
+      return this.attendances[index];
+    }
+    return null;
+  }
+
+  finishAttendance(attendanceId: string, serviceFee: number, items: ConsumptionItem[], vaccines: any[] = []) {
     const attendanceIndex = this.attendances.findIndex(a => a.id === attendanceId);
     if (attendanceIndex === -1) throw new Error('Attendance not found');
 
@@ -223,12 +272,15 @@ class MockDatabaseService {
     // 1. Calculate Costs
     const materialsCost = items.reduce((acc, item) => acc + (item.costAtMoment * item.quantityUsed), 0);
     const materialsPrice = items.reduce((acc, item) => acc + (item.priceAtMoment * item.quantityUsed), 0);
-    const total = serviceFee + materialsPrice;
+    const vaccinesPrice = vaccines.reduce((acc, vac) => acc + vac.price, 0);
+
+    const total = serviceFee + materialsPrice + vaccinesPrice;
 
     // 2. Update Attendance
     attendance.status = 'finished';
     attendance.consumedItems = items;
-    attendance.totalCost = materialsCost;
+    attendance.vaccines = vaccines;
+    attendance.totalCost = materialsCost; // Note: Vaccine cost not tracked separately here yet
     attendance.totalService = serviceFee;
     attendance.totalTotal = total;
     this.attendances[attendanceIndex] = attendance;
@@ -237,6 +289,10 @@ class MockDatabaseService {
     // 3. Deduct Stock
     items.forEach(item => {
       this.updateStock(item.inventoryItemId, -item.quantityUsed);
+    });
+    // Deduct Vaccines Stock
+    vaccines.forEach(vac => {
+        this.updateStock(vac.inventoryItemId, -1);
     });
 
     // 4. Create Receivable

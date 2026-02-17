@@ -28,17 +28,79 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [isChangingOwner, setIsChangingOwner] = useState(false)
   const [isChangingProperty, setIsChangingProperty] = useState(false)
+  const [isEditing, setIsEditing] = useState(false) // Edit Mode
   const [owners, setOwners] = useState([])
   const [properties, setProperties] = useState([])
   const [newOwner, setNewOwner] = useState(null)
   const [newProperty, setNewProperty] = useState(null)
+  
+  // Attendances State
+  const [attendances, setAttendances] = useState([])
+  const [selectedAttendance, setSelectedAttendance] = useState(null)
+  const [isEditingAttendance, setIsEditingAttendance] = useState(false)
+  
+  // Edit Form State
+  const [editFormData, setEditFormData] = useState({})
 
   useEffect(() => {
     if (isOpen) {
         setOwners(mockDB.getOwners())
         setProperties(mockDB.getAllProperties())
+        // Initialize edit form
+        if (patient) {
+            const owner = mockDB.getOwners().find(o => o.id === patient.ownerId);
+            const prop = mockDB.getAllProperties().find(p => p.id === patient.propertyId);
+            setEditFormData({
+                ...patient,
+                ownerData: owner || {},
+                propertyData: prop || {}
+            });
+            
+            // Load Attendances
+            setAttendances(mockDB.getAttendancesByPatientId(patient.id));
+        }
     }
-  }, [isOpen])
+  }, [isOpen, patient])
+
+  const handlePhotoUpload = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const base64 = reader.result;
+              mockDB.updatePatient(patient.id, { photoUrl: base64 });
+              // Force update UI (hacky since patient is prop, better if parent updates)
+              // But for now we assume parent might re-render or we update local
+              patient.photoUrl = base64; 
+              // Trigger re-render
+              setEditFormData({...editFormData, photoUrl: base64}); 
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleSaveEdit = () => {
+      // Save Patient
+      const { ownerData, propertyData, ...patientUpdates } = editFormData;
+      mockDB.updatePatient(patient.id, patientUpdates);
+      
+      // Save Owner
+      if (patient.ownerId && ownerData) {
+          mockDB.updateOwner(patient.ownerId, ownerData);
+      }
+
+      // Save Property
+      if (patient.propertyId && propertyData && patient.species === 'Equine') {
+          mockDB.updateProperty(patient.propertyId, propertyData);
+      }
+
+      // Update local 'patient' prop reference for immediate UI feedback (React won't re-render parent automatically here without callback)
+      Object.assign(patient, patientUpdates);
+      if(ownerData) patient.ownerName = ownerData.name; // Sync name
+
+      setIsEditing(false);
+      alert('Dados atualizados com sucesso!');
+  };
 
   if (!patient) return null
 
@@ -66,6 +128,8 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
 
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
+    { id: 'contacts', label: 'Contatos & Local' },
+    { id: 'attendances', label: 'Histórico de Atendimentos' },
     { id: 'odontogram', label: 'Odontograma' },
     { id: 'treatments', label: 'Tratamentos' },
     { id: 'exams', label: 'Exames' },
@@ -127,12 +191,17 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
         {/* Header */}
         <div className="bg-white border-b p-6 flex items-start justify-between shrink-0">
           <div className="flex gap-6">
-            <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden shrink-0 border-4 border-white shadow-lg">
+            <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden shrink-0 border-4 border-white shadow-lg relative group">
               <img 
-                src={`https://api.dicebear.com/7.x/fun-emoji/svg?seed=${patient.name}`} 
+                src={patient.photoUrl || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${patient.name}`} 
                 alt={patient.name}
                 className="w-full h-full object-cover"
               />
+              {/* Photo Upload Overlay */}
+              <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  <ImageIcon className="h-8 w-8 text-white" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+              </label>
             </div>
             
             <div className="space-y-2">
@@ -176,15 +245,36 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                     </div>
                   </>
                 )}
+                
+                {/* Edit Button */}
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="ml-auto text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                    onClick={() => setIsEditing(true)}
+                >
+                    <Edit2 className="h-4 w-4 mr-2" /> Editar Dados
+                </Button>
               </div>
 
-              <div className="flex gap-2 mt-2">
-                <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                  Alergias: Penicilina
-                </span>
-                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                  Risco Anestésico: ASA III
-                </span>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {patient.allergies && patient.allergies.length > 0 && (
+                    <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-red-200">
+                        <AlertCircle className="h-3 w-3" />
+                        Alergias: {patient.allergies.join(', ')}
+                    </span>
+                )}
+                {patient.anestheticRisk && (
+                    <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-orange-200">
+                        <Activity className="h-3 w-3" />
+                        Risco: {patient.anestheticRisk}
+                    </span>
+                )}
+                {patient.neutered && (
+                     <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
+                        Castrado
+                    </span>
+                )}
               </div>
             </div>
           </div>
@@ -332,7 +422,133 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   </div>
                 </div>
               )}
-              {activeTab !== 'overview' && (
+              {activeTab === 'contacts' && (
+                  <div className="space-y-6">
+                      {/* Tutor Contacts */}
+                      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                              <User className="h-5 w-5 text-blue-600" />
+                              Contatos do Tutor
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div>
+                                  <label className="text-xs text-gray-500 uppercase font-semibold">Nome Completo</label>
+                                  <p className="font-medium text-lg">{patient.ownerName}</p>
+                              </div>
+                              {/* We need owner object, find it from owners array or use what we have */}
+                              {(() => {
+                                  const owner = owners.find(o => o.id === patient.ownerId);
+                                  return owner ? (
+                                      <>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Telefone Principal</label>
+                                              <div className="flex items-center gap-2">
+                                                  <p className="font-medium text-lg">{owner.phone}</p>
+                                                  <button className="text-green-600 hover:text-green-700 text-sm font-bold bg-green-50 px-2 py-1 rounded">WhatsApp</button>
+                                              </div>
+                                          </div>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
+                                              <p className="font-medium text-gray-700">{owner.email}</p>
+                                          </div>
+                                          <div className="md:col-span-2">
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço</label>
+                                              <p className="font-medium text-gray-700">{owner.address} {owner.city && `- ${owner.city}/${owner.state}`}</p>
+                                          </div>
+                                      </>
+                                  ) : (
+                                      <p className="text-red-500">Dados do tutor não encontrados.</p>
+                                  )
+                              })()}
+                          </div>
+                      </div>
+
+                      {/* Property Contacts (Equine) */}
+                      {patient.species === 'Equine' && (
+                           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Home className="h-5 w-5 text-orange-600" />
+                                    Dados da Propriedade
+                                </h3>
+                                {(() => {
+                                  const prop = properties.find(p => p.id === patient.propertyId);
+                                  return prop ? (
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Nome da Propriedade</label>
+                                              <p className="font-medium text-lg">{prop.name}</p>
+                                          </div>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">CNPJ / Inscrição</label>
+                                              <p className="font-medium text-gray-700">{prop.registrationNumber || '-'}</p>
+                                          </div>
+                                          <div className="md:col-span-2">
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
+                                              <p className="font-medium text-gray-700">{prop.address} - {prop.city}/{prop.state}</p>
+                                          </div>
+                                      </div>
+                                  ) : (
+                                    <p className="text-gray-500">Nenhuma propriedade vinculada.</p>
+                                  )
+                                })()}
+                           </div>
+                      )}
+                  </div>
+              )}
+              {activeTab === 'attendances' && (
+                  <div className="space-y-4">
+                      {attendances.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                              <FileText className="h-12 w-12 mb-4 text-gray-300" />
+                              <p>Nenhum atendimento registrado para este paciente.</p>
+                          </div>
+                      ) : (
+                          attendances.map(att => (
+                              <div 
+                                key={att.id} 
+                                onClick={() => setSelectedAttendance(att)} 
+                                className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md cursor-pointer transition-all group"
+                              >
+                                  <div className="flex justify-between items-start mb-2">
+                                      <div>
+                                          <div className="flex items-center gap-2">
+                                              <p className="font-bold text-gray-900 text-lg">{att.reason}</p>
+                                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{new Date(att.date).toLocaleDateString()}</span>
+                                          </div>
+                                          <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                                              <User className="h-3 w-3" /> Vet: {att.vetId}
+                                          </p>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-1">
+                                          <span className={cn("px-3 py-1 rounded-full text-xs font-bold", att.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
+                                              {att.status === 'finished' ? 'Finalizado' : 'Em Andamento'}
+                                          </span>
+                                          {att.updatedAt && (
+                                              <span className="text-[10px] text-gray-400">Editado em {new Date(att.updatedAt).toLocaleDateString()}</span>
+                                          )}
+                                      </div>
+                                  </div>
+                                  
+                                  {/* Resumo */}
+                                  <div className="text-sm text-gray-500 line-clamp-2 border-t pt-2 mt-2">
+                                      <span className="font-semibold text-gray-700">Diagnóstico: </span>
+                                      {att.diagnosis || 'Não informado'}
+                                  </div>
+                                  
+                                  <div className="mt-3 flex gap-2">
+                                      {att.vitals?.weight && (
+                                          <span className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded border">Peso: {att.vitals.weight}kg</span>
+                                      )}
+                                      {att.vitals?.temperature && (
+                                          <span className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded border">Temp: {att.vitals.temperature}°C</span>
+                                      )}
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                  </div>
+              )}
+              {activeTab !== 'overview' && activeTab !== 'contacts' && activeTab !== 'attendances' && (
                 <div className="flex items-center justify-center h-64 text-gray-500">
                   Conteúdo da aba {tabs.find(t => t.id === activeTab)?.label} em desenvolvimento.
                 </div>
@@ -398,6 +614,429 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
         </div>
       </div>
       
+      {/* Edit Patient Modal */}
+      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Editar Dados Cadastrais" className="max-w-4xl">
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto p-1">
+              {/* Patient Data */}
+              <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Dados do Paciente</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="col-span-2">
+                          <label className="text-sm font-medium">Nome</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.name || ''} 
+                            onChange={e => setEditFormData({...editFormData, name: e.target.value})} 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Espécie</label>
+                          <input 
+                            className="w-full border rounded p-2 bg-gray-50"
+                            value={editFormData.species || ''} 
+                            readOnly
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Raça</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.breed || ''} 
+                            onChange={e => setEditFormData({...editFormData, breed: e.target.value})} 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Idade (anos)</label>
+                          <input 
+                            type="number"
+                            className="w-full border rounded p-2"
+                            value={editFormData.age || ''} 
+                            onChange={e => setEditFormData({...editFormData, age: Number(e.target.value)})} 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Sexo</label>
+                          <select 
+                            className="w-full border rounded p-2"
+                            value={editFormData.gender || 'M'} 
+                            onChange={e => setEditFormData({...editFormData, gender: e.target.value})} 
+                          >
+                              <option value="M">Macho</option>
+                              <option value="F">Fêmea</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Cor/Pelagem</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.color || ''} 
+                            onChange={e => setEditFormData({...editFormData, color: e.target.value})} 
+                          />
+                      </div>
+                       <div className="flex items-center pt-6">
+                           <label className="flex items-center gap-2 cursor-pointer">
+                               <input 
+                                  type="checkbox"
+                                  checked={editFormData.neutered || false}
+                                  onChange={e => setEditFormData({...editFormData, neutered: e.target.checked})}
+                               />
+                               <span className="text-sm font-medium">Castrado?</span>
+                           </label>
+                      </div>
+                      
+                      {/* Clinical Alerts Edit Section */}
+                      <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
+                          <h4 className="text-sm font-bold text-gray-700 mb-2">Alertas Clínicos</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-sm font-medium text-red-600">Alergias (separar por vírgula)</label>
+                                  <input 
+                                    className="w-full border rounded p-2 border-red-100 bg-red-50"
+                                    placeholder="Ex: Penicilina, Dipirona"
+                                    value={editFormData.allergies ? editFormData.allergies.join(', ') : ''} 
+                                    onChange={e => setEditFormData({...editFormData, allergies: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-medium text-orange-600">Risco Anestésico</label>
+                                  <select 
+                                    className="w-full border rounded p-2 border-orange-100 bg-orange-50"
+                                    value={editFormData.anestheticRisk || ''} 
+                                    onChange={e => setEditFormData({...editFormData, anestheticRisk: e.target.value})} 
+                                  >
+                                      <option value="">Não avaliado</option>
+                                      <option value="ASA I">ASA I - Paciente saudável</option>
+                                      <option value="ASA II">ASA II - Doença sistêmica leve</option>
+                                      <option value="ASA III">ASA III - Doença sistêmica grave</option>
+                                      <option value="ASA IV">ASA IV - Risco de vida constante</option>
+                                      <option value="ASA V">ASA V - Moribundo</option>
+                                  </select>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Owner Data */}
+              <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Dados do Tutor</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                          <label className="text-sm font-medium">Nome Completo</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.name || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, name: e.target.value}})} 
+                          />
+                      </div>
+                       <div>
+                          <label className="text-sm font-medium">CPF/Documento</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.document || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, document: e.target.value}})} 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Telefone</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.phone || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, phone: e.target.value}})} 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-sm font-medium">Email</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.email || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, email: e.target.value}})} 
+                          />
+                      </div>
+                      <div className="md:col-span-2">
+                          <label className="text-sm font-medium">Endereço Completo</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.address || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, address: e.target.value}})} 
+                          />
+                      </div>
+                  </div>
+              </div>
+
+              {/* Property Data (Equine Only) */}
+              {editFormData.species === 'Equine' && (
+                  <div className="space-y-4">
+                      <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Dados da Propriedade</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-sm font-medium">Nome da Propriedade</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.name || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, name: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">CNPJ/Inscrição</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.registrationNumber || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, registrationNumber: e.target.value}})} 
+                              />
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="text-sm font-medium">Endereço da Propriedade</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.address || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, address: e.target.value}})} 
+                              />
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                  <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveEdit} className="bg-[#0B2C4D] text-white">Salvar Alterações</Button>
+              </div>
+          </div>
+      </Modal>
+
+      {/* Attendance Details Modal */}
+      <Modal isOpen={!!selectedAttendance} onClose={() => { setSelectedAttendance(null); setIsEditingAttendance(false); }} title="Detalhes do Atendimento" className="max-w-4xl">
+          {selectedAttendance && (
+              <div className="space-y-6 max-h-[70vh] overflow-y-auto p-2">
+                  {/* Header Status */}
+                  <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+                      <div>
+                          <h3 className="font-bold text-lg">{selectedAttendance.reason}</h3>
+                          <p className="text-sm text-gray-500">{new Date(selectedAttendance.date).toLocaleDateString()} - {new Date(selectedAttendance.date).toLocaleTimeString()}</p>
+                      </div>
+                      <div className="text-right">
+                          <span className={cn("px-3 py-1 rounded-full text-xs font-bold block mb-1", selectedAttendance.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
+                              {selectedAttendance.status === 'finished' ? 'Finalizado' : 'Em Andamento'}
+                          </span>
+                          <p className="text-xs text-gray-500">Vet: {selectedAttendance.vetId}</p>
+                      </div>
+                  </div>
+
+                  {/* Content - Read Only or Edit Mode */}
+                  <div className="space-y-4">
+                      {/* Anamnese & Diagnosis */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-white border rounded-lg p-4">
+                              <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Anamnese</label>
+                              {isEditingAttendance ? (
+                                  <textarea 
+                                      className="w-full border rounded p-2 text-sm" 
+                                      rows={6}
+                                      defaultValue={selectedAttendance.anamnesis}
+                                      id="edit-anamnesis"
+                                  />
+                              ) : (
+                                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedAttendance.anamnesis || '-'}</p>
+                              )}
+                          </div>
+                          <div className="bg-white border rounded-lg p-4">
+                              <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Diagnóstico</label>
+                              {isEditingAttendance ? (
+                                  <textarea 
+                                      className="w-full border rounded p-2 text-sm" 
+                                      rows={6}
+                                      defaultValue={selectedAttendance.diagnosis}
+                                      id="edit-diagnosis"
+                                  />
+                              ) : (
+                                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedAttendance.diagnosis || '-'}</p>
+                              )}
+                          </div>
+                      </div>
+
+                      {/* Vitals */}
+                      <div className="bg-white border rounded-lg p-4">
+                          <label className="text-xs font-bold text-gray-500 uppercase mb-4 block flex items-center gap-2">
+                              <Activity className="h-4 w-4" /> Sinais Vitais
+                          </label>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                               <div>
+                                  <span className="text-xs text-gray-500 block">Peso (kg)</span>
+                                  {isEditingAttendance ? (
+                                      <input type="number" defaultValue={selectedAttendance.vitals?.weight} className="border rounded w-full p-1" id="edit-weight" />
+                                  ) : (
+                                      <span className="font-bold">{selectedAttendance.vitals?.weight || '-'}</span>
+                                  )}
+                               </div>
+                               <div>
+                                  <span className="text-xs text-gray-500 block">Temp (°C)</span>
+                                  {isEditingAttendance ? (
+                                      <input type="number" defaultValue={selectedAttendance.vitals?.temperature} className="border rounded w-full p-1" id="edit-temp" />
+                                  ) : (
+                                      <span className="font-bold">{selectedAttendance.vitals?.temperature || '-'}</span>
+                                  )}
+                               </div>
+                               <div>
+                                  <span className="text-xs text-gray-500 block">Freq. Cardíaca</span>
+                                  {isEditingAttendance ? (
+                                      <input type="number" defaultValue={selectedAttendance.vitals?.heartRate} className="border rounded w-full p-1" id="edit-hr" />
+                                  ) : (
+                                      <span className="font-bold">{selectedAttendance.vitals?.heartRate || '-'}</span>
+                                  )}
+                               </div>
+                               <div>
+                                  <span className="text-xs text-gray-500 block">Freq. Resp.</span>
+                                  {isEditingAttendance ? (
+                                      <input type="number" defaultValue={selectedAttendance.vitals?.respiratoryRate} className="border rounded w-full p-1" id="edit-rr" />
+                                  ) : (
+                                      <span className="font-bold">{selectedAttendance.vitals?.respiratoryRate || '-'}</span>
+                                  )}
+                               </div>
+                               <div>
+                                  <span className="text-xs text-gray-500 block">TPC (seg)</span>
+                                  {isEditingAttendance ? (
+                                      <input type="number" defaultValue={selectedAttendance.vitals?.tpc} className="border rounded w-full p-1" id="edit-tpc" />
+                                  ) : (
+                                      <span className="font-bold">{selectedAttendance.vitals?.tpc || '-'}</span>
+                                  )}
+                               </div>
+                               <div>
+                                  <span className="text-xs text-gray-500 block">Pressão</span>
+                                  {isEditingAttendance ? (
+                                      <div className="flex gap-1 items-center">
+                                          <input type="number" defaultValue={selectedAttendance.vitals?.pressureSystolic} className="border rounded w-12 p-1 text-xs" id="edit-bp-sys" placeholder="Sys" />
+                                          /
+                                          <input type="number" defaultValue={selectedAttendance.vitals?.pressureDiastolic} className="border rounded w-12 p-1 text-xs" id="edit-bp-dia" placeholder="Dia" />
+                                      </div>
+                                  ) : (
+                                      <span className="font-bold">
+                                          {selectedAttendance.vitals?.pressureSystolic ? `${selectedAttendance.vitals.pressureSystolic}/${selectedAttendance.vitals.pressureDiastolic}` : '-'}
+                                      </span>
+                                  )}
+                               </div>
+                          </div>
+
+                          {/* Equine Specific Vitals Display */}
+                          {patient.species === 'Equine' && selectedAttendance.vitals?.motility && (
+                              <div className="mt-4 pt-4 border-t">
+                                  <span className="text-xs font-bold text-gray-500 uppercase block mb-2">Motilidade Intestinal (Equinos)</span>
+                                  <div className="grid grid-cols-4 gap-2 text-center text-sm">
+                                      <div className="bg-gray-50 p-2 rounded border">
+                                          <span className="block text-xs text-gray-400">Sup. Esq.</span>
+                                          <span className="font-bold">{selectedAttendance.vitals.motility.upperLeft}</span>
+                                      </div>
+                                      <div className="bg-gray-50 p-2 rounded border">
+                                          <span className="block text-xs text-gray-400">Sup. Dir.</span>
+                                          <span className="font-bold">{selectedAttendance.vitals.motility.upperRight}</span>
+                                      </div>
+                                      <div className="bg-gray-50 p-2 rounded border">
+                                          <span className="block text-xs text-gray-400">Inf. Esq.</span>
+                                          <span className="font-bold">{selectedAttendance.vitals.motility.lowerLeft}</span>
+                                      </div>
+                                      <div className="bg-gray-50 p-2 rounded border">
+                                          <span className="block text-xs text-gray-400">Inf. Dir.</span>
+                                          <span className="font-bold">{selectedAttendance.vitals.motility.lowerRight}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                      
+                      {/* Prescriptions / Treatments (ReadOnly for now in edit mode as they are complex) */}
+                      <div className="bg-white border rounded-lg p-4">
+                          <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Prescrição / Tratamento</label>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedAttendance.prescription || 'Nenhuma prescrição registrada.'}</p>
+                      </div>
+
+                      {/* Consumed Items (ReadOnly) */}
+                      {selectedAttendance.consumedItems?.length > 0 && (
+                          <div className="bg-gray-50 border rounded-lg p-4">
+                              <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Materiais Consumidos</label>
+                              <ul className="text-sm space-y-1">
+                                  {selectedAttendance.consumedItems.map((item, idx) => (
+                                      <li key={idx} className="flex justify-between text-gray-600">
+                                          <span>{item.itemName}</span>
+                                          <span>{item.quantityUsed} {item.unit}</span>
+                                      </li>
+                                  ))}
+                              </ul>
+                          </div>
+                      )}
+
+                      {/* Vaccines (ReadOnly) */}
+                      {selectedAttendance.vaccines?.length > 0 && (
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+                              <label className="text-xs font-bold text-blue-700 uppercase mb-2 block flex items-center gap-2">
+                                  <Syringe className="h-3 w-3" /> Vacinas Aplicadas
+                              </label>
+                              <ul className="text-sm space-y-2">
+                                  {selectedAttendance.vaccines.map((vac, idx) => (
+                                      <li key={idx} className="bg-white p-2 rounded border border-blue-100">
+                                          <div className="flex justify-between font-medium text-blue-900">
+                                              <span>{vac.name}</span>
+                                              <span>{vac.applicationDate}</span>
+                                          </div>
+                                          <div className="text-xs text-blue-600 flex gap-2 mt-1">
+                                              <span>Lote: {vac.batch || '-'}</span>
+                                              <span>Val: {vac.expiryDate || '-'}</span>
+                                          </div>
+                                      </li>
+                                  ))}
+                              </ul>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                      {isEditingAttendance ? (
+                          <>
+                              <Button variant="outline" onClick={() => setIsEditingAttendance(false)}>Cancelar Edição</Button>
+                              <Button onClick={() => {
+                                  // Collect data and save
+                                  const updates = {
+                                      anamnesis: document.getElementById('edit-anamnesis').value,
+                                      diagnosis: document.getElementById('edit-diagnosis').value,
+                                      vitals: {
+                                          ...selectedAttendance.vitals,
+                                          weight: Number(document.getElementById('edit-weight').value),
+                                          temperature: Number(document.getElementById('edit-temp').value),
+                                          heartRate: Number(document.getElementById('edit-hr').value),
+                                          respiratoryRate: Number(document.getElementById('edit-rr').value),
+                                          tpc: Number(document.getElementById('edit-tpc').value),
+                                          pressureSystolic: Number(document.getElementById('edit-bp-sys').value),
+                                          pressureDiastolic: Number(document.getElementById('edit-bp-dia').value),
+                                      }
+                                  };
+                                  mockDB.updateAttendance(selectedAttendance.id, updates, 'Current Vet');
+                                  
+                                  // Update Patient Weight History if weight changed
+                                  if (updates.vitals.weight && updates.vitals.weight !== selectedAttendance.vitals?.weight) {
+                                      mockDB.updatePatient(selectedAttendance.patientId, { weight: updates.vitals.weight });
+                                      // Update local patient prop for immediate feedback
+                                      patient.weight = updates.vitals.weight;
+                                  }
+
+                                  // Update local list
+                                  setAttendances(prev => prev.map(a => a.id === selectedAttendance.id ? {...a, ...updates} : a));
+                                  setSelectedAttendance(prev => ({...prev, ...updates}));
+                                  setIsEditingAttendance(false);
+                                  alert('Atendimento atualizado com sucesso!');
+                              }} className="bg-blue-600 text-white">Salvar Alterações</Button>
+                          </>
+                      ) : (
+                          <>
+                              <Button variant="outline" onClick={() => { setSelectedAttendance(null); setIsEditingAttendance(false); }}>Fechar</Button>
+                              <Button onClick={() => setIsEditingAttendance(true)} className="bg-[#0B2C4D] text-white">
+                                  <Edit2 className="h-4 w-4 mr-2" /> Editar Atendimento
+                              </Button>
+                          </>
+                      )}
+                  </div>
+              </div>
+          )}
+      </Modal>
+
       {/* Change Owner Modal */}
       <Modal isOpen={isChangingOwner} onClose={() => setIsChangingOwner(false)} title="Alterar Tutor">
           <div className="space-y-4 p-1">

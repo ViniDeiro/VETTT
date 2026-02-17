@@ -49,6 +49,9 @@ export interface Patient {
   neutered?: boolean;
   weight?: number;
   photoUrl?: string;
+  allergies?: string[]; // List of allergies
+  anestheticRisk?: 'ASA I' | 'ASA II' | 'ASA III' | 'ASA IV' | 'ASA V'; // Risk classification
+  notes?: string; // General clinical notes
 }
 
 export type UnitType = 'ml' | 'un' | 'frasco' | 'g' | 'kg';
@@ -111,10 +114,22 @@ export interface Attendance {
   prescription?: string;
   status: AttendanceStatus;
   consumedItems: ConsumptionItem[];
+  vaccines?: {
+      inventoryItemId: string;
+      name: string;
+      batch?: string;
+      manufacturer?: string;
+      expiryDate?: string;
+      applicationDate: string;
+      price: number;
+      notes?: string;
+  }[];
   totalCost: number; // Cost of materials
   totalService: number; // Vet service fee
   totalTotal: number; // Final price
   vitals?: Vitals;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue';
