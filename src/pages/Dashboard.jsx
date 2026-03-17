@@ -74,7 +74,16 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat, index) => (
-            <Card key={index} className="border-none shadow-sm hover:shadow-md transition-shadow">
+            <Card 
+              key={index} 
+              className="border-none shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => {
+                if (stat.title.includes('Atendimentos')) navigate('/agenda');
+                else if (stat.title.includes('Procedimentos')) navigate('/attendance-new');
+                else if (stat.title.includes('Receita')) navigate('/finance/revenue');
+                else if (stat.title.includes('Custos')) navigate('/finance/expenses');
+              }}
+            >
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className={`p-4 rounded-2xl ${stat.bg}`}>
@@ -100,7 +109,11 @@ export default function Dashboard() {
               <h3 className="text-lg font-bold text-gray-900 mb-4">Próximos Atendimentos</h3>
               <div className="space-y-4">
                 {nextAppointments.map((apt, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                  <div 
+                    key={index} 
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                    onClick={() => navigate('/agenda')}
+                  >
                     <div className="flex items-center gap-3">
                       <div className="h-2 w-2 rounded-full bg-blue-500"></div>
                       <div>

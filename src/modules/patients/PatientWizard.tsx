@@ -9,7 +9,8 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { mockDB } from '../../services/mockDatabase';
 import { Owner, Property, Patient } from '../../domain/types';
-import { CheckCircle, ChevronRight, ChevronLeft, User, Home, PawPrint, Plus } from 'lucide-react';
+import { getBreedsBySpecies } from '../../domain/breeds';
+import { CheckCircle, ChevronRight, ChevronLeft, User, Home, PawPrint, Plus, AlertCircle, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const PatientWizard: React.FC = () => {
@@ -26,7 +27,12 @@ export const PatientWizard: React.FC = () => {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
   // Forms
-  const [patientData, setPatientData] = useState<Partial<Patient>>({ species: 'Canine' });
+  const [patientData, setPatientData] = useState<Partial<Patient>>({ 
+    species: 'Canine',
+    status: 'Alive',
+    gender: 'M',
+    healthPlan: { name: '', number: '', expiryDate: '' }
+  });
   const [newOwnerData, setNewOwnerData] = useState<Partial<Owner>>({});
   const [newPropertyData, setNewPropertyData] = useState<Partial<Property>>({});
   
@@ -35,6 +41,10 @@ export const PatientWizard: React.FC = () => {
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [useBirthDate, setUseBirthDate] = useState(true);
   const [birthDateInput, setBirthDateInput] = useState('');
+  
+  // Specific inputs for Allergies/Chronic (comma separated strings in UI, array in DB)
+  const [allergiesInput, setAllergiesInput] = useState('');
+  const [chronicInput, setChronicInput] = useState('');
 
   useEffect(() => {
     setOwners(mockDB.getOwners());
@@ -43,15 +53,28 @@ export const PatientWizard: React.FC = () => {
 
   // --- Helpers ---
   const calculateAge = (dob: string) => {
-    if (!dob) return 0;
+    if (!dob) return { years: 0, months: 0 };
     const birth = new Date(dob);
     const now = new Date();
-    let age = now.getFullYear() - birth.getFullYear();
-    const m = now.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-        age--;
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    
+    if (months < 0 || (months === 0 && now.getDate() < birth.getDate())) {
+        years--;
+        months += 12;
     }
-    return age;
+    return { years, months };
+  };
+
+  const getAgeDisplay = () => {
+    if (useBirthDate && birthDateInput) {
+        const { years, months } = calculateAge(birthDateInput);
+        return `${years} anos e ${months} meses`;
+    }
+    if (!useBirthDate) {
+        return `${patientData.age || 0} anos e ${patientData.ageMonths || 0} meses`;
+    }
+    return '0 anos e 0 meses';
   };
 
   // --- Step 1: Patient Handlers ---
@@ -121,18 +144,28 @@ export const PatientWizard: React.FC = () => {
     
     try {
       setTimeout(() => {
-        let finalAge = Number(patientData.age);
+        let finalAgeYears = Number(patientData.age || 0);
+        let finalAgeMonths = Number(patientData.ageMonths || 0);
+
         if (useBirthDate && birthDateInput) {
-            finalAge = calculateAge(birthDateInput);
+            const calculated = calculateAge(birthDateInput);
+            finalAgeYears = calculated.years;
+            finalAgeMonths = calculated.months; // We don't store months in 'age' field usually, but prompt asked for display.
+            // Note: 'age' in Patient interface is number (years). We might want to store birthDate primarily.
         }
 
-        const newPatient = {
+        const newPatient: Patient = {
+          id: Math.random().toString(36).substr(2, 9),
           ...patientData,
           ownerId: selectedOwner.id,
           propertyId: selectedProperty?.id,
-          age: finalAge,
+          age: finalAgeYears,
+          // ageMonths: finalAgeMonths, // Not in interface? I added it in previous step.
           birthDate: birthDateInput,
-          weight: Number(patientData.weight)
+          weight: Number(patientData.weight),
+          allergies: allergiesInput.split(',').map(s => s.trim()).filter(Boolean),
+          chronicDiseases: chronicInput.split(',').map(s => s.trim()).filter(Boolean),
+          healthPlan: patientData.healthPlan?.name ? patientData.healthPlan : undefined
         } as Patient;
 
         console.log('Salvando paciente:', newPatient);
@@ -151,11 +184,11 @@ export const PatientWizard: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6 pb-20">
         <h1 className="text-2xl font-bold text-gray-900">Novo Paciente</h1>
 
         {/* Stepper */}
-        <div className="flex items-center justify-between relative mb-8">
+        <div className="flex items-center justify-between relative mb-8 px-10">
           <div className="absolute left-0 top-1/2 w-full h-1 bg-gray-200 -z-10"></div>
           
           {[
@@ -163,148 +196,350 @@ export const PatientWizard: React.FC = () => {
             { num: 2, label: 'Tutor', icon: User },
             { num: 3, label: 'Propriedade', icon: Home, disabled: patientData.species !== 'Equine' }
           ].map((s) => (
-            <div key={s.num} className={cn("flex flex-col items-center bg-gray-50 px-2", s.disabled && "opacity-50")}>
+            <div key={s.num} className={cn("flex flex-col items-center bg-gray-50 px-4 py-2 rounded-xl", s.disabled && "opacity-50 grayscale")}>
               <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-colors",
-                step >= s.num ? "bg-[#0B2C4D]" : "bg-gray-300"
+                "w-12 h-12 rounded-full flex items-center justify-center font-bold text-white transition-all shadow-md",
+                step >= s.num ? "bg-[#0B2C4D] scale-110" : "bg-gray-300"
               )}>
-                <s.icon className="h-5 w-5" />
+                <s.icon className="h-6 w-6" />
               </div>
-              <span className="text-xs font-medium mt-2 text-gray-600">{s.label}</span>
+              <span className={cn("text-xs font-bold mt-2", step >= s.num ? "text-[#0B2C4D]" : "text-gray-500")}>{s.label}</span>
             </div>
           ))}
         </div>
 
-        <Card>
-          <CardContent className="p-6">
+        <Card className="border-none shadow-lg">
+          <CardContent className="p-8">
             {/* STEP 1: PATIENT */}
             {step === 1 && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                <h2 className="text-xl font-semibold mb-4">Dados do Animal</h2>
+              <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                 
-                <div>
-                  <Label>Nome do Paciente *</Label>
-                  <Input 
-                    value={patientData.name || ''} 
-                    onChange={e => setPatientData({...patientData, name: e.target.value})}
-                    placeholder="Ex: Thor"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Espécie *</Label>
-                    <Select 
-                      value={patientData.species} 
-                      onChange={e => setPatientData({...patientData, species: e.target.value as any})}
-                    >
-                      <option value="Canine">Canino</option>
-                      <option value="Feline">Felino</option>
-                      <option value="Equine">Equino</option>
-                      <option value="Bovine">Bovino</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Raça</Label>
-                    <Input 
-                      value={patientData.breed || ''} 
-                      onChange={e => setPatientData({...patientData, breed: e.target.value})}
-                      placeholder="Ex: Golden Retriever"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Sexo</Label>
-                    <Select 
-                      value={patientData.gender} 
-                      onChange={e => setPatientData({...patientData, gender: e.target.value as any})}
-                    >
-                      <option value="">Selecione</option>
-                      <option value="M">Macho</option>
-                      <option value="F">Fêmea</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Peso (kg)</Label>
-                    <Input 
-                      type="number"
-                      value={patientData.weight || ''} 
-                      onChange={e => setPatientData({...patientData, weight: Number(e.target.value)})}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Pelagem / Cor</Label>
-                    <Input 
-                      value={patientData.color || ''} 
-                      onChange={e => setPatientData({...patientData, color: e.target.value})}
-                      placeholder="Ex: Baio, Branco..."
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2 pt-8">
-                    <input
-                      type="checkbox"
-                      id="neutered"
-                      className="h-4 w-4 rounded border-gray-300 text-[#0B2C4D] focus:ring-[#0B2C4D]"
-                      checked={patientData.neutered || false}
-                      onChange={e => setPatientData({...patientData, neutered: e.target.checked})}
-                    />
-                    <Label htmlFor="neutered" className="mb-0 cursor-pointer">Castrado?</Label>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg border">
-                    <div className="flex justify-between mb-2">
-                        <Label>Idade / Nascimento</Label>
-                        <div className="flex gap-2 text-xs">
-                            <button 
-                                className={cn("px-2 py-1 rounded", useBirthDate ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500")}
-                                onClick={() => setUseBirthDate(true)}
+                {/* 1.1 Identificação Básica */}
+                <section className="space-y-4">
+                    <h3 className="text-lg font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
+                        <PawPrint className="h-5 w-5 text-blue-600" />
+                        Identificação
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <Label>Nome do Animal *</Label>
+                            <Input 
+                                value={patientData.name || ''} 
+                                onChange={e => setPatientData({...patientData, name: e.target.value})}
+                                placeholder="Ex: Thor"
+                                className="text-lg font-medium"
+                            />
+                        </div>
+                        <div>
+                            <Label>Status do Animal</Label>
+                            <Select 
+                                value={patientData.status} 
+                                onChange={e => setPatientData({...patientData, status: e.target.value as any})}
+                                className={cn("font-medium", patientData.status === 'Deceased' ? "bg-red-50 text-red-600 border-red-200" : "bg-green-50 text-green-700 border-green-200")}
                             >
-                                Data Nasc.
-                            </button>
-                            <button 
-                                className={cn("px-2 py-1 rounded", !useBirthDate ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500")}
-                                onClick={() => setUseBirthDate(false)}
-                            >
-                                Idade Manual
-                            </button>
+                                <option value="Alive">Vivo</option>
+                                <option value="Deceased">Óbito</option>
+                            </Select>
+                            {patientData.status === 'Deceased' && (
+                                <p className="text-xs text-red-500 mt-1 font-semibold">
+                                    * Cadastro será bloqueado para edição futura.
+                                </p>
+                            )}
                         </div>
                     </div>
-                    
-                    {useBirthDate ? (
-                        <div className="flex gap-4 items-center">
-                           <Input 
-                              type="date" 
-                              value={birthDateInput}
-                              onChange={e => setBirthDateInput(e.target.value)}
-                           />
-                           {birthDateInput && (
-                             <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                               = {calculateAge(birthDateInput)} anos
-                             </span>
-                           )}
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 items-center">
-                           <Input 
-                              type="number" 
-                              placeholder="Anos"
-                              value={patientData.age || ''}
-                              onChange={e => setPatientData({...patientData, age: Number(e.target.value)})}
-                           />
-                           <span className="text-sm text-gray-500">anos</span>
-                        </div>
-                    )}
-                </div>
 
-                <div className="flex justify-end pt-4">
-                  <Button onClick={handleStep1Next} className="bg-[#0B2C4D] text-white px-8">
-                    Continuar <ChevronRight className="ml-2 h-4 w-4" />
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="col-span-1">
+                            <Label>Espécie *</Label>
+                            <Select 
+                                value={patientData.species} 
+                                onChange={e => setPatientData({...patientData, species: e.target.value as any, breed: ''})}
+                            >
+                                <option value="Canine">Canino</option>
+                                <option value="Feline">Felino</option>
+                                <option value="Equine">Equino</option>
+                                <option value="Other">Outros</option>
+                            </Select>
+                        </div>
+                        <div className="col-span-1">
+                            <Label>Raça</Label>
+                            {(() => {
+                                const breeds = getBreedsBySpecies(patientData.species || 'Canine');
+                                if (breeds.length > 0) {
+                                    const isInList = patientData.breed && breeds.includes(patientData.breed) && patientData.breed !== 'Outra';
+                                    const selectValue = !patientData.breed ? '' : (isInList ? patientData.breed : 'Outra');
+                                    const showInput = selectValue === 'Outra';
+
+                                    return (
+                                        <div>
+                                            <Select 
+                                                value={selectValue}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    if (val === 'Outra') {
+                                                        setPatientData({...patientData, breed: ''});
+                                                    } else {
+                                                        setPatientData({...patientData, breed: val});
+                                                    }
+                                                }}
+                                                className="mb-2 font-medium"
+                                            >
+                                                <option value="" disabled>Selecione...</option>
+                                                {breeds.map(b => (
+                                                    <option key={b} value={b}>{b}</option>
+                                                ))}
+                                            </Select>
+                                            {showInput && (
+                                                <Input 
+                                                    value={patientData.breed || ''} 
+                                                    onChange={e => setPatientData({...patientData, breed: e.target.value})}
+                                                    placeholder="Digite a raça..."
+                                                    className="mt-2"
+                                                    autoFocus
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <Input 
+                                        value={patientData.breed || ''} 
+                                        onChange={e => setPatientData({...patientData, breed: e.target.value})}
+                                        placeholder="Ex: SRD"
+                                    />
+                                );
+                            })()}
+                        </div>
+                        <div className="col-span-1">
+                            <Label>Sexo</Label>
+                            <Select 
+                                value={patientData.gender} 
+                                onChange={e => setPatientData({...patientData, gender: e.target.value as any})}
+                            >
+                                <option value="M">Macho</option>
+                                <option value="F">Fêmea</option>
+                            </Select>
+                        </div>
+                        <div className="col-span-1 flex items-center pt-6">
+                            <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
+                                <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.neutered ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300")}>
+                                    {patientData.neutered && <CheckCircle className="w-3.5 h-3.5" />}
+                                </div>
+                                <input 
+                                    type="checkbox" 
+                                    className="hidden"
+                                    checked={patientData.neutered || false}
+                                    onChange={e => setPatientData({...patientData, neutered: e.target.checked})}
+                                />
+                                <span className="font-medium text-gray-700">Castrado?</span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                {/* 1.2 Idade e Nascimento */}
+                <section className="bg-blue-50/50 p-6 rounded-xl border border-blue-100 space-y-4">
+                    <div className="flex justify-between items-center mb-2">
+                         <Label className="text-blue-900 text-base">Idade do Animal</Label>
+                         <div className="flex bg-white rounded-lg p-1 shadow-sm border">
+                            <button 
+                                className={cn("px-3 py-1 text-xs font-bold rounded transition-all", useBirthDate ? "bg-blue-100 text-blue-700" : "text-gray-500 hover:bg-gray-50")}
+                                onClick={() => setUseBirthDate(true)}
+                            >
+                                Data Nascimento
+                            </button>
+                            <button 
+                                className={cn("px-3 py-1 text-xs font-bold rounded transition-all", !useBirthDate ? "bg-blue-100 text-blue-700" : "text-gray-500 hover:bg-gray-50")}
+                                onClick={() => setUseBirthDate(false)}
+                            >
+                                Manual
+                            </button>
+                         </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-6">
+                        {useBirthDate ? (
+                            <div className="flex-1">
+                                <Input 
+                                    type="date" 
+                                    value={birthDateInput}
+                                    onChange={e => setBirthDateInput(e.target.value)}
+                                    className="bg-white"
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex gap-4">
+                                <div className="flex-1">
+                                    <Input 
+                                        type="number" 
+                                        placeholder="0"
+                                        value={patientData.age || ''}
+                                        onChange={e => setPatientData({...patientData, age: Number(e.target.value)})}
+                                        className="bg-white"
+                                    />
+                                    <span className="text-xs text-gray-500 mt-1 block">Anos</span>
+                                </div>
+                                <div className="flex-1">
+                                    <Input 
+                                        type="number" 
+                                        placeholder="0"
+                                        value={patientData.ageMonths || ''}
+                                        onChange={e => setPatientData({...patientData, ageMonths: Number(e.target.value)})}
+                                        className="bg-white"
+                                    />
+                                    <span className="text-xs text-gray-500 mt-1 block">Meses</span>
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div className="flex-1 bg-white p-3 rounded-lg border border-blue-200 text-center shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Idade Calculada</p>
+                            <p className="text-lg font-bold text-blue-900">{getAgeDisplay()}</p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* 1.3 Dados Clínicos e Características */}
+                <section className="space-y-4">
+                    <h3 className="text-lg font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
+                        <User className="h-5 w-5 text-purple-600" />
+                        Características Físicas
+                    </h3>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                         <div>
+                            <Label>Porte</Label>
+                            <Select 
+                                value={patientData.size} 
+                                onChange={e => setPatientData({...patientData, size: e.target.value as any})}
+                            >
+                                <option value="">Selecione...</option>
+                                <option value="Small">Pequeno</option>
+                                <option value="Medium">Médio</option>
+                                <option value="Large">Grande</option>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Temperamento</Label>
+                            <Input 
+                                value={patientData.temperament || ''} 
+                                onChange={e => setPatientData({...patientData, temperament: e.target.value})}
+                                placeholder="Ex: Dócil, Agitado"
+                            />
+                        </div>
+                        <div>
+                            <Label>Pelagem (Cor)</Label>
+                            <Input 
+                                value={patientData.coat || ''} 
+                                onChange={e => setPatientData({...patientData, coat: e.target.value})}
+                                placeholder="Ex: Tigrado"
+                            />
+                        </div>
+                        <div>
+                            <Label>Microchip</Label>
+                            <Input 
+                                value={patientData.microchip || ''} 
+                                onChange={e => setPatientData({...patientData, microchip: e.target.value})}
+                                placeholder="Opcional"
+                            />
+                        </div>
+                        <div>
+                            <Label>RG Animal (RGA)</Label>
+                            <Input 
+                                value={patientData.rg || ''} 
+                                onChange={e => setPatientData({...patientData, rg: e.target.value})}
+                                placeholder="Opcional"
+                            />
+                        </div>
+                        <div>
+                            <Label>Peso Atual (kg)</Label>
+                            <Input 
+                                type="number"
+                                value={patientData.weight || ''} 
+                                onChange={e => setPatientData({...patientData, weight: Number(e.target.value)})}
+                                placeholder="0.00"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* 1.4 Plano de Saúde */}
+                <section className="space-y-4">
+                    <h3 className="text-lg font-bold text-gray-900 border-b pb-2 flex items-center gap-2">
+                        <Heart className="h-5 w-5 text-pink-600" />
+                        Plano de Saúde
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <Label>Nome do Plano</Label>
+                            <Input 
+                                value={patientData.healthPlan?.name || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, name: e.target.value}})}
+                                placeholder="Ex: PetLove"
+                            />
+                        </div>
+                        <div>
+                            <Label>Nº Carteirinha</Label>
+                            <Input 
+                                value={patientData.healthPlan?.number || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, number: e.target.value}})}
+                            />
+                        </div>
+                        <div>
+                            <Label>Vencimento</Label>
+                            <Input 
+                                type="date"
+                                value={patientData.healthPlan?.expiryDate || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, expiryDate: e.target.value}})}
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* 1.5 Alergias e Doenças Crônicas (DESTAQUE) */}
+                <section className="bg-red-50 p-6 rounded-xl border-2 border-red-100 space-y-6">
+                    <div>
+                        <Label className="text-red-700 font-bold text-base flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            ALERGIAS
+                        </Label>
+                        <Input 
+                            value={allergiesInput}
+                            onChange={e => setAllergiesInput(e.target.value)}
+                            placeholder="Separe por vírgulas. Ex: Dipirona, Carne de Frango"
+                            className="border-red-200 focus:ring-red-500 bg-white text-red-900 font-medium placeholder:text-red-200"
+                        />
+                        <p className="text-xs text-red-400 mt-1">Este campo ficará em destaque no prontuário.</p>
+                    </div>
+                    <div>
+                        <Label className="text-red-700 font-bold text-base flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            DOENÇAS CRÔNICAS
+                        </Label>
+                        <Input 
+                            value={chronicInput}
+                            onChange={e => setChronicInput(e.target.value)}
+                            placeholder="Separe por vírgulas. Ex: Diabetes, Insuficiência Renal"
+                            className="border-red-200 focus:ring-red-500 bg-white text-red-900 font-medium placeholder:text-red-200"
+                        />
+                    </div>
+                </section>
+
+                {/* 1.6 Observações Gerais */}
+                <section>
+                    <Label className="text-base font-bold text-gray-700">Observações Gerais / Histórico Cirúrgico</Label>
+                    <textarea 
+                        className="w-full border border-gray-300 rounded-lg p-3 min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Descreva cirurgias prévias, amputações, ou outras condições especiais..."
+                        value={patientData.notes || ''}
+                        onChange={e => setPatientData({...patientData, notes: e.target.value})}
+                    />
+                </section>
+
+                <div className="flex justify-end pt-8">
+                  <Button onClick={handleStep1Next} className="bg-[#0B2C4D] text-white px-10 h-12 text-lg rounded-xl shadow-lg shadow-blue-900/10 hover:bg-[#0B2C4D]/90">
+                    Continuar <ChevronRight className="ml-2 h-5 w-5" />
                   </Button>
                 </div>
               </div>
@@ -312,123 +547,145 @@ export const PatientWizard: React.FC = () => {
 
             {/* STEP 2: OWNER */}
             {step === 2 && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                <h2 className="text-xl font-semibold mb-4">Tutor (Proprietário)</h2>
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <User className="h-6 w-6 text-blue-600" />
+                    Dados do Tutor
+                </h2>
                 
                 {!isCreatingOwner ? (
-                  <div className="space-y-6">
-                    <div>
-                      <Label>Buscar Tutor Existente</Label>
+                  <div className="space-y-8 py-8">
+                    <div className="max-w-xl mx-auto space-y-4">
+                      <Label className="text-center block text-lg text-gray-600">Buscar Tutor Cadastrado</Label>
                       <Autocomplete 
                         options={owners.map(o => ({ id: o.id, label: o.name }))}
                         onSelect={(opt) => setSelectedOwner(owners.find(o => o.id === opt.id) || null)}
-                        placeholder="Digite o nome..."
+                        placeholder="Digite o nome do tutor..."
                         value={selectedOwner?.name}
                       />
                     </div>
                     
-                    <div className="relative">
+                    <div className="relative py-4">
                       <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
+                        <span className="w-full border-t border-gray-200" />
                       </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-gray-500">Ou</span>
+                      <div className="relative flex justify-center text-sm uppercase font-bold tracking-widest">
+                        <span className="bg-white px-4 text-gray-400">Ou</span>
                       </div>
                     </div>
 
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => setIsCreatingOwner(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Cadastrar Novo Tutor
-                    </Button>
+                    <div className="flex justify-center">
+                        <Button 
+                          variant="outline" 
+                          size="lg"
+                          className="border-dashed border-2 border-gray-300 hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 w-full max-w-sm h-16 text-lg"
+                          onClick={() => setIsCreatingOwner(true)}
+                        >
+                          <Plus className="mr-2 h-6 w-6" /> Cadastrar Novo Tutor
+                        </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 p-4 rounded-lg border space-y-4">
-                    <h3 className="font-medium">Novo Cadastro</h3>
-                    <Input 
-                      placeholder="Nome Completo *" 
-                      value={newOwnerData.name || ''}
-                      onChange={e => setNewOwnerData({...newOwnerData, name: e.target.value})}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input 
-                        placeholder="Telefone Principal *" 
-                        value={newOwnerData.phone || ''}
-                        onChange={e => setNewOwnerData({...newOwnerData, phone: e.target.value})}
-                      />
-                      <Input 
-                        placeholder="Telefone Secundário" 
-                        value={newOwnerData.secondaryPhone || ''}
-                        onChange={e => setNewOwnerData({...newOwnerData, secondaryPhone: e.target.value})}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input 
-                        placeholder="CPF/CNPJ" 
-                        value={newOwnerData.document || ''}
-                        onChange={e => setNewOwnerData({...newOwnerData, document: e.target.value})}
-                      />
-                      <Input 
-                        placeholder="E-mail" 
-                        value={newOwnerData.email || ''}
-                        onChange={e => setNewOwnerData({...newOwnerData, email: e.target.value})}
-                      />
+                  <div className="bg-gray-50 p-6 rounded-xl border space-y-6">
+                    <h3 className="font-bold text-gray-900 border-b pb-2">Novo Cadastro de Tutor</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="col-span-2">
+                             <Label>Nome Completo *</Label>
+                            <Input 
+                              value={newOwnerData.name || ''}
+                              onChange={e => setNewOwnerData({...newOwnerData, name: e.target.value})}
+                              placeholder="Nome do responsável"
+                            />
+                        </div>
+                        <div>
+                             <Label>Telefone Principal *</Label>
+                             <Input 
+                                value={newOwnerData.phone || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, phone: e.target.value})}
+                                placeholder="(00) 00000-0000"
+                              />
+                        </div>
+                        <div>
+                             <Label>Telefone Secundário</Label>
+                             <Input 
+                                value={newOwnerData.secondaryPhone || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, secondaryPhone: e.target.value})}
+                                placeholder="(00) 00000-0000"
+                              />
+                        </div>
+                        <div>
+                             <Label>CPF / CNPJ</Label>
+                             <Input 
+                                value={newOwnerData.document || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, document: e.target.value})}
+                                placeholder="000.000.000-00"
+                              />
+                        </div>
+                        <div>
+                             <Label>E-mail</Label>
+                             <Input 
+                                value={newOwnerData.email || ''}
+                                onChange={e => setNewOwnerData({...newOwnerData, email: e.target.value})}
+                                placeholder="email@exemplo.com"
+                              />
+                        </div>
                     </div>
                     
-                    <div className="border-t pt-2 mt-2">
-                        <Label className="text-xs text-gray-500 mb-2 block">Endereço</Label>
-                        <div className="grid grid-cols-3 gap-4 mb-2">
-                            <Input 
-                                placeholder="CEP" 
-                                value={newOwnerData.zipCode || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, zipCode: e.target.value})}
-                            />
+                    <div className="border-t pt-4">
+                        <Label className="text-gray-900 font-bold mb-4 block">Endereço</Label>
+                        <div className="grid grid-cols-6 gap-4">
                             <div className="col-span-2">
+                                <Label>CEP</Label>
                                 <Input 
-                                    placeholder="Rua / Logradouro" 
+                                    value={newOwnerData.zipCode || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, zipCode: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-4">
+                                <Label>Logradouro</Label>
+                                <Input 
                                     value={newOwnerData.street || ''}
                                     onChange={e => setNewOwnerData({...newOwnerData, street: e.target.value})}
                                 />
                             </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 mb-2">
-                            <Input 
-                                placeholder="Número" 
-                                value={newOwnerData.number || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, number: e.target.value})}
-                            />
                             <div className="col-span-2">
+                                <Label>Número</Label>
                                 <Input 
-                                    placeholder="Bairro" 
+                                    value={newOwnerData.number || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, number: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-4">
+                                <Label>Bairro</Label>
+                                <Input 
                                     value={newOwnerData.neighborhood || ''}
                                     onChange={e => setNewOwnerData({...newOwnerData, neighborhood: e.target.value})}
                                 />
                             </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="col-span-2">
+                            <div className="col-span-4">
+                                <Label>Cidade</Label>
                                 <Input 
-                                    placeholder="Cidade" 
                                     value={newOwnerData.city || ''}
                                     onChange={e => setNewOwnerData({...newOwnerData, city: e.target.value})}
                                 />
                             </div>
-                            <Input 
-                                placeholder="UF" 
-                                maxLength={2}
-                                value={newOwnerData.state || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, state: e.target.value})}
-                            />
+                            <div className="col-span-2">
+                                <Label>UF</Label>
+                                <Input 
+                                    maxLength={2}
+                                    value={newOwnerData.state || ''}
+                                    onChange={e => setNewOwnerData({...newOwnerData, state: e.target.value})}
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-4 pt-4 justify-end">
                       <Button variant="outline" onClick={() => setIsCreatingOwner(false)} disabled={isLoading}>
                         Cancelar
                       </Button>
-                      <Button onClick={handleCreateOwner} disabled={isLoading} className="bg-blue-600 text-white">
+                      <Button onClick={handleCreateOwner} disabled={isLoading} className="bg-blue-600 text-white px-8">
                         {isLoading ? 'Salvando...' : 'Salvar Tutor'}
                       </Button>
                     </div>
@@ -436,29 +693,35 @@ export const PatientWizard: React.FC = () => {
                 )}
 
                 {selectedOwner && !isCreatingOwner && (
-                  <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                  <div className="bg-blue-50 p-6 rounded-xl flex items-center gap-4 border border-blue-100">
+                    <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-blue-600 font-bold text-2xl shadow-sm">
                       {selectedOwner.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-bold text-gray-900">{selectedOwner.name}</p>
-                      <p className="text-xs text-gray-500">{selectedOwner.phone}</p>
+                      <p className="font-bold text-gray-900 text-lg">{selectedOwner.name}</p>
+                      <p className="text-sm text-gray-600 flex items-center gap-2">
+                          <span>{selectedOwner.phone}</span>
+                          <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
+                          <span>{selectedOwner.email}</span>
+                      </p>
                     </div>
-                    <CheckCircle className="ml-auto h-5 w-5 text-green-500" />
+                    <Button variant="ghost" className="ml-auto text-blue-600 hover:text-blue-700" onClick={() => setSelectedOwner(null)}>
+                        Alterar
+                    </Button>
                   </div>
                 )}
 
-                <div className="flex justify-between pt-4 border-t mt-4">
-                  <Button variant="outline" onClick={() => setStep(1)}>
+                <div className="flex justify-between pt-8 border-t mt-8">
+                  <Button variant="outline" onClick={() => setStep(1)} className="h-12 px-6">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
                   </Button>
                   <Button 
                     onClick={handleStep2Next} 
-                    className="bg-[#0B2C4D] text-white px-8"
+                    className="bg-[#0B2C4D] text-white px-10 h-12 text-lg rounded-xl shadow-lg shadow-blue-900/10 hover:bg-[#0B2C4D]/90"
                     disabled={!selectedOwner || isLoading}
                   >
                     {isLoading ? 'Processando...' : patientData.species === 'Equine' ? 'Continuar' : 'Finalizar Cadastro'} 
-                    {!isLoading && patientData.species === 'Equine' && <ChevronRight className="ml-2 h-4 w-4" />}
+                    {!isLoading && patientData.species === 'Equine' && <ChevronRight className="ml-2 h-5 w-5" />}
                   </Button>
                 </div>
               </div>
@@ -466,74 +729,106 @@ export const PatientWizard: React.FC = () => {
 
             {/* STEP 3: PROPERTY (EQUINE ONLY) */}
             {step === 3 && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                <h2 className="text-xl font-semibold mb-4">Propriedade (Equino)</h2>
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <Home className="h-6 w-6 text-orange-600" />
+                    Propriedade (Equino)
+                </h2>
                 
                 {!isCreatingProperty ? (
-                  <div className="space-y-6">
-                    <div>
-                      <Label>Buscar Propriedade Existente</Label>
+                  <div className="space-y-8 py-8">
+                    <div className="max-w-xl mx-auto space-y-4">
+                      <Label className="text-center block text-lg text-gray-600">Buscar Propriedade</Label>
                       <Autocomplete 
                         options={properties.map(p => ({ id: p.id, label: `${p.name} - ${p.city}` }))}
                         onSelect={(opt) => setSelectedProperty(properties.find(p => p.id === opt.id) || null)}
-                        placeholder="Digite o nome..."
+                        placeholder="Nome da fazenda, haras ou sítio..."
                         value={selectedProperty?.name}
                       />
                     </div>
 
-                    <div className="relative">
+                    <div className="relative py-4">
                       <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
+                        <span className="w-full border-t border-gray-200" />
                       </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-gray-500">Ou</span>
+                      <div className="relative flex justify-center text-sm uppercase font-bold tracking-widest">
+                        <span className="bg-white px-4 text-gray-400">Ou</span>
                       </div>
                     </div>
 
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => setIsCreatingProperty(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Cadastrar Nova Propriedade
-                    </Button>
+                    <div className="flex justify-center">
+                        <Button 
+                          variant="outline" 
+                          size="lg"
+                          className="border-dashed border-2 border-gray-300 hover:border-orange-500 hover:text-orange-600 hover:bg-orange-50 w-full max-w-sm h-16 text-lg"
+                          onClick={() => setIsCreatingProperty(true)}
+                        >
+                          <Plus className="mr-2 h-6 w-6" /> Cadastrar Nova Propriedade
+                        </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 p-4 rounded-lg border space-y-4">
-                    <h3 className="font-medium">Nova Propriedade</h3>
-                    <Input 
-                      placeholder="Nome da Propriedade *" 
-                      value={newPropertyData.name || ''}
-                      onChange={e => setNewPropertyData({...newPropertyData, name: e.target.value})}
-                    />
-                    <Input 
-                      placeholder="CNPJ (Opcional)" 
-                      value={newPropertyData.document || ''}
-                      onChange={e => setNewPropertyData({...newPropertyData, document: e.target.value})}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input 
-                        placeholder="Cidade *" 
-                        value={newPropertyData.city || ''}
-                        onChange={e => setNewPropertyData({...newPropertyData, city: e.target.value})}
-                      />
-                      <Input 
-                        placeholder="Estado (UF) *" 
-                        maxLength={2}
-                        value={newPropertyData.state || ''}
-                        onChange={e => setNewPropertyData({...newPropertyData, state: e.target.value})}
-                      />
+                  <div className="bg-gray-50 p-6 rounded-xl border space-y-6">
+                    <h3 className="font-bold text-gray-900 border-b pb-2">Nova Propriedade</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="col-span-2">
+                             <Label>Nome da Propriedade *</Label>
+                            <Input 
+                              value={newPropertyData.name || ''}
+                              onChange={e => setNewPropertyData({...newPropertyData, name: e.target.value})}
+                              placeholder="Haras, Fazenda, Sítio..."
+                            />
+                        </div>
+                        <div>
+                             <Label>Inscrição Estadual / CNPJ</Label>
+                             <Input 
+                                value={newPropertyData.document || ''}
+                                onChange={e => setNewPropertyData({...newPropertyData, document: e.target.value})}
+                              />
+                        </div>
+                        <div>
+                             <Label>Responsável no Local</Label>
+                             <Input 
+                                placeholder="Nome do gerente ou caseiro"
+                              />
+                        </div>
                     </div>
-                    <Input 
-                        placeholder="Endereço Completo" 
-                        value={newPropertyData.address || ''}
-                        onChange={e => setNewPropertyData({...newPropertyData, address: e.target.value})}
-                      />
-                    <div className="flex gap-2">
+                    
+                    <div className="border-t pt-4">
+                        <Label className="text-gray-900 font-bold mb-4 block">Localização</Label>
+                        <div className="grid grid-cols-6 gap-4">
+                             <div className="col-span-4">
+                                <Label>Cidade *</Label>
+                                <Input 
+                                    value={newPropertyData.city || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, city: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-2">
+                                <Label>UF *</Label>
+                                <Input 
+                                    maxLength={2}
+                                    value={newPropertyData.state || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, state: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-6">
+                                <Label>Endereço Completo</Label>
+                                <Input 
+                                    value={newPropertyData.address || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, address: e.target.value})}
+                                    placeholder="Estrada, Km, Ponto de referência..."
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-4 justify-end">
                       <Button variant="outline" onClick={() => setIsCreatingProperty(false)} disabled={isLoading}>
                         Cancelar
                       </Button>
-                      <Button onClick={handleCreateProperty} disabled={isLoading} className="bg-blue-600 text-white">
+                      <Button onClick={handleCreateProperty} disabled={isLoading} className="bg-blue-600 text-white px-8">
                         {isLoading ? 'Salvando...' : 'Salvar Propriedade'}
                       </Button>
                     </div>
@@ -541,25 +836,30 @@ export const PatientWizard: React.FC = () => {
                 )}
 
                 {selectedProperty && !isCreatingProperty && (
-                  <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      <Home className="h-5 w-5" />
+                  <div className="bg-orange-50 p-6 rounded-xl flex items-center gap-4 border border-orange-100">
+                    <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-orange-600 font-bold text-2xl shadow-sm">
+                      <Home className="h-8 w-8" />
                     </div>
                     <div>
-                      <p className="font-bold text-gray-900">{selectedProperty.name}</p>
-                      <p className="text-xs text-gray-500">{selectedProperty.city} - {selectedProperty.state}</p>
+                      <p className="font-bold text-gray-900 text-lg">{selectedProperty.name}</p>
+                      <p className="text-sm text-gray-600">
+                          {selectedProperty.city} - {selectedProperty.state}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">{selectedProperty.address}</p>
                     </div>
-                    <CheckCircle className="ml-auto h-5 w-5 text-green-500" />
+                    <Button variant="ghost" className="ml-auto text-orange-600 hover:text-orange-700" onClick={() => setSelectedProperty(null)}>
+                        Alterar
+                    </Button>
                   </div>
                 )}
 
-                <div className="flex justify-between pt-4 border-t mt-4">
-                  <Button variant="outline" onClick={() => setStep(2)}>
+                <div className="flex justify-between pt-8 border-t mt-8">
+                  <Button variant="outline" onClick={() => setStep(2)} className="h-12 px-6">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
                   </Button>
                   <Button 
                     onClick={finishRegistration} 
-                    className="bg-green-600 hover:bg-green-700 text-white px-8"
+                    className="bg-green-600 hover:bg-green-700 text-white px-10 h-12 text-lg rounded-xl shadow-lg shadow-green-900/10"
                     disabled={!selectedProperty || isLoading}
                   >
                     {isLoading ? 'Salvando...' : 'Finalizar Cadastro'}

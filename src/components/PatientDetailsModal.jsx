@@ -3,6 +3,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Autocomplete } from '../shared/Autocomplete'
 import { mockDB } from '../services/mockDatabase'
+import { getBreedsBySpecies } from '../domain/breeds'
 import { 
   Heart, 
   Activity, 
@@ -639,11 +640,52 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                       </div>
                       <div>
                           <label className="text-sm font-medium">Raça</label>
-                          <input 
-                            className="w-full border rounded p-2"
-                            value={editFormData.breed || ''} 
-                            onChange={e => setEditFormData({...editFormData, breed: e.target.value})} 
-                          />
+                          {(() => {
+                              const breeds = getBreedsBySpecies(editFormData.species || 'Equine');
+                              if (breeds.length > 0) {
+                                  const isInList = editFormData.breed && breeds.includes(editFormData.breed) && editFormData.breed !== 'Outra';
+                                  const selectValue = !editFormData.breed ? '' : (isInList ? editFormData.breed : 'Outra');
+                                  const showInput = selectValue === 'Outra';
+
+                                  return (
+                                      <div>
+                                          <select 
+                                              className="w-full border rounded p-2 mb-2"
+                                              value={selectValue}
+                                              onChange={e => {
+                                                  const val = e.target.value;
+                                                  if (val === 'Outra') {
+                                                      setEditFormData({...editFormData, breed: ''});
+                                                  } else {
+                                                      setEditFormData({...editFormData, breed: val});
+                                                  }
+                                              }}
+                                          >
+                                              <option value="" disabled>Selecione...</option>
+                                              {breeds.map(b => (
+                                                  <option key={b} value={b}>{b}</option>
+                                              ))}
+                                          </select>
+                                          {showInput && (
+                                              <input 
+                                                  className="w-full border rounded p-2"
+                                                  placeholder="Digite a raça..."
+                                                  value={editFormData.breed || ''} 
+                                                  onChange={e => setEditFormData({...editFormData, breed: e.target.value})} 
+                                                  autoFocus
+                                              />
+                                          )}
+                                      </div>
+                                  );
+                              }
+                              return (
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    value={editFormData.breed || ''} 
+                                    onChange={e => setEditFormData({...editFormData, breed: e.target.value})} 
+                                  />
+                              );
+                          })()}
                       </div>
                       <div>
                           <label className="text-sm font-medium">Idade (anos)</label>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { mockDB } from '../../services/mockDatabase';
 import { Owner, Property, Patient } from '../../domain/types';
 import { Autocomplete } from '../../shared/Autocomplete';
+import { getBreedsBySpecies } from '../../domain/breeds';
 
 export const RegistrationWizard: React.FC = () => {
   const navigate = useNavigate();
@@ -262,10 +263,11 @@ export const RegistrationWizard: React.FC = () => {
                 <select 
                 className="border p-2 rounded w-full"
                 value={newPatient.species}
-                onChange={e => setNewPatient({...newPatient, species: e.target.value as any})}
+                onChange={e => {
+                    setNewPatient({...newPatient, species: e.target.value as any, breed: ''});
+                }}
                 >
                 <option value="Equine">Equino</option>
-                <option value="Bovine">Bovino</option>
                 <option value="Canine">Canino</option>
                 <option value="Feline">Felino</option>
                 </select>
@@ -273,11 +275,55 @@ export const RegistrationWizard: React.FC = () => {
             
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Raça</label>
-                <input 
-                className="border p-2 rounded w-full" 
-                placeholder="Ex: Mangalarga"
-                onChange={e => setNewPatient({...newPatient, breed: e.target.value})}
-                />
+                {(() => {
+                    const breeds = getBreedsBySpecies(newPatient.species || 'Equine');
+                    
+                    if (breeds.length > 0) {
+                        const isInList = newPatient.breed && breeds.includes(newPatient.breed) && newPatient.breed !== 'Outra';
+                        const selectValue = !newPatient.breed ? '' : (isInList ? newPatient.breed : 'Outra');
+                        const showInput = selectValue === 'Outra';
+
+                        return (
+                            <div>
+                                <select 
+                                    className="border p-2 rounded w-full mb-2"
+                                    value={selectValue}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === 'Outra') {
+                                            setNewPatient(prev => ({...prev, breed: ''}));
+                                        } else {
+                                            setNewPatient(prev => ({...prev, breed: val}));
+                                        }
+                                    }}
+                                >
+                                    <option value="" disabled>Selecione...</option>
+                                    {breeds.map(b => (
+                                        <option key={b} value={b}>{b}</option>
+                                    ))}
+                                </select>
+                                {showInput && (
+                                    <input 
+                                        className="border p-2 rounded w-full" 
+                                        placeholder="Digite a raça..."
+                                        value={newPatient.breed || ''}
+                                        onChange={e => setNewPatient(prev => ({...prev, breed: e.target.value}))}
+                                        autoFocus
+                                    />
+                                )}
+                            </div>
+                        );
+                    }
+                    
+                    return (
+                        <input 
+                            className="border p-2 rounded w-full" 
+                            placeholder="Ex: Mangalarga"
+                            value={newPatient.breed || ''}
+                            onChange={e => setNewPatient({...newPatient, breed: e.target.value})}
+                        />
+                    );
+                })()}
             </div>
             
             <div className="md:col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-100">

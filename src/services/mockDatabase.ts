@@ -57,32 +57,77 @@ class MockDatabaseService {
   }
 
   private load() {
-    const loadedOwners = localStorage.getItem('vet_owners');
-    this.owners = loadedOwners ? JSON.parse(loadedOwners) : INITIAL_OWNERS;
+    try {
+      const loadedOwners = localStorage.getItem('vet_owners');
+      this.owners = loadedOwners ? JSON.parse(loadedOwners) : INITIAL_OWNERS;
+    } catch (e) {
+      console.error('Error loading owners', e);
+      this.owners = INITIAL_OWNERS;
+    }
 
-    const loadedProperties = localStorage.getItem('vet_properties');
-    this.properties = loadedProperties ? JSON.parse(loadedProperties) : INITIAL_PROPERTIES;
+    try {
+      const loadedProperties = localStorage.getItem('vet_properties');
+      this.properties = loadedProperties ? JSON.parse(loadedProperties) : INITIAL_PROPERTIES;
+    } catch (e) {
+      console.error('Error loading properties', e);
+      this.properties = INITIAL_PROPERTIES;
+    }
 
-    const loadedPatients = localStorage.getItem('vet_patients');
-    this.patients = loadedPatients ? JSON.parse(loadedPatients) : INITIAL_PATIENTS;
+    try {
+      const loadedPatients = localStorage.getItem('vet_patients');
+      this.patients = loadedPatients ? JSON.parse(loadedPatients) : INITIAL_PATIENTS;
+    } catch (e) {
+      console.error('Error loading patients', e);
+      this.patients = INITIAL_PATIENTS;
+    }
 
-    const loadedInventory = localStorage.getItem('vet_inventory');
-    this.inventory = loadedInventory ? JSON.parse(loadedInventory) : INITIAL_INVENTORY;
+    try {
+      const loadedInventory = localStorage.getItem('vet_inventory');
+      this.inventory = loadedInventory ? JSON.parse(loadedInventory) : INITIAL_INVENTORY;
+    } catch (e) {
+      console.error('Error loading inventory', e);
+      this.inventory = INITIAL_INVENTORY;
+    }
 
-    const loadedAttendances = localStorage.getItem('vet_attendances');
-    this.attendances = loadedAttendances ? JSON.parse(loadedAttendances) : [];
+    try {
+      const loadedAttendances = localStorage.getItem('vet_attendances');
+      this.attendances = loadedAttendances ? JSON.parse(loadedAttendances) : [];
+    } catch (e) {
+      console.error('Error loading attendances', e);
+      this.attendances = [];
+    }
 
-    const loadedReceivables = localStorage.getItem('vet_receivables');
-    this.receivables = loadedReceivables ? JSON.parse(loadedReceivables) : [];
+    try {
+      const loadedReceivables = localStorage.getItem('vet_receivables');
+      this.receivables = loadedReceivables ? JSON.parse(loadedReceivables) : [];
+    } catch (e) {
+      console.error('Error loading receivables', e);
+      this.receivables = [];
+    }
 
-    const loadedAppointments = localStorage.getItem('vet_appointments');
-    this.appointments = loadedAppointments ? JSON.parse(loadedAppointments) : [];
+    try {
+      const loadedAppointments = localStorage.getItem('vet_appointments');
+      this.appointments = loadedAppointments ? JSON.parse(loadedAppointments) : [];
+    } catch (e) {
+      console.error('Error loading appointments', e);
+      this.appointments = [];
+    }
 
-    const loadedProcedures = localStorage.getItem('vet_procedures');
-    this.procedures = loadedProcedures ? JSON.parse(loadedProcedures) : [];
+    try {
+      const loadedProcedures = localStorage.getItem('vet_procedures');
+      this.procedures = loadedProcedures ? JSON.parse(loadedProcedures) : [];
+    } catch (e) {
+      console.error('Error loading procedures', e);
+      this.procedures = [];
+    }
 
-    const loadedCashFlow = localStorage.getItem('vet_cashflow');
-    this.cashFlow = loadedCashFlow ? JSON.parse(loadedCashFlow) : [];
+    try {
+      const loadedCashFlow = localStorage.getItem('vet_cashflow');
+      this.cashFlow = loadedCashFlow ? JSON.parse(loadedCashFlow) : [];
+    } catch (e) {
+      console.error('Error loading cashflow', e);
+      this.cashFlow = [];
+    }
   }
 
   private save(key: string, data: any) {
@@ -237,7 +282,11 @@ class MockDatabaseService {
       totalCost: 0,
       totalService: 0,
       totalTotal: 0,
-      vitals: attendance.vitals || {}
+      vitals: attendance.vitals || {},
+      prescriptions: [],
+      examRequests: [],
+      vaccines: [],
+      procedures: []
     };
     this.attendances.push(newAttendance);
     this.save('vet_attendances', this.attendances);
@@ -248,14 +297,13 @@ class MockDatabaseService {
     return this.attendances.filter(a => a.patientId === patientId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
-  updateAttendance(id: string, updates: Partial<Attendance>, user: string) {
+  updateAttendance(id: string, updates: Partial<Attendance>) {
     const index = this.attendances.findIndex(a => a.id === id);
     if (index !== -1) {
       this.attendances[index] = { 
         ...this.attendances[index], 
         ...updates,
-        updatedAt: new Date().toISOString(),
-        updatedBy: user
+        updatedAt: new Date().toISOString()
       };
       this.save('vet_attendances', this.attendances);
       return this.attendances[index];
@@ -263,7 +311,7 @@ class MockDatabaseService {
     return null;
   }
 
-  finishAttendance(attendanceId: string, serviceFee: number, items: ConsumptionItem[], vaccines: any[] = []) {
+  finishAttendance(attendanceId: string, serviceFee: number, items: ConsumptionItem[], vaccines: any[] = [], procedures: any[] = [], returnVisit?: any) {
     const attendanceIndex = this.attendances.findIndex(a => a.id === attendanceId);
     if (attendanceIndex === -1) throw new Error('Attendance not found');
 
@@ -273,15 +321,18 @@ class MockDatabaseService {
     const materialsCost = items.reduce((acc, item) => acc + (item.costAtMoment * item.quantityUsed), 0);
     const materialsPrice = items.reduce((acc, item) => acc + (item.priceAtMoment * item.quantityUsed), 0);
     const vaccinesPrice = vaccines.reduce((acc, vac) => acc + vac.price, 0);
+    const proceduresPrice = procedures.reduce((acc, proc) => acc + proc.price, 0);
 
-    const total = serviceFee + materialsPrice + vaccinesPrice;
+    const total = serviceFee + materialsPrice + vaccinesPrice + proceduresPrice;
 
     // 2. Update Attendance
     attendance.status = 'finished';
     attendance.consumedItems = items;
     attendance.vaccines = vaccines;
-    attendance.totalCost = materialsCost; // Note: Vaccine cost not tracked separately here yet
-    attendance.totalService = serviceFee;
+    attendance.procedures = procedures;
+    attendance.returnVisit = returnVisit;
+    attendance.totalCost = materialsCost; // Note: Vaccine/Procedure cost not tracked separately here yet
+    attendance.totalService = serviceFee + proceduresPrice; // Add procedure price to service? Or keep separate?
     attendance.totalTotal = total;
     this.attendances[attendanceIndex] = attendance;
     this.save('vet_attendances', this.attendances);
@@ -309,6 +360,22 @@ class MockDatabaseService {
     this.receivables.push(receivable);
     this.save('vet_receivables', this.receivables);
 
+    // 5. Schedule Return (Create Appointment)
+    if (returnVisit) {
+        const returnAppt = {
+            id: Math.random().toString(36).substr(2, 9),
+            title: `Retorno: ${attendance.patientName} (${returnVisit.type})`,
+            start: new Date(returnVisit.date + 'T09:00:00').toISOString(), // Default to 9 AM
+            end: new Date(returnVisit.date + 'T10:00:00').toISOString(),
+            patientId: attendance.patientId,
+            doctor: attendance.vetId || 'Dr. Vet',
+            type: attendance.consultationType || 'retorno',
+            status: 'confirmed'
+        };
+        this.appointments.push(returnAppt);
+        this.save('vet_appointments', this.appointments);
+    }
+
     return attendance;
   }
 
@@ -322,13 +389,17 @@ class MockDatabaseService {
   getReceivables() { return this.receivables; }
   
   payReceivable(id: string, details: { method: any, installments?: number, taxRate?: number }) {
-    const rec = this.receivables.find(r => r.id === id);
-    if (rec) {
+    const recIndex = this.receivables.findIndex(r => r.id === id);
+    if (recIndex !== -1) {
+      const rec = this.receivables[recIndex];
       rec.status = 'paid';
+      // paymentDate must be ISO string or formatted date string? 
+      // Receivables uses ISO usually but for UI display we often use locale.
       rec.paymentDate = new Date().toISOString();
       rec.paymentMethod = details.method;
       
-      const netValue = details.taxRate ? rec.amount * (1 - (details.taxRate / 100)) : rec.amount;
+      const taxAmount = details.taxRate ? rec.amount * (details.taxRate / 100) : 0;
+      const netValue = rec.amount - taxAmount;
       
       rec.paymentDetails = {
           method: details.method,
@@ -337,30 +408,31 @@ class MockDatabaseService {
           netValue: netValue
       };
 
-      // Create CashFlow Entry
+      this.receivables[recIndex] = rec;
+      this.save('vet_receivables', this.receivables);
+
+      // Create CashFlow Entry (Income)
       const entry: CashFlowEntry = {
           id: Math.random().toString(36).substr(2, 9),
-          date: new Date().toLocaleDateString('pt-BR'), // Should match system format
+          date: new Date().toLocaleDateString('pt-BR'), 
           type: 'income',
           category: 'Serviços Veterinários',
-          amount: netValue, // Use net value for cash flow? Or Gross? Usually Gross for revenue, Expense for fees. 
-                            // Let's use Net for simple cash flow or Gross + Expense entry.
-                            // For simplicity: Gross Income.
+          amount: rec.amount, // Gross Income
           description: `Recebimento: ${rec.description} (${details.method})`,
           referenceId: rec.id
       };
-      
-      // We don't have a direct cashFlow array in this mockDB, but we have `revenueHistory` in FinanceRevenue page.
-      // Ideally we should centralize. I'll push to a new `cashFlow` array if I had one, 
-      // but the requirement says "aparece automaticamente em Receitas". 
-      // The `FinanceRevenue` page uses `revenueHistory` from a local mock or mockDB?
-      // Let's check `FinanceRevenue.jsx`. It seems to have local state `revenueHistory`.
-      // I should add a `getCashFlow()` method here and update `FinanceRevenue` to use it.
-      
       this.cashFlow.push(entry);
+
+      // If there is tax/fee, create Expense entry? 
+      // For now, let's keep it simple: Just register the Income.
+      // Or maybe register the net value if it's "Cash Flow".
+      // Let's stick to Gross Amount for Revenue report and Net for Cash Flow if we were sophisticated.
+      // But `FinanceRevenue` displays `value`. 
+
       this.save('vet_cashflow', this.cashFlow);
-      this.save('vet_receivables', this.receivables);
+      return rec;
     }
+    return null;
   }
 
   // --- Cash Flow ---

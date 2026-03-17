@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/Button'
@@ -44,8 +44,24 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [financeOpen, setFinanceOpen] = useState(false)
   const [patientsOpen, setPatientsOpen] = useState(false)
+  const [clinicName, setClinicName] = useState('VETTOOTH')
   const location = useLocation()
   const { logout } = useAuth()
+
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('vet_settings')
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings)
+        if (parsed.clinic && parsed.clinic.name) {
+          // Simplistic name extraction or use full name
+          setClinicName(parsed.clinic.name)
+        }
+      } catch (e) {
+        console.error('Error loading settings in Sidebar', e)
+      }
+    }
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -87,7 +103,7 @@ export default function Sidebar() {
                 V
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">VETTOOTH</h1>
+                <h1 className="text-xl font-bold tracking-tight uppercase truncate max-w-[160px]">{clinicName}</h1>
                 <p className="text-xs text-blue-300 font-medium tracking-wider">PRO</p>
               </div>
             </div>

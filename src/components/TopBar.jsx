@@ -16,7 +16,7 @@ export default function TopBar() {
     }
 
     return (
-        <div className="h-16 px-8 flex items-center justify-between bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="h-16 px-8 flex items-center justify-between bg-white border-b border-gray-200 sticky top-0 z-50">
             {/* Search */}
             <div className="flex-1 max-w-xl">
                 <div className="relative">
@@ -44,7 +44,7 @@ export default function TopBar() {
                     </Button>
                     
                     {isNotifOpen && (
-                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-[60] animate-in fade-in zoom-in-95 duration-200">
                             <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
                                 <h3 className="font-semibold text-sm">Notificações</h3>
                                 <span className="text-xs text-blue-600 cursor-pointer">Marcar todas como lidas</span>
@@ -66,7 +66,7 @@ export default function TopBar() {
                 {/* User Profile */}
                 <div className="relative">
                     <div 
-                        className="flex items-center gap-3 pl-4 border-l border-gray-200 cursor-pointer"
+                        className="flex items-center gap-3 pl-4 border-l border-gray-200 cursor-pointer select-none"
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
                     >
                         <div className="flex flex-col items-end hidden md:flex">
@@ -84,7 +84,7 @@ export default function TopBar() {
                     </div>
 
                     {isProfileOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-[60] animate-in fade-in zoom-in-95 duration-200">
                             <Link 
                                 to="/settings" 
                                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"

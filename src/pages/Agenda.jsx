@@ -83,11 +83,18 @@ export default function Agenda() {
 
   const handleConfirmAppointment = () => {
     if (!selectedAppointment) return;
-    const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
-    if (updated) {
-        setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
-        setSelectedAppointment(updated);
-        alert('Agendamento confirmado com sucesso!');
+    try {
+      const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
+      if (updated) {
+          setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
+          setSelectedAppointment(updated);
+          alert('Agendamento confirmado com sucesso!');
+      } else {
+          alert('Erro: Agendamento não encontrado no banco de dados.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao confirmar agendamento.');
     }
   };
 

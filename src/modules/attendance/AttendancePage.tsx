@@ -29,6 +29,12 @@ import { useLocation } from 'react-router-dom';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
+import { PrescriptionModal } from './PrescriptionModal';
+import { ExamRequestModal } from './ExamRequestModal';
+import { VaccineModal } from './VaccineModal';
+import { ProceduresModal } from './ProceduresModal';
+import { ReturnVisitModal } from './ReturnVisitModal';
+import { CertificateModal } from './CertificateModal';
 import PatientDetailsModal from '../../components/PatientDetailsModal';
 
 export const AttendancePage: React.FC = () => {
@@ -69,6 +75,14 @@ export const AttendancePage: React.FC = () => {
   const [vaccineNotes, setVaccineNotes] = useState('');
   const [isVaccineOpen, setIsVaccineOpen] = useState(false); // Collapsible state
 
+  // Modal States
+  const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
+  const [isExamRequestModalOpen, setIsExamRequestModalOpen] = useState(false);
+  const [isVaccineModalOpen, setIsVaccineModalOpen] = useState(false);
+  const [isProceduresModalOpen, setIsProceduresModalOpen] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
+
   // Vitals State
   const [vitals, setVitals] = useState<Vitals>({});
 
@@ -81,14 +95,30 @@ export const AttendancePage: React.FC = () => {
     }
   }, [initialPatient]);
 
-  const handleStartAttendance = () => {
+  // Consultation Type State
+  const [showConsultationTypes, setShowConsultationTypes] = useState(false);
+  const consultationTypes = [
+    { id: 'clinica', label: 'Clínica Geral', icon: Activity },
+    { id: 'odonto', label: 'Odontológica', icon: Plus }, // Icon placeholder
+    { id: 'dermato', label: 'Dermatológica', icon: Search },
+    { id: 'retorno', label: 'Retorno', icon: Clock },
+    { id: 'outras', label: 'Outras', icon: FileText }
+  ];
+
+  const handleStartAttendanceCheck = () => {
+    setShowConsultationTypes(true);
+  };
+
+  const handleSelectConsultationType = (typeId: string, label: string) => {
+    setShowConsultationTypes(false);
     if (selectedPatient) {
       const newAttendance = mockDB.createAttendance({
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
-        reason: 'Consulta',
+        reason: label, // Set reason to the selected type
+        consultationType: typeId, // Store the type ID
         consumedItems: [],
         vitals: {} // Initialize
       });
@@ -180,15 +210,23 @@ export const AttendancePage: React.FC = () => {
     if (currentAttendance) {
       try {
         currentAttendance.vitals = vitals; // Attach vitals before finishing
-        mockDB.finishAttendance(currentAttendance.id, serviceFee, consumedItems, vaccines);
+        mockDB.finishAttendance(
+            currentAttendance.id, 
+            serviceFee, 
+            consumedItems, 
+            vaccines, 
+            currentAttendance.procedures || [],
+            currentAttendance.returnVisit
+        );
         alert('Atendimento finalizado com sucesso!');
         setCurrentAttendance(null);
         setConsumedItems([]);
         setVaccines([]);
         setVitals({});
         setActiveTab('overview');
-      } catch (e) {
-        alert('Erro ao finalizar atendimento.');
+      } catch (e: any) {
+        console.error('Erro ao finalizar:', e);
+        alert('Erro ao finalizar atendimento: ' + (e?.message || 'Erro desconhecido'));
       }
     }
   };
@@ -208,7 +246,7 @@ export const AttendancePage: React.FC = () => {
               
               <div className="text-left">
                 <Autocomplete 
-                  options={patients.map(p => ({ id: p.id, label: `${p.name} (${p.species})` }))}
+                  options={(patients || []).map(p => ({ id: p.id, label: `${p.name} (${p.species})` }))}
                   onSelect={(opt) => {
                     const p = patients.find(pat => pat.id === opt.id);
                     if (p) setSelectedPatient(p);
@@ -396,13 +434,29 @@ export const AttendancePage: React.FC = () => {
             {activeTab === 'attendance_active' && currentAttendance && (
                 <div className="space-y-6">
                     
-                    {/* 1. Sinais Vitais & Pré-Atendimento (TOPO) */}
+                    {/* HEADER: CONSULTATION INFO */}
+                    <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
+                        <div>
+                            <p className="text-sm text-gray-500">Atendimento Iniciado em {currentAttendance.date}</p>
+                            <h2 className="text-xl font-bold text-gray-900">{currentAttendance.reason}</h2>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                Em Andamento
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* 1. SINAIS VITAIS (EXPANDABLE) */}
                     <Card className="border-none shadow-sm">
                         <CardContent className="p-6">
-                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                                <Activity className="h-5 w-5 text-red-500" />
-                                Sinais Vitais & Pré-Atendimento
-                            </h3>
+                             <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold flex items-center gap-2">
+                                    <Activity className="h-5 w-5 text-red-500" />
+                                    Sinais Vitais
+                                </h3>
+                            </div>
+                            
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
                                     <Label>Peso (kg)</Label>
@@ -431,19 +485,6 @@ export const AttendancePage: React.FC = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <Label>Freq. Respiratória (rpm)</Label>
-                                    <div className="relative">
-                                        <Input 
-                                            type="number" 
-                                            placeholder="0"
-                                            value={vitals.respiratoryRate || ''}
-                                            onChange={e => setVitals({...vitals, respiratoryRate: Number(e.target.value)})}
-                                            className="pl-8"
-                                        />
-                                        <Wind className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-                                    </div>
-                                </div>
-                                <div>
                                     <Label>Temperatura (°C)</Label>
                                     <div className="relative">
                                         <Input 
@@ -465,31 +506,13 @@ export const AttendancePage: React.FC = () => {
                                         onChange={e => setVitals({...vitals, tpc: Number(e.target.value)})}
                                     />
                                 </div>
-                                <div>
-                                    <Label>Pressão Sistólica</Label>
-                                    <Input 
-                                        type="number" 
-                                        placeholder="Ex: 120"
-                                        value={vitals.pressureSystolic || ''}
-                                        onChange={e => setVitals({...vitals, pressureSystolic: Number(e.target.value)})}
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Pressão Diastólica</Label>
-                                    <Input 
-                                        type="number" 
-                                        placeholder="Ex: 80"
-                                        value={vitals.pressureDiastolic || ''}
-                                        onChange={e => setVitals({...vitals, pressureDiastolic: Number(e.target.value)})}
-                                    />
-                                </div>
                             </div>
 
                             {/* Equine Specific: Motility */}
                             {selectedPatient.species === 'Equine' && (
                                 <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-100">
                                     <h4 className="font-semibold text-orange-800 mb-3 text-sm uppercase">Motilidade Intestinal (Equinos)</h4>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <div>
                                             <Label className="text-xs">Superior Esq.</Label>
                                             <Input 
@@ -529,239 +552,265 @@ export const AttendancePage: React.FC = () => {
                                     </div>
                                 </div>
                             )}
-                            
-                            <div className="flex justify-end mt-4">
-                                <Button 
-                                    variant="outline" 
-                                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                                    onClick={() => {
-                                        if (currentAttendance) {
-                                            currentAttendance.vitals = vitals;
-                                            alert("Pré-atendimento salvo! Sinais vitais registrados.");
-                                        }
-                                    }}
-                                >
-                                    Salvar Pré-atendimento
-                                </Button>
-                            </div>
                         </CardContent>
                     </Card>
 
-                    {/* 2. Dados Clínicos */}
+                    {/* 2. DOCUMENTO CLÍNICO (CONTINUOUS TEXT) */}
                     <Card className="border-none shadow-sm">
-                        <CardContent className="p-6">
-                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                                <FileText className="h-5 w-5 text-blue-600" />
-                                Dados Clínicos
-                            </h3>
-                            <textarea 
-                                className="w-full border p-3 rounded-lg mb-4 h-32 bg-gray-50 focus:bg-white transition-colors" 
-                                placeholder="Anamnese e Histórico..."
-                                value={anamnesis}
-                                onChange={e => setAnamnesis(e.target.value)}
-                            />
-                            <textarea 
-                                className="w-full border p-3 rounded-lg h-32 bg-gray-50 focus:bg-white transition-colors" 
-                                placeholder="Diagnóstico e Procedimentos..."
-                                value={diagnosis}
-                                onChange={e => setDiagnosis(e.target.value)}
-                            />
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm">
-                        <CardContent className="p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-bold flex items-center gap-2">
-                                    <Syringe className="h-5 w-5 text-blue-600" />
-                                    Vacinas
+                        <CardContent className="p-8 space-y-8">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <FileText className="h-5 w-5 text-blue-600" />
+                                    Registro Clínico
                                 </h3>
-                                <Button variant="outline" size="sm" onClick={() => setIsVaccineOpen(!isVaccineOpen)}>
-                                    {isVaccineOpen ? 'Ocultar' : 'Adicionar Vacina'}
-                                </Button>
-                            </div>
-                            
-                            {isVaccineOpen && (
-                                <div className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <div className="lg:col-span-1">
-                                            <Label>Vacina (Estoque)</Label>
-                                            <Autocomplete 
-                                                options={inventory.filter(i => i.category === 'Vaccine').map(i => ({ id: i.id, label: `${i.name} (R$ ${i.salePrice})` }))}
-                                                onSelect={(opt) => {
-                                                    const item = inventory.find(i => i.id === opt.id);
-                                                    if (item) setSelectedVaccineToAdd(item);
-                                                }}
-                                                placeholder="Selecione a vacina..."
-                                                value={selectedVaccineToAdd?.name}
-                                            />
-                                        </div>
-                                        <div>
-                                            <Label>Lote</Label>
-                                            <Input value={vaccineBatch} onChange={e => setVaccineBatch(e.target.value)} placeholder="Lote..." />
-                                        </div>
-                                        <div>
-                                            <Label>Validade</Label>
-                                            <Input type="date" value={vaccineExpiry} onChange={e => setVaccineExpiry(e.target.value)} />
-                                        </div>
-                                        <div className="lg:col-span-3">
-                                            <Label>Observações</Label>
-                                            <div className="flex gap-2">
-                                                <Input value={vaccineNotes} onChange={e => setVaccineNotes(e.target.value)} placeholder="Ex: Reforço anual..." className="flex-1" />
-                                                <Button onClick={handleAddVaccine} className="bg-blue-600 text-white">Adicionar</Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* List Vaccines */}
-                            {vaccines.length > 0 ? (
-                                <div className="space-y-2">
-                                    {vaccines.map((vac, idx) => (
-                                        <div key={idx} className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm">
-                                            <div>
-                                                <p className="font-medium text-gray-900">{vac.name}</p>
-                                                <p className="text-xs text-gray-500">Lote: {vac.batch} | Val: {vac.expiryDate}</p>
-                                            </div>
-                                            <span className="font-bold text-gray-900">R$ {vac.price.toFixed(2)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-gray-400 italic">Nenhuma vacina aplicada neste atendimento.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* 3. Procedimento, Consumo e Custos (FINAL) */}
-                    <Card className="border-none shadow-sm bg-gray-50/50 border-t-2 border-t-purple-100">
-                        <CardContent className="p-6">
-                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-purple-800">
-                                <Syringe className="h-5 w-5" />
-                                Procedimentos & Fechamento
-                            </h3>
-                            
-                            {/* Seleção de Pacote */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm mb-6 border border-purple-100">
-                                <div className="flex gap-4 items-end">
-                                    <div className="flex-1">
-                                        <Label>Aplicar Procedimento Padrão (Pacote)</Label>
-                                        <Select 
-                                            onChange={(e) => {
-                                                if (e.target.value) handleSelectProcedure(e.target.value);
-                                            }}
-                                        >
-                                            <option value="">Selecione para preencher automaticamente...</option>
-                                            {procedures.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} - R$ {p.baseCost}</option>
-                                            ))}
-                                        </Select>
-                                    </div>
-                                    <div className="text-xs text-gray-500 pb-2">
-                                        *Preenche honorários e materiais.
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-100">
-                                <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
-                                    <Package className="h-4 w-4 text-teal-600" />
-                                    Consumo de Materiais
-                                </h4>
                                 
-                                <div className="flex gap-2 mb-4">
-                                    <div className="flex-1">
-                                        <Autocomplete 
-                                            options={inventory.map(i => ({ id: i.id, label: `${i.name} (${i.quantity} ${i.unit})` }))}
-                                            onSelect={(opt) => {
-                                                const item = inventory.find(i => i.id === opt.id);
-                                                if (item) setSelectedItemToAdd(item);
-                                            }}
-                                            placeholder="Buscar item avulso..."
-                                            value={selectedItemToAdd?.name}
+                                <div className="space-y-6">
+                                    <div>
+                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Motivo da Consulta / Queixa Principal</Label>
+                                        <Input 
+                                            className="w-full text-lg p-4 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+                                            value={currentAttendance.reason}
+                                            onChange={e => setCurrentAttendance({...currentAttendance, reason: e.target.value})}
                                         />
                                     </div>
+
+                                    <div>
+                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Anamnese e Histórico</Label>
+                                        <textarea 
+                                            className="w-full min-h-[150px] p-4 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all resize-y text-gray-700 leading-relaxed"
+                                            placeholder="Descreva o histórico do paciente, evolução dos sintomas, alimentação, etc..."
+                                            value={anamnesis}
+                                            onChange={e => setAnamnesis(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Exame Físico e Diagnóstico</Label>
+                                        <textarea 
+                                            className="w-full min-h-[150px] p-4 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all resize-y text-gray-700 leading-relaxed"
+                                            placeholder="Descreva os achados do exame físico e a conclusão diagnóstica..."
+                                            value={diagnosis}
+                                            onChange={e => setDiagnosis(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* 3. AÇÕES FINAIS (TOOLBAR) */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                            { id: 'prescricao', label: 'Prescrição', icon: FileText, color: 'bg-blue-600' },
+                            { id: 'exames', label: 'Exames', icon: Activity, color: 'bg-teal-600' },
+                            { id: 'vacinas', label: 'Vacinas', icon: Syringe, color: 'bg-purple-600' },
+                            { id: 'procedimentos', label: 'Procedim.', icon: Package, color: 'bg-orange-600' },
+                            { id: 'cirurgia', label: 'Cirurgia', icon: Activity, color: 'bg-red-600' },
+                            { id: 'retorno', label: 'Retorno', icon: Calendar, color: 'bg-green-600' },
+                            { id: 'termos', label: 'Docs', icon: FileText, color: 'bg-gray-600' },
+                        ].map(action => (
+                            <Button
+                                key={action.id}
+                                className={`${action.color} hover:opacity-90 text-white h-14 flex flex-col items-center justify-center gap-1 shadow-md`}
+                                onClick={() => {
+                                    // Save current state first
+                                    if(currentAttendance) {
+                                        currentAttendance.vitals = vitals;
+                                        currentAttendance.anamnesis = anamnesis;
+                                        currentAttendance.diagnosis = diagnosis;
+                                        
+                                        if (action.id === 'prescricao') {
+                                            setIsPrescriptionModalOpen(true);
+                                        } else if (action.id === 'exames') {
+                                            setIsExamRequestModalOpen(true);
+                                        } else if (action.id === 'vacinas') {
+                                            setIsVaccineModalOpen(true);
+                                        } else if (action.id === 'procedimentos' || action.id === 'cirurgia') {
+                                            setIsProceduresModalOpen(true);
+                                        } else if (action.id === 'retorno') {
+                                            setIsReturnModalOpen(true);
+                                        } else if (action.id === 'termos') {
+                                            setIsCertificateModalOpen(true);
+                                        } else {
+                                            alert(`Ação "${action.label}" selecionada.\n(O sistema salvará os dados e abrirá o módulo na próxima fase).`);
+                                        }
+                                    }
+                                }}
+                            >
+                                <action.icon className="h-5 w-5" />
+                                <span className="text-xs font-semibold">{action.label}</span>
+                            </Button>
+                        ))}
+                    </div>
+
+                    {/* Prescriptions List (Feedback) */}
+                    {currentAttendance.prescriptions && currentAttendance.prescriptions.length > 0 && (
+                        <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
+                                <FileText className="h-4 w-4" />
+                                Prescrições Geradas neste Atendimento
+                            </h4>
+                            <div className="space-y-2">
+                                {currentAttendance.prescriptions.map((p, idx) => (
+                                    <div key={p.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm">
+                                        <div>
+                                            <span className="font-semibold text-gray-700">Receita #{idx + 1}</span>
+                                            <span className="text-xs text-gray-500 ml-2">({p.items.length} itens)</span>
+                                        </div>
+                                        <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => pdfService.generatePrescriptionPdf(selectedPatient, p, 'Tutor (Demo)')}>
+                                            <Printer className="h-4 w-4 mr-1" /> Re-imprimir
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Exams List (Feedback) */}
+                    {currentAttendance.examRequests && currentAttendance.examRequests.length > 0 && (
+                        <div className="mt-6 bg-teal-50 p-4 rounded-lg border border-teal-100">
+                            <h4 className="font-bold text-teal-900 mb-2 flex items-center gap-2">
+                                <Activity className="h-4 w-4" />
+                                Solicitações de Exames
+                            </h4>
+                            <div className="space-y-2">
+                                {currentAttendance.examRequests.map((req, idx) => (
+                                    <div key={req.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm">
+                                        <div>
+                                            <span className="font-semibold text-gray-700">Solicitação #{idx + 1}</span>
+                                            <span className="text-xs text-gray-500 ml-2">({req.items.length} exames) - {req.priority === 'urgent' ? 'URGENTE' : 'Rotina'}</span>
+                                        </div>
+                                        <Button variant="ghost" size="sm" className="text-teal-600" onClick={() => pdfService.generateExamRequestPdf(selectedPatient, req, 'Tutor (Demo)')}>
+                                            <Printer className="h-4 w-4 mr-1" /> Re-imprimir
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Vaccines List (Feedback) */}
+                    {currentAttendance.vaccines && currentAttendance.vaccines.length > 0 && (
+                        <div className="mt-6 bg-purple-50 p-4 rounded-lg border border-purple-100">
+                            <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2">
+                                <Syringe className="h-4 w-4" />
+                                Vacinas Aplicadas Hoje
+                            </h4>
+                            <div className="space-y-2">
+                                {currentAttendance.vaccines.map((vac, idx) => (
+                                    <div key={vac.id || idx} className="flex justify-between items-center bg-white p-3 rounded shadow-sm">
+                                        <div>
+                                            <span className="font-semibold text-gray-700">{vac.name}</span>
+                                            <span className="text-xs text-gray-500 ml-2">Lote: {vac.batch}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-purple-700">Aplicada</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Procedures List (Feedback) */}
+                    {currentAttendance.procedures && currentAttendance.procedures.length > 0 && (
+                        <div className="mt-6 bg-orange-50 p-4 rounded-lg border border-orange-100">
+                            <h4 className="font-bold text-orange-900 mb-2 flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                Procedimentos Realizados
+                            </h4>
+                            <div className="space-y-2">
+                                {currentAttendance.procedures.map((proc, idx) => (
+                                    <div key={proc.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm">
+                                        <div>
+                                            <span className="font-semibold text-gray-700">{proc.name}</span>
+                                            {proc.notes && <span className="text-xs text-gray-500 ml-2">"{proc.notes}"</span>}
+                                        </div>
+                                        <span className="text-sm font-bold text-orange-700">R$ {proc.price.toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Return Visit (Feedback) */}
+                    {currentAttendance.returnVisit && (
+                        <div className="mt-6 bg-green-50 p-4 rounded-lg border border-green-100">
+                            <h4 className="font-bold text-green-900 mb-2 flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                Retorno Agendado
+                            </h4>
+                            <div className="bg-white p-3 rounded shadow-sm flex justify-between items-center">
+                                <div>
+                                    <span className="font-semibold text-gray-700">
+                                        {new Date(currentAttendance.returnVisit.date).toLocaleDateString('pt-BR')}
+                                    </span>
+                                    <span className="text-xs text-gray-500 ml-2">
+                                        ({currentAttendance.returnVisit.type}) - {currentAttendance.returnVisit.reason}
+                                    </span>
+                                </div>
+                                <span className="text-sm font-bold text-green-700">Confirmado</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Financial Summary */}
+                    <div className="mt-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+                        <h4 className="font-bold text-gray-900 mb-4">Resumo Financeiro</h4>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Total Materiais:</span>
+                                <span className="font-medium">R$ {consumedItems.reduce((acc, i) => acc + (i.priceAtMoment * i.quantityUsed), 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Total Vacinas:</span>
+                                <span className="font-medium">R$ {vaccines.reduce((acc, v) => acc + v.price, 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Total Procedimentos:</span>
+                                <span className="font-medium">R$ {(currentAttendance.procedures || []).reduce((acc, p) => acc + p.price, 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Honorários Veterinários:</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-400 text-sm">R$</span>
                                     <input 
                                         type="number" 
-                                        className="w-24 border p-2 rounded-lg"
-                                        placeholder="Qtd"
-                                        value={qtyToAdd || ''}
-                                        onChange={e => setQtyToAdd(Number(e.target.value))}
+                                        className="border-b border-gray-300 w-20 text-right font-medium focus:outline-none focus:border-blue-500 bg-transparent"
+                                        value={serviceFee}
+                                        onChange={e => setServiceFee(Number(e.target.value))}
                                     />
-                                    <Button onClick={handleAddItem} className="bg-teal-600 hover:bg-teal-700 text-white">
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
-                                </div>
-
-                                {/* List of Consumed Items */}
-                                <div className="mb-2">
-                                    {consumedItems.length === 0 ? (
-                                        <p className="text-sm text-gray-400 italic text-center py-4 bg-gray-50 rounded-lg">Nenhum item adicionado.</p>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {consumedItems.map((item, idx) => (
-                                                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 border rounded-lg">
-                                                    <div>
-                                                        <p className="font-medium text-gray-900">{item.itemName}</p>
-                                                        <p className="text-xs text-gray-500">{item.quantityUsed} {item.unit} x R$ {item.priceAtMoment.toFixed(2)}</p>
-                                                    </div>
-                                                    <span className="font-bold text-gray-900">R$ {(item.priceAtMoment * item.quantityUsed).toFixed(2)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
-
-                            {/* Totals */}
-                            <div className="border-t pt-4 space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-600">Total Materiais:</span>
-                                    <span className="font-medium">R$ {consumedItems.reduce((acc, i) => acc + (i.priceAtMoment * i.quantityUsed), 0).toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-600">Total Vacinas:</span>
-                                    <span className="font-medium">R$ {vaccines.reduce((acc, v) => acc + v.price, 0).toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-600">Honorários Veterinários:</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-gray-400 text-sm">R$</span>
-                                        <input 
-                                            type="number" 
-                                            className="border-b border-gray-300 w-20 text-right font-medium focus:outline-none focus:border-blue-500"
-                                            value={serviceFee}
-                                            onChange={e => setServiceFee(Number(e.target.value))}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center text-xl font-bold text-[#0B2C4D] pt-4 border-t">
-                                    <span>Total Final:</span>
-                                    <span>R$ {(serviceFee + consumedItems.reduce((acc, i) => acc + (i.priceAtMoment * i.quantityUsed), 0) + vaccines.reduce((acc, v) => acc + v.price, 0)).toFixed(2)}</span>
-                                </div>
+                            <div className="flex justify-between items-center text-xl font-bold text-[#0B2C4D] pt-4 border-t border-gray-300">
+                                <span>Total Final:</span>
+                                <span>R$ {(
+                                    serviceFee + 
+                                    consumedItems.reduce((acc, i) => acc + (i.priceAtMoment * i.quantityUsed), 0) + 
+                                    vaccines.reduce((acc, v) => acc + v.price, 0) +
+                                    (currentAttendance.procedures || []).reduce((acc, p) => acc + p.price, 0)
+                                ).toFixed(2)}</span>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
-                    <div className="flex justify-end gap-4">
-                         <Button 
-                            variant="outline" 
-                            className="text-red-600 border-red-200 hover:bg-red-50"
+                    <div className="flex justify-between pt-6 border-t">
+                        <Button 
+                            variant="ghost" 
+                            className="text-red-600 hover:bg-red-50"
                             onClick={() => {
-                                if(confirm('Cancelar atendimento?')) {
+                                if(confirm('Tem certeza que deseja cancelar? Dados não salvos serão perdidos.')) {
                                     setCurrentAttendance(null);
                                     setActiveTab('overview');
                                 }
                             }}
                         >
-                            Cancelar
+                            Cancelar Atendimento
                         </Button>
+                        
                         <Button 
-                            className="bg-green-600 hover:bg-green-700 text-white px-8"
+                            className="bg-gray-800 text-white px-8"
                             onClick={handleFinish}
                         >
-                            Finalizar e Cobrar
+                            Salvar e Finalizar (Sem Ações Extras)
                         </Button>
                     </div>
                 </div>
@@ -783,10 +832,11 @@ export const AttendancePage: React.FC = () => {
                 <div className="space-y-3">
                   {!currentAttendance ? (
                       <Button 
-                        onClick={handleStartAttendance}
+                        type="button"
+                        onClick={handleStartAttendanceCheck}
                         className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white border-none justify-center h-12 text-base font-semibold shadow-lg shadow-teal-900/20"
                       >
-                        Novo Procedimento
+                        Nova Consulta / Procedimento
                       </Button>
                   ) : (
                       <div className="bg-white/10 p-3 rounded-lg text-center text-sm">
@@ -827,6 +877,88 @@ export const AttendancePage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Consultation Type Modal */}
+      {showConsultationTypes && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg bg-white shadow-xl">
+            <CardContent className="p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Selecione o Tipo de Consulta</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {consultationTypes.map((type) => (
+                  <Button
+                    key={type.id}
+                    variant="outline"
+                    className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-all"
+                    onClick={() => handleSelectConsultationType(type.id, type.label)}
+                  >
+                    <type.icon className="h-8 w-8 text-blue-600" />
+                    <span className="font-medium text-gray-700">{type.label}</span>
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-6 flex justify-end">
+                <Button variant="ghost" onClick={() => setShowConsultationTypes(false)}>Cancelar</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Prescription Modal */}
+      {currentAttendance && selectedPatient && (
+        <PrescriptionModal
+            isOpen={isPrescriptionModalOpen}
+            onClose={() => setIsPrescriptionModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={(updated) => setCurrentAttendance(updated)}
+        />
+      )}
+
+      {/* Exam Request Modal */}
+      {currentAttendance && selectedPatient && (
+        <ExamRequestModal
+            isOpen={isExamRequestModalOpen}
+            onClose={() => setIsExamRequestModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={(updated) => setCurrentAttendance(updated)}
+        />
+      )}
+
+      {/* Vaccine Modal */}
+      {currentAttendance && selectedPatient && (
+        <VaccineModal
+            isOpen={isVaccineModalOpen}
+            onClose={() => setIsVaccineModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={(updated) => setCurrentAttendance(updated)}
+        />
+      )}
+
+      {/* Return Visit Modal */}
+      {currentAttendance && selectedPatient && (
+        <ReturnVisitModal
+            isOpen={isReturnModalOpen}
+            onClose={() => setIsReturnModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={(updated) => setCurrentAttendance(updated)}
+        />
+      )}
+
+      {/* Certificate Modal */}
+      {currentAttendance && selectedPatient && (
+        <CertificateModal
+            isOpen={isCertificateModalOpen}
+            onClose={() => setIsCertificateModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+        />
+      )}
+
       <PatientDetailsModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} patient={selectedPatient} />
     </Layout>
   );

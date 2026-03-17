@@ -268,7 +268,6 @@ export default function Clients() {
                         <option value="Equine">Equino</option>
                         <option value="Canine">Canino</option>
                         <option value="Feline">Felino</option>
-                        <option value="Bovine">Bovino</option>
                     </Select>
                     </div>
                     <div>

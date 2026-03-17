@@ -28,7 +28,7 @@ export default function FinanceRevenue() {
     // We filter for 'income' type
     const flows = mockDB.getCashFlow().filter(c => c.type === 'income');
     
-    // Map to view format if needed or use directly
+    // Map to view format
     const formatted = flows.map(f => ({
         id: f.id,
         date: f.date,
@@ -41,8 +41,8 @@ export default function FinanceRevenue() {
         statusColor: 'bg-teal-100 text-teal-700'
     }));
     
-    // Merge with static mock data if empty? Or just replace.
-    // For this session, let's prefer the dynamic data but keep some static for demo if empty
+    // Always prefer dynamic data if available, but keep static as fallback or merge?
+    // Let's just use dynamic + fallback if empty to not break demo look
     if (formatted.length > 0) {
         setRevenueHistory(formatted);
     } else {
