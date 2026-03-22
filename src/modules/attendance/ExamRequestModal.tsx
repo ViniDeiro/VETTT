@@ -39,37 +39,32 @@ export const ExamRequestModal: React.FC<ExamRequestModalProps> = ({
   const [clinicalIndication, setClinicalIndication] = useState('');
   const [priority, setPriority] = useState<'routine' | 'urgent'>('routine');
   
-  const [selectedCommonExam, setSelectedCommonExam] = useState('');
-  const [customExamName, setCustomExamName] = useState('');
-  const [customExamType, setCustomExamType] = useState<'laboratory' | 'imaging' | 'cardiology' | 'other'>('laboratory');
+  const [examName, setExamName] = useState('');
+  const [examType, setExamType] = useState<'laboratory' | 'imaging' | 'cardiology' | 'other'>('laboratory');
   const [instructions, setInstructions] = useState('');
 
-  const handleAddCommon = () => {
-      if (!selectedCommonExam) return;
-      const tmpl = COMMON_EXAMS.find(e => e.name === selectedCommonExam);
-      if (tmpl) {
-          const newItem: ExamItem = {
-              id: Math.random().toString(36).substr(2, 9),
-              name: tmpl.name,
-              type: tmpl.type as any,
-              instructions: instructions || (tmpl.type === 'imaging' ? 'Jejum alimentar de 8h' : '')
-          };
-          setItems([...items, newItem]);
-          setInstructions('');
-          setSelectedCommonExam('');
+  // When exam name changes, try to auto-fill type and instructions if it matches a common exam
+  const handleExamNameChange = (name: string) => {
+      setExamName(name);
+      const common = COMMON_EXAMS.find(e => e.name.toLowerCase() === name.toLowerCase());
+      if (common) {
+          setExamType(common.type as any);
+          if (common.type === 'imaging' && !instructions) {
+              setInstructions('Jejum alimentar de 8h');
+          }
       }
   };
 
-  const handleAddCustom = () => {
-      if (!customExamName) return;
+  const handleAddExam = () => {
+      if (!examName) return;
       const newItem: ExamItem = {
           id: Math.random().toString(36).substr(2, 9),
-          name: customExamName,
-          type: customExamType,
+          name: examName,
+          type: examType,
           instructions: instructions
       };
       setItems([...items, newItem]);
-      setCustomExamName('');
+      setExamName('');
       setInstructions('');
   };
 
@@ -176,55 +171,48 @@ export const ExamRequestModal: React.FC<ExamRequestModalProps> = ({
             <div className="space-y-4">
                 <h3 className="font-semibold text-gray-700">Adicionar Exame</h3>
                 
-                <div className="bg-gray-50 p-3 rounded-lg border space-y-3">
-                    <Label className="text-xs uppercase text-gray-500 font-bold">Opção 1: Lista Padrão</Label>
-                    <div className="flex gap-2">
-                        <select 
-                            className="flex-1 border rounded-md p-2 text-sm"
-                            value={selectedCommonExam}
-                            onChange={e => setSelectedCommonExam(e.target.value)}
-                        >
-                            <option value="">Selecione...</option>
-                            {COMMON_EXAMS.map(e => <option key={e.name} value={e.name}>{e.name}</option>)}
-                        </select>
-                        <Button onClick={handleAddCommon} disabled={!selectedCommonExam} size="sm" className="bg-teal-600 text-white">
-                            <Plus className="h-4 w-4" />
-                        </Button>
+                <div className="bg-gray-50 p-4 rounded-lg border space-y-4">
+                    <div>
+                        <Label>Nome do Exame *</Label>
+                        <Input 
+                            value={examName} 
+                            onChange={e => handleExamNameChange(e.target.value)} 
+                            placeholder="Digite ou selecione da lista..." 
+                            className="bg-white mt-1"
+                            list="common-exams-list"
+                        />
+                        <datalist id="common-exams-list">
+                            {COMMON_EXAMS.map(e => <option key={e.name} value={e.name} />)}
+                        </datalist>
                     </div>
-                </div>
 
-                <div className="bg-gray-50 p-3 rounded-lg border space-y-3">
-                    <Label className="text-xs uppercase text-gray-500 font-bold">Opção 2: Personalizado</Label>
-                    <Input 
-                        value={customExamName} 
-                        onChange={e => setCustomExamName(e.target.value)} 
-                        placeholder="Nome do exame..." 
-                        className="bg-white"
-                    />
-                    <div className="flex gap-2">
+                    <div>
+                        <Label>Categoria</Label>
                         <select 
-                            className="w-1/2 border rounded-md p-2 text-sm bg-white"
-                            value={customExamType}
-                            onChange={e => setCustomExamType(e.target.value as any)}
+                            className="w-full border rounded-md p-2 text-sm bg-white mt-1"
+                            value={examType}
+                            onChange={e => setExamType(e.target.value as any)}
                         >
                             <option value="laboratory">Laboratorial</option>
                             <option value="imaging">Imagem</option>
                             <option value="cardiology">Cardio</option>
                             <option value="other">Outros</option>
                         </select>
-                        <Button onClick={handleAddCustom} disabled={!customExamName} size="sm" className="w-1/2 bg-gray-600 text-white">
-                            Adicionar
-                        </Button>
                     </div>
-                </div>
-                
-                <div>
-                    <Label>Instruções de Preparo (Opcional)</Label>
-                    <Input 
-                        value={instructions} 
-                        onChange={e => setInstructions(e.target.value)} 
-                        placeholder="Ex: Jejum 8h..." 
-                    />
+
+                    <div>
+                        <Label>Instruções de Preparo (Opcional)</Label>
+                        <Input 
+                            value={instructions} 
+                            onChange={e => setInstructions(e.target.value)} 
+                            placeholder="Ex: Jejum 8h..." 
+                            className="bg-white mt-1"
+                        />
+                    </div>
+
+                    <Button onClick={handleAddExam} disabled={!examName} className="w-full bg-teal-600 hover:bg-teal-700 text-white mt-2">
+                        <Plus className="h-4 w-4 mr-2" /> Adicionar Exame
+                    </Button>
                 </div>
             </div>
 

@@ -4,6 +4,7 @@ import { mockDB } from '../../services/mockDatabase';
 import { Owner, Property, Patient } from '../../domain/types';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { getBreedsBySpecies } from '../../domain/breeds';
+import { formatPhone, formatDocument, formatCEP } from '../../lib/formatters';
 
 export const RegistrationWizard: React.FC = () => {
   const navigate = useNavigate();
@@ -140,12 +141,16 @@ export const RegistrationWizard: React.FC = () => {
                 <input 
                     className="border p-2 rounded" 
                     placeholder="Telefone"
-                    onChange={e => setNewOwner({...newOwner, phone: e.target.value})}
+                    value={newOwner.phone || ''}
+                    onChange={e => setNewOwner({...newOwner, phone: formatPhone(e.target.value)})}
+                    maxLength={15}
                 />
                 <input 
                     className="border p-2 rounded" 
                     placeholder="CPF"
-                    onChange={e => setNewOwner({...newOwner, document: e.target.value})}
+                    value={newOwner.document || ''}
+                    onChange={e => setNewOwner({...newOwner, document: formatDocument(e.target.value)})}
+                    maxLength={18}
                 />
               </div>
               <button 

@@ -57,6 +57,7 @@ export const AttendancePage: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient);
   const [activeTab, setActiveTab] = useState('overview');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historySubTab, setHistorySubTab] = useState('Geral');
   
   // Attendance Form State
   const [currentAttendance, setCurrentAttendance] = useState<Attendance | null>(null);
@@ -85,6 +86,9 @@ export const AttendancePage: React.FC = () => {
 
   // Vitals State
   const [vitals, setVitals] = useState<Vitals>({});
+
+  const allProperties = mockDB.getAllProperties();
+  const patientProperty = allProperties.find(p => p.id === selectedPatient?.propertyId);
 
   useEffect(() => {
     setPatients(mockDB.getPatients());
@@ -117,7 +121,7 @@ export const AttendancePage: React.FC = () => {
         patientName: selectedPatient.name,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
-        reason: label, // Set reason to the selected type
+        reason: '', // Set reason to empty by default
         consultationType: typeId, // Store the type ID
         consumedItems: [],
         vitals: {} // Initialize
@@ -231,6 +235,41 @@ export const AttendancePage: React.FC = () => {
     }
   };
 
+  const handleActionClick = (actionId: string) => {
+      let activeAttendance = currentAttendance;
+      if (!activeAttendance) {
+          // Create a quick attendance if none exists
+          if (confirm('Nenhum atendimento em andamento. Deseja iniciar um novo atendimento rápido para esta ação?')) {
+              activeAttendance = mockDB.createAttendance({
+                  patientId: selectedPatient!.id,
+                  patientName: selectedPatient!.name,
+                  vetId: 'current-vet-id',
+                  date: new Date().toLocaleDateString('pt-BR'),
+                  reason: 'Atendimento Rápido',
+                  consultationType: 'outras',
+                  consumedItems: [],
+                  vitals: {}
+              });
+              setCurrentAttendance(activeAttendance);
+              setActiveTab('attendance_active');
+          } else {
+              return;
+          }
+      }
+
+      // Save current state first
+      activeAttendance.vitals = vitals;
+      activeAttendance.anamnesis = anamnesis;
+      activeAttendance.diagnosis = diagnosis;
+      
+      if (actionId === 'prescricao') setIsPrescriptionModalOpen(true);
+      else if (actionId === 'exames') setIsExamRequestModalOpen(true);
+      else if (actionId === 'vacinas') setIsVaccineModalOpen(true);
+      else if (actionId === 'procedimentos' || actionId === 'cirurgia') setIsProceduresModalOpen(true);
+      else if (actionId === 'retorno') setIsReturnModalOpen(true);
+      else if (actionId === 'termos') setIsCertificateModalOpen(true);
+  };
+
   // --- VIEW: SELECT PATIENT ---
   if (!selectedPatient) {
     return (
@@ -317,23 +356,44 @@ export const AttendancePage: React.FC = () => {
         <div className="flex overflow-x-auto gap-2 pb-2 md:pb-0">
           {[
             { id: 'overview', label: 'Visão Geral' },
-            { id: 'attendance_active', label: 'Em Atendimento', disabled: !currentAttendance },
+            { id: 'attendance_active', label: 'Em Atendimento' },
             { id: 'history', label: 'Histórico' },
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => !tab.disabled && setActiveTab(tab.id)}
-              disabled={tab.disabled}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
                 activeTab === tab.id 
                   ? "bg-[#0B2C4D] text-white shadow-md" 
-                  : tab.disabled ? "bg-gray-100 text-gray-300 cursor-not-allowed" : "bg-white text-gray-600 hover:bg-gray-50 shadow-sm"
+                  : "bg-white text-gray-600 hover:bg-gray-50 shadow-sm"
               )}
             >
               {tab.label}
             </button>
           ))}
+        </div>
+
+        {/* Global Action Toolbar */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+            {[
+                { id: 'prescricao', label: 'Prescrição', icon: FileText, color: 'bg-blue-600 hover:bg-blue-700' },
+                { id: 'exames', label: 'Exames', icon: Activity, color: 'bg-teal-600 hover:bg-teal-700' },
+                { id: 'vacinas', label: 'Vacinas', icon: Syringe, color: 'bg-purple-600 hover:bg-purple-700' },
+                { id: 'procedimentos', label: 'Procedimentos', icon: Package, color: 'bg-orange-600 hover:bg-orange-700' },
+                { id: 'cirurgia', label: 'Cirurgia', icon: Activity, color: 'bg-red-600 hover:bg-red-700' },
+                { id: 'retorno', label: 'Retorno', icon: Calendar, color: 'bg-green-600 hover:bg-green-700' },
+                { id: 'termos', label: 'Docs/Termos', icon: FileText, color: 'bg-gray-600 hover:bg-gray-700' },
+            ].map(action => (
+                <Button
+                    key={action.id}
+                    className={`${action.color} text-white h-12 flex flex-row items-center justify-center gap-2 shadow-sm transition-all`}
+                    onClick={() => handleActionClick(action.id)}
+                >
+                    <action.icon className="h-4 w-4" />
+                    <span className="text-xs font-semibold">{action.label}</span>
+                </Button>
+            ))}
         </div>
 
         {/* CONTENT AREA */}
@@ -366,7 +426,7 @@ export const AttendancePage: React.FC = () => {
                                     {selectedPatient.species === 'Equine' && (
                                         <div>
                                             <p className="text-xs text-gray-500 uppercase font-semibold">Propriedade</p>
-                                            <p className="text-gray-900 font-medium">Haras Pimbury (Mock)</p> 
+                                            <p className="text-gray-900 font-medium">{patientProperty ? patientProperty.name : 'Não vinculada'}</p> 
                                         </div>
                                     )}
                                 </div>
@@ -498,6 +558,33 @@ export const AttendancePage: React.FC = () => {
                                     </div>
                                 </div>
                                 <div>
+                                    <Label>Freq. Respiratória (m)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={vitals.respiratoryRate || ''}
+                                            onChange={e => setVitals({...vitals, respiratoryRate: Number(e.target.value)})}
+                                            className="pl-8"
+                                        />
+                                        <Wind className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Mucosa</Label>
+                                    <Select 
+                                        value={vitals.mucousMembrane || ''}
+                                        onChange={e => setVitals({...vitals, mucousMembrane: e.target.value})}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        <option value="Normocorada">Normocorada</option>
+                                        <option value="Hipocorada">Hipocorada</option>
+                                        <option value="Congesta">Congesta</option>
+                                        <option value="Ictérica">Ictérica</option>
+                                        <option value="Cianótica">Cianótica</option>
+                                    </Select>
+                                </div>
+                                <div>
                                     <Label>TPC (seg)</Label>
                                     <Input 
                                         type="number" 
@@ -597,51 +684,6 @@ export const AttendancePage: React.FC = () => {
                             </div>
                         </CardContent>
                     </Card>
-
-                    {/* 3. AÇÕES FINAIS (TOOLBAR) */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {[
-                            { id: 'prescricao', label: 'Prescrição', icon: FileText, color: 'bg-blue-600' },
-                            { id: 'exames', label: 'Exames', icon: Activity, color: 'bg-teal-600' },
-                            { id: 'vacinas', label: 'Vacinas', icon: Syringe, color: 'bg-purple-600' },
-                            { id: 'procedimentos', label: 'Procedim.', icon: Package, color: 'bg-orange-600' },
-                            { id: 'cirurgia', label: 'Cirurgia', icon: Activity, color: 'bg-red-600' },
-                            { id: 'retorno', label: 'Retorno', icon: Calendar, color: 'bg-green-600' },
-                            { id: 'termos', label: 'Docs', icon: FileText, color: 'bg-gray-600' },
-                        ].map(action => (
-                            <Button
-                                key={action.id}
-                                className={`${action.color} hover:opacity-90 text-white h-14 flex flex-col items-center justify-center gap-1 shadow-md`}
-                                onClick={() => {
-                                    // Save current state first
-                                    if(currentAttendance) {
-                                        currentAttendance.vitals = vitals;
-                                        currentAttendance.anamnesis = anamnesis;
-                                        currentAttendance.diagnosis = diagnosis;
-                                        
-                                        if (action.id === 'prescricao') {
-                                            setIsPrescriptionModalOpen(true);
-                                        } else if (action.id === 'exames') {
-                                            setIsExamRequestModalOpen(true);
-                                        } else if (action.id === 'vacinas') {
-                                            setIsVaccineModalOpen(true);
-                                        } else if (action.id === 'procedimentos' || action.id === 'cirurgia') {
-                                            setIsProceduresModalOpen(true);
-                                        } else if (action.id === 'retorno') {
-                                            setIsReturnModalOpen(true);
-                                        } else if (action.id === 'termos') {
-                                            setIsCertificateModalOpen(true);
-                                        } else {
-                                            alert(`Ação "${action.label}" selecionada.\n(O sistema salvará os dados e abrirá o módulo na próxima fase).`);
-                                        }
-                                    }
-                                }}
-                            >
-                                <action.icon className="h-5 w-5" />
-                                <span className="text-xs font-semibold">{action.label}</span>
-                            </Button>
-                        ))}
-                    </div>
 
                     {/* Prescriptions List (Feedback) */}
                     {currentAttendance.prescriptions && currentAttendance.prescriptions.length > 0 && (
@@ -813,6 +855,105 @@ export const AttendancePage: React.FC = () => {
                             Salvar e Finalizar (Sem Ações Extras)
                         </Button>
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'history' && (
+                <div className="space-y-6">
+                    <Card className="border-none shadow-sm">
+                        <CardContent className="p-6">
+                            <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2 mb-6">
+                                <FileText className="h-5 w-5 text-blue-600" />
+                                Histórico do Paciente
+                            </h3>
+                            
+                            {/* History Sub-tabs */}
+                            <div className="flex overflow-x-auto gap-2 border-b pb-2 mb-6">
+                                {['Geral', 'Consultas', 'Peso e Sinais Vitais', 'Vacinas', 'Exames'].map(tab => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setHistorySubTab(tab)}
+                                        className={cn(
+                                            "px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors focus:outline-none",
+                                            historySubTab === tab 
+                                                ? "border-blue-600 text-blue-600 bg-blue-50/50" 
+                                                : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900"
+                                        )}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            <div className="py-4">
+                                {historySubTab === 'Geral' && (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                                        <p>Para ver o histórico geral completo com edições, abra a ficha.</p>
+                                        <Button variant="outline" className="mt-4" onClick={() => setIsHistoryOpen(true)}>Abrir Ficha Completa</Button>
+                                    </div>
+                                )}
+                                {historySubTab === 'Consultas' && (
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).map(att => (
+                                            <div key={att.id} className="p-4 border rounded-lg bg-gray-50">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="font-bold text-gray-800">{att.date} - {att.reason}</span>
+                                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{att.status === 'finished' ? 'Finalizado' : 'Em Andamento'}</span>
+                                                </div>
+                                                {att.diagnosis && <p className="text-sm text-gray-600"><span className="font-semibold">Diagnóstico:</span> {att.diagnosis}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {historySubTab === 'Peso e Sinais Vitais' && (
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).filter(a => a.vitals && Object.keys(a.vitals).length > 0).map(att => (
+                                            <div key={att.id} className="p-4 border rounded-lg bg-gray-50 flex flex-col md:flex-row gap-4 md:gap-6">
+                                                <span className="font-bold text-gray-600 w-24 shrink-0">{att.date}</span>
+                                                <div className="flex flex-wrap gap-4 text-sm">
+                                                    {att.vitals?.weight && <span><span className="font-semibold">Peso:</span> {att.vitals.weight}kg</span>}
+                                                    {att.vitals?.temperature && <span><span className="font-semibold">Temp:</span> {att.vitals.temperature}°C</span>}
+                                                    {att.vitals?.heartRate && <span><span className="font-semibold">FC:</span> {att.vitals.heartRate}bpm</span>}
+                                                    {att.vitals?.respiratoryRate && <span><span className="font-semibold">FR:</span> {att.vitals.respiratoryRate}rpm</span>}
+                                                    {att.vitals?.mucousMembrane && <span><span className="font-semibold">Mucosa:</span> {att.vitals.mucousMembrane}</span>}
+                                                    {att.vitals?.tpc && <span><span className="font-semibold">TPC:</span> {att.vitals.tpc}s</span>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {historySubTab === 'Vacinas' && (
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => a.vaccines || []).map((vac, i) => (
+                                            <div key={i} className="p-4 border rounded-lg bg-purple-50">
+                                                <div className="flex justify-between">
+                                                    <span className="font-bold text-purple-900">{vac.name}</span>
+                                                    <span className="text-sm text-purple-700">{vac.applicationDate}</span>
+                                                </div>
+                                                <p className="text-xs text-purple-600 mt-1">Lote: {vac.batch} | Próx. Dose: {vac.nextDoseDate ? new Date(vac.nextDoseDate).toLocaleDateString('pt-BR') : 'Não agendada'}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {historySubTab === 'Exames' && (
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => a.examRequests || []).map((req, i) => (
+                                            <div key={i} className="p-4 border rounded-lg bg-teal-50">
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="font-bold text-teal-900">Solicitação em {req.date}</span>
+                                                    <span className="text-xs font-bold uppercase text-teal-700">{req.priority === 'urgent' ? 'Urgente' : 'Rotina'}</span>
+                                                </div>
+                                                <ul className="list-disc list-inside text-sm text-teal-800 ml-2">
+                                                    {req.items.map((item, j) => <li key={j}>{item.name} {item.instructions ? `(${item.instructions})` : ''}</li>)}
+                                                </ul>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
 

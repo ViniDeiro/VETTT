@@ -147,7 +147,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
           setActiveTab('odontogram');
           break;
         case 'new-procedure':
-          window.alert('Funcionalidade de Novo Procedimento: Abriria um modal de cadastro.');
+          window.location.href = `/attendance-new?patientId=${patient.id}`;
           break;
         case 'pdf':
           console.log('Generating PDF...');
@@ -575,7 +575,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                 }}
                 className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white justify-start relative z-10 cursor-pointer"
               >
-                <Plus className="mr-2 h-4 w-4" /> Novo Procedimento
+                <Plus className="mr-2 h-4 w-4" /> Nova Consulta
               </Button>
               <Button 
                 onClick={() => handleAction('pdf')}
@@ -708,11 +708,11 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                           </select>
                       </div>
                       <div>
-                          <label className="text-sm font-medium">Cor/Pelagem</label>
+                          <label className="text-sm font-medium">Pelagem/Cor</label>
                           <input 
                             className="w-full border rounded p-2"
-                            value={editFormData.color || ''} 
-                            onChange={e => setEditFormData({...editFormData, color: e.target.value})} 
+                            value={editFormData.coat || editFormData.color || ''} 
+                            onChange={e => setEditFormData({...editFormData, coat: e.target.value, color: e.target.value})} 
                           />
                       </div>
                        <div className="flex items-center pt-6">
@@ -737,6 +737,15 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                     placeholder="Ex: Penicilina, Dipirona"
                                     value={editFormData.allergies ? editFormData.allergies.join(', ') : ''} 
                                     onChange={e => setEditFormData({...editFormData, allergies: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-medium text-red-600">Doenças Crônicas</label>
+                                  <input 
+                                    className="w-full border rounded p-2 border-red-100 bg-red-50"
+                                    placeholder="Ex: Diabetes, Insuficiência Renal"
+                                    value={editFormData.chronicDiseases ? editFormData.chronicDiseases.join(', ') : ''} 
+                                    onChange={e => setEditFormData({...editFormData, chronicDiseases: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
                                   />
                               </div>
                               <div>
@@ -1080,7 +1089,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
       </Modal>
 
       {/* Change Owner Modal */}
-      <Modal isOpen={isChangingOwner} onClose={() => setIsChangingOwner(false)} title="Alterar Tutor">
+      <Modal isOpen={isChangingOwner} onClose={() => { setIsChangingOwner(false); setNewOwner(null); }} title="Alterar Tutor">
           <div className="space-y-4 p-1">
               <p className="text-sm text-gray-500">Selecione o novo tutor para este paciente.</p>
               <Autocomplete 
@@ -1092,15 +1101,56 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   placeholder="Buscar novo tutor..."
                   value={newOwner?.name}
               />
+              
+              <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-sm uppercase font-bold tracking-widest">
+                      <span className="bg-white px-4 text-gray-400">Ou Cadastre Novo</span>
+                  </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Nome Completo"
+                      onChange={e => setNewOwner(prev => ({...prev, name: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Telefone"
+                      onChange={e => setNewOwner(prev => ({...prev, phone: e.target.value, isNew: true}))}
+                  />
+              </div>
+
               <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setIsChangingOwner(false)}>Cancelar</Button>
-                  <Button onClick={handleSaveOwnerChange} disabled={!newOwner}>Salvar Alteração</Button>
+                  <Button onClick={() => {
+                      if (newOwner?.isNew) {
+                          if (!newOwner.name || !newOwner.phone) {
+                              alert('Preencha nome e telefone do novo tutor.');
+                              return;
+                          }
+                          const created = mockDB.createOwner(newOwner);
+                          setOwners(mockDB.getOwners());
+                          setNewOwner(created);
+                          
+                          patient.ownerId = created.id;
+                          patient.ownerName = created.name;
+                          alert(`Tutor cadastrado e alterado para: ${created.name}`);
+                      } else {
+                          handleSaveOwnerChange();
+                      }
+                      setIsChangingOwner(false);
+                      setNewOwner(null);
+                  }} disabled={!newOwner?.name}>Salvar Alteração</Button>
               </div>
           </div>
       </Modal>
 
       {/* Change Property Modal */}
-      <Modal isOpen={isChangingProperty} onClose={() => setIsChangingProperty(false)} title="Alterar Propriedade">
+      <Modal isOpen={isChangingProperty} onClose={() => { setIsChangingProperty(false); setNewProperty(null); }} title="Alterar Propriedade">
           <div className="space-y-4 p-1">
               <p className="text-sm text-gray-500">Selecione a nova propriedade para este paciente.</p>
               <Autocomplete 
@@ -1112,9 +1162,55 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   placeholder="Buscar nova propriedade..."
                   value={newProperty?.name}
               />
+
+              <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-sm uppercase font-bold tracking-widest">
+                      <span className="bg-white px-4 text-gray-400">Ou Cadastre Nova</span>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input 
+                      className="border rounded p-2 md:col-span-2" 
+                      placeholder="Nome da Propriedade"
+                      onChange={e => setNewProperty(prev => ({...prev, name: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Cidade"
+                      onChange={e => setNewProperty(prev => ({...prev, city: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Estado (UF)"
+                      maxLength={2}
+                      onChange={e => setNewProperty(prev => ({...prev, state: e.target.value, isNew: true}))}
+                  />
+              </div>
+
               <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setIsChangingProperty(false)}>Cancelar</Button>
-                  <Button onClick={handleSavePropertyChange} disabled={!newProperty}>Salvar Alteração</Button>
+                  <Button onClick={() => {
+                      if (newProperty?.isNew) {
+                          if (!newProperty.name || !newProperty.city || !newProperty.state) {
+                              alert('Preencha nome, cidade e estado da nova propriedade.');
+                              return;
+                          }
+                          const created = mockDB.createProperty(newProperty);
+                          setProperties(mockDB.getAllProperties());
+                          setNewProperty(created);
+                          
+                          patient.propertyId = created.id;
+                          alert(`Propriedade cadastrada e alterada para: ${created.name}`);
+                      } else {
+                          handleSavePropertyChange();
+                      }
+                      setIsChangingProperty(false);
+                      setNewProperty(null);
+                  }} disabled={!newProperty?.name}>Salvar Alteração</Button>
               </div>
           </div>
       </Modal>

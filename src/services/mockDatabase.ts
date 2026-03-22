@@ -362,11 +362,17 @@ class MockDatabaseService {
 
     // 5. Schedule Return (Create Appointment)
     if (returnVisit) {
+        const time = returnVisit.time || '09:00';
+        // end time: start + 1 hour
+        const [h, m] = time.split(':');
+        const endHour = String(Number(h) + 1).padStart(2, '0');
+        const endTime = `${endHour}:${m}`;
+
         const returnAppt = {
             id: Math.random().toString(36).substr(2, 9),
             title: `Retorno: ${attendance.patientName} (${returnVisit.type})`,
-            start: new Date(returnVisit.date + 'T09:00:00').toISOString(), // Default to 9 AM
-            end: new Date(returnVisit.date + 'T10:00:00').toISOString(),
+            start: new Date(`${returnVisit.date}T${time}:00`).toISOString(),
+            end: new Date(`${returnVisit.date}T${endTime}:00`).toISOString(),
             patientId: attendance.patientId,
             doctor: attendance.vetId || 'Dr. Vet',
             type: attendance.consultationType || 'retorno',

@@ -10,8 +10,9 @@ import { Autocomplete } from '../../shared/Autocomplete';
 import { mockDB } from '../../services/mockDatabase';
 import { Owner, Property, Patient } from '../../domain/types';
 import { getBreedsBySpecies } from '../../domain/breeds';
-import { CheckCircle, ChevronRight, ChevronLeft, User, Home, PawPrint, Plus, AlertCircle, Heart } from 'lucide-react';
+import { CheckCircle, ChevronRight, ChevronLeft, User, Home, PawPrint, Plus, AlertCircle, Heart, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatPhone, formatDocument, formatCEP } from '../../lib/formatters';
 
 export const PatientWizard: React.FC = () => {
   const navigate = useNavigate();
@@ -45,6 +46,17 @@ export const PatientWizard: React.FC = () => {
   // Specific inputs for Allergies/Chronic (comma separated strings in UI, array in DB)
   const [allergiesInput, setAllergiesInput] = useState('');
   const [chronicInput, setChronicInput] = useState('');
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setPatientData(prev => ({...prev, photoUrl: reader.result as string}));
+          };
+          reader.readAsDataURL(file);
+      }
+  };
 
   useEffect(() => {
     setOwners(mockDB.getOwners());
@@ -94,7 +106,12 @@ export const PatientWizard: React.FC = () => {
     }
     setIsLoading(true);
     setTimeout(() => {
-      const created = mockDB.createOwner(newOwnerData as Owner);
+      const finalAddress = [newOwnerData.street, newOwnerData.number ? `nº ${newOwnerData.number}` : '', newOwnerData.neighborhood].filter(Boolean).join(', ');
+      
+      const created = mockDB.createOwner({
+          ...newOwnerData,
+          address: finalAddress || newOwnerData.address || ''
+      } as Owner);
       setOwners(mockDB.getOwners());
       setSelectedOwner(created);
       setIsCreatingOwner(false);
@@ -123,9 +140,11 @@ export const PatientWizard: React.FC = () => {
     }
     setIsLoading(true);
     setTimeout(() => {
+      const finalAddress = [newPropertyData.street, newPropertyData.number ? `km/nº ${newPropertyData.number}` : '', newPropertyData.neighborhood].filter(Boolean).join(', ');
+      
       const created = mockDB.createProperty({
         ...newPropertyData,
-        address: newPropertyData.address || ''
+        address: finalAddress || newPropertyData.address || ''
       } as Property);
       setProperties(mockDB.getAllProperties());
       setSelectedProperty(created);
@@ -221,8 +240,24 @@ export const PatientWizard: React.FC = () => {
                         Identificação
                     </h3>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
+                    <div className="flex gap-6 items-center mb-6">
+                        <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-200 hover:border-blue-400 transition-colors cursor-pointer relative overflow-hidden group">
+                            {patientData.photoUrl ? (
+                                <img src={patientData.photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                            ) : (
+                                <>
+                                    <ImageIcon className="w-8 h-8 mb-1 text-gray-400 group-hover:text-blue-500" />
+                                    <span className="text-[10px] font-medium">Foto</span>
+                                </>
+                            )}
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={handlePhotoUpload}
+                            />
+                        </div>
+                        <div className="flex-1">
                             <Label>Nome do Animal *</Label>
                             <Input 
                                 value={patientData.name || ''} 
@@ -230,22 +265,6 @@ export const PatientWizard: React.FC = () => {
                                 placeholder="Ex: Thor"
                                 className="text-lg font-medium"
                             />
-                        </div>
-                        <div>
-                            <Label>Status do Animal</Label>
-                            <Select 
-                                value={patientData.status} 
-                                onChange={e => setPatientData({...patientData, status: e.target.value as any})}
-                                className={cn("font-medium", patientData.status === 'Deceased' ? "bg-red-50 text-red-600 border-red-200" : "bg-green-50 text-green-700 border-green-200")}
-                            >
-                                <option value="Alive">Vivo</option>
-                                <option value="Deceased">Óbito</option>
-                            </Select>
-                            {patientData.status === 'Deceased' && (
-                                <p className="text-xs text-red-500 mt-1 font-semibold">
-                                    * Cadastro será bloqueado para edição futura.
-                                </p>
-                            )}
                         </div>
                     </div>
 
@@ -321,7 +340,7 @@ export const PatientWizard: React.FC = () => {
                                 <option value="F">Fêmea</option>
                             </Select>
                         </div>
-                        <div className="col-span-1 flex items-center pt-6">
+                        <div className="col-span-1 flex flex-col gap-2 pt-6">
                             <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
                                 <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.neutered ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300")}>
                                     {patientData.neutered && <CheckCircle className="w-3.5 h-3.5" />}
@@ -334,6 +353,21 @@ export const PatientWizard: React.FC = () => {
                                 />
                                 <span className="font-medium text-gray-700">Castrado?</span>
                             </label>
+                            
+                            {patientData.gender === 'F' && (
+                                <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
+                                    <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.pregnant ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300")}>
+                                        {patientData.pregnant && <CheckCircle className="w-3.5 h-3.5" />}
+                                    </div>
+                                    <input 
+                                        type="checkbox" 
+                                        className="hidden"
+                                        checked={patientData.pregnant || false}
+                                        onChange={e => setPatientData({...patientData, pregnant: e.target.checked})}
+                                    />
+                                    <span className="font-medium text-gray-700">Prenha?</span>
+                                </label>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -408,18 +442,20 @@ export const PatientWizard: React.FC = () => {
                     </h3>
                     
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                         <div>
-                            <Label>Porte</Label>
-                            <Select 
-                                value={patientData.size} 
-                                onChange={e => setPatientData({...patientData, size: e.target.value as any})}
-                            >
-                                <option value="">Selecione...</option>
-                                <option value="Small">Pequeno</option>
-                                <option value="Medium">Médio</option>
-                                <option value="Large">Grande</option>
-                            </Select>
-                        </div>
+                        {patientData.species !== 'Equine' && (
+                            <div>
+                                <Label>Porte</Label>
+                                <Select 
+                                    value={patientData.size} 
+                                    onChange={e => setPatientData({...patientData, size: e.target.value as any})}
+                                >
+                                    <option value="">Selecione...</option>
+                                    <option value="Small">Pequeno</option>
+                                    <option value="Medium">Médio</option>
+                                    <option value="Large">Grande</option>
+                                </Select>
+                            </div>
+                        )}
                         <div>
                             <Label>Temperamento</Label>
                             <Input 
@@ -527,14 +563,25 @@ export const PatientWizard: React.FC = () => {
                 </section>
 
                 {/* 1.6 Observações Gerais */}
-                <section>
-                    <Label className="text-base font-bold text-gray-700">Observações Gerais / Histórico Cirúrgico</Label>
-                    <textarea 
-                        className="w-full border border-gray-300 rounded-lg p-3 min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Descreva cirurgias prévias, amputações, ou outras condições especiais..."
-                        value={patientData.notes || ''}
-                        onChange={e => setPatientData({...patientData, notes: e.target.value})}
-                    />
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <Label className="text-base font-bold text-gray-700">Observações Gerais / Histórico Cirúrgico</Label>
+                        <textarea 
+                            className="w-full border border-gray-300 rounded-lg p-3 min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                            placeholder="Descreva cirurgias prévias, amputações, ou outras condições especiais..."
+                            value={patientData.notes || ''}
+                            onChange={e => setPatientData({...patientData, notes: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <Label className="text-base font-bold text-gray-700">Observação Interna</Label>
+                        <textarea 
+                            className="w-full border border-gray-300 rounded-lg p-3 min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2 bg-yellow-50/50"
+                            placeholder="Anotações visíveis apenas para a equipe da clínica..."
+                            value={patientData.internalNotes || ''}
+                            onChange={e => setPatientData({...patientData, internalNotes: e.target.value})}
+                        />
+                    </div>
                 </section>
 
                 <div className="flex justify-end pt-8">
@@ -602,24 +649,27 @@ export const PatientWizard: React.FC = () => {
                              <Label>Telefone Principal *</Label>
                              <Input 
                                 value={newOwnerData.phone || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, phone: e.target.value})}
+                                onChange={e => setNewOwnerData({...newOwnerData, phone: formatPhone(e.target.value)})}
                                 placeholder="(00) 00000-0000"
+                                maxLength={15}
                               />
                         </div>
                         <div>
                              <Label>Telefone Secundário</Label>
                              <Input 
                                 value={newOwnerData.secondaryPhone || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, secondaryPhone: e.target.value})}
+                                onChange={e => setNewOwnerData({...newOwnerData, secondaryPhone: formatPhone(e.target.value)})}
                                 placeholder="(00) 00000-0000"
+                                maxLength={15}
                               />
                         </div>
                         <div>
                              <Label>CPF / CNPJ</Label>
                              <Input 
                                 value={newOwnerData.document || ''}
-                                onChange={e => setNewOwnerData({...newOwnerData, document: e.target.value})}
+                                onChange={e => setNewOwnerData({...newOwnerData, document: formatDocument(e.target.value)})}
                                 placeholder="000.000.000-00"
+                                maxLength={18}
                               />
                         </div>
                         <div>
@@ -639,7 +689,8 @@ export const PatientWizard: React.FC = () => {
                                 <Label>CEP</Label>
                                 <Input 
                                     value={newOwnerData.zipCode || ''}
-                                    onChange={e => setNewOwnerData({...newOwnerData, zipCode: e.target.value})}
+                                    onChange={e => setNewOwnerData({...newOwnerData, zipCode: formatCEP(e.target.value)})}
+                                    maxLength={9}
                                 />
                             </div>
                             <div className="col-span-4">
@@ -781,23 +832,78 @@ export const PatientWizard: React.FC = () => {
                             />
                         </div>
                         <div>
+                             <Label>Tipo de Propriedade</Label>
+                             <Select 
+                                value={newPropertyData.type || ''}
+                                onChange={e => setNewPropertyData({...newPropertyData, type: e.target.value})}
+                             >
+                                 <option value="">Selecione...</option>
+                                 <option value="Haras">Haras</option>
+                                 <option value="Fazenda">Fazenda</option>
+                                 <option value="Sítio">Sítio</option>
+                                 <option value="Hípica">Hípica</option>
+                                 <option value="Centro de Treinamento">Centro de Treinamento</option>
+                                 <option value="Outro">Outro</option>
+                             </Select>
+                        </div>
+                        <div>
                              <Label>Inscrição Estadual / CNPJ</Label>
                              <Input 
                                 value={newPropertyData.document || ''}
-                                onChange={e => setNewPropertyData({...newPropertyData, document: e.target.value})}
+                                onChange={e => setNewPropertyData({...newPropertyData, document: formatDocument(e.target.value)})}
+                                maxLength={18}
                               />
                         </div>
                         <div>
-                             <Label>Responsável no Local</Label>
+                             <Label>Telefone</Label>
                              <Input 
-                                placeholder="Nome do gerente ou caseiro"
+                                value={newPropertyData.phone || ''}
+                                onChange={e => setNewPropertyData({...newPropertyData, phone: formatPhone(e.target.value)})}
+                                maxLength={15}
+                              />
+                        </div>
+                        <div>
+                             <Label>E-mail</Label>
+                             <Input 
+                                value={newPropertyData.email || ''}
+                                onChange={e => setNewPropertyData({...newPropertyData, email: e.target.value})}
+                                type="email"
                               />
                         </div>
                     </div>
                     
                     <div className="border-t pt-4">
-                        <Label className="text-gray-900 font-bold mb-4 block">Localização</Label>
+                        <Label className="text-gray-900 font-bold mb-4 block">Endereço</Label>
                         <div className="grid grid-cols-6 gap-4">
+                            <div className="col-span-2">
+                                <Label>CEP</Label>
+                                <Input 
+                                    value={newPropertyData.zipCode || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, zipCode: formatCEP(e.target.value)})}
+                                    maxLength={9}
+                                />
+                            </div>
+                            <div className="col-span-4">
+                                <Label>Logradouro / Estrada</Label>
+                                <Input 
+                                    value={newPropertyData.street || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, street: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-2">
+                                <Label>Número / Km</Label>
+                                <Input 
+                                    value={newPropertyData.number || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, number: e.target.value})}
+                                />
+                            </div>
+                            <div className="col-span-4">
+                                <Label>Bairro / Distrito</Label>
+                                <Input 
+                                    value={newPropertyData.neighborhood || ''}
+                                    onChange={e => setNewPropertyData({...newPropertyData, neighborhood: e.target.value})}
+                                />
+                            </div>
                              <div className="col-span-4">
                                 <Label>Cidade *</Label>
                                 <Input 
@@ -811,14 +917,6 @@ export const PatientWizard: React.FC = () => {
                                     maxLength={2}
                                     value={newPropertyData.state || ''}
                                     onChange={e => setNewPropertyData({...newPropertyData, state: e.target.value})}
-                                />
-                            </div>
-                            <div className="col-span-6">
-                                <Label>Endereço Completo</Label>
-                                <Input 
-                                    value={newPropertyData.address || ''}
-                                    onChange={e => setNewPropertyData({...newPropertyData, address: e.target.value})}
-                                    placeholder="Estrada, Km, Ponto de referência..."
                                 />
                             </div>
                         </div>

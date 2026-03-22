@@ -28,6 +28,7 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
   const [history, setHistory] = useState<VaccineApplication[]>([]);
 
   // Form State
+  const [vaccineNameInput, setVaccineNameInput] = useState('');
   const [selectedVaccineToAdd, setSelectedVaccineToAdd] = useState<InventoryItem | null>(null);
   const [vaccineBatch, setVaccineBatch] = useState('');
   const [vaccineExpiry, setVaccineExpiry] = useState('');
@@ -60,18 +61,20 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
   }, [isOpen, patient.id]);
 
   const handleAddVaccine = () => {
-      if (selectedVaccineToAdd && vaccineBatch && vaccineExpiry) {
+      const finalName = selectedVaccineToAdd ? selectedVaccineToAdd.name : vaccineNameInput;
+
+      if (finalName && vaccineBatch && vaccineExpiry) {
           const newVaccine: VaccineApplication = {
               id: Math.random().toString(36).substr(2, 9),
               attendanceId: attendance.id,
               patientId: patient.id,
-              inventoryItemId: selectedVaccineToAdd.id,
-              name: selectedVaccineToAdd.name,
+              inventoryItemId: selectedVaccineToAdd?.id || '',
+              name: finalName,
               batch: vaccineBatch,
-              manufacturer: selectedVaccineToAdd.supplier || 'Unknown',
+              manufacturer: selectedVaccineToAdd?.supplier || 'Desconhecido',
               expiryDate: vaccineExpiry,
               applicationDate: new Date().toLocaleDateString('pt-BR'),
-              price: selectedVaccineToAdd.salePrice,
+              price: selectedVaccineToAdd?.salePrice || 0,
               notes: vaccineNotes,
               nextDoseDate: nextDoseDate || undefined
           };
@@ -82,7 +85,22 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
               vaccines: [...currentVaccines, newVaccine]
           };
 
-          mockDB.updateAttendance(attendance.id, { vaccines: updatedAttendance.vaccines });
+          // Auto-schedule return visit for vaccine
+          if (nextDoseDate) {
+              const [y, m, d] = nextDoseDate.split('-');
+              const returnVisit = {
+                  date: new Date(Number(y), Number(m)-1, Number(d)).toISOString(),
+                  reason: `Revacina: ${finalName}`,
+                  type: 'Vaccine' as const,
+                  time: '09:00' // Default time
+              };
+              updatedAttendance.returnVisit = returnVisit;
+          }
+
+          mockDB.updateAttendance(attendance.id, { 
+              vaccines: updatedAttendance.vaccines,
+              returnVisit: updatedAttendance.returnVisit 
+          });
           onSave(updatedAttendance);
           
           // Add to local history view immediately
@@ -90,15 +108,22 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
 
           // Reset Form
           setSelectedVaccineToAdd(null);
+          setVaccineNameInput('');
           setVaccineBatch('');
           setVaccineExpiry('');
           setVaccineNotes('');
           setNextDoseDate('');
           
-          alert(`Vacina ${newVaccine.name} registrada com sucesso!`);
+          alert(`Vacina ${newVaccine.name} registrada com sucesso!${nextDoseDate ? '\nAgendamento de revacina criado automaticamente.' : ''}`);
       } else {
-          alert('Preencha a vacina, lote e validade.');
+          alert('Preencha a vacina (nome), lote e validade.');
       }
+  };
+
+  const setNextDoseByDays = (days: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      setNextDoseDate(d.toISOString().split('T')[0]);
   };
 
   const getStatusColor = (vac: VaccineApplication) => {
@@ -161,16 +186,19 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
                       
                       <div className="space-y-4">
                           <div>
-                              <Label>Vacina (Estoque)</Label>
-                              <Autocomplete 
-                                  options={inventory.map(i => ({ id: i.id, label: `${i.name} (R$ ${i.salePrice.toFixed(2)})` }))}
-                                  onSelect={(opt) => {
-                                      const item = inventory.find(i => i.id === opt.id);
-                                      if (item) setSelectedVaccineToAdd(item);
+                              <Label>Vacina (Nome ou Estoque) *</Label>
+                              <Input 
+                                  value={selectedVaccineToAdd ? selectedVaccineToAdd.name : vaccineNameInput}
+                                  onChange={e => {
+                                      setVaccineNameInput(e.target.value);
+                                      setSelectedVaccineToAdd(null);
                                   }}
-                                  placeholder="Buscar vacina..."
-                                  value={selectedVaccineToAdd?.name}
+                                  placeholder="Digite o nome da vacina..."
+                                  list="vaccine-stock-list"
                               />
+                              <datalist id="vaccine-stock-list">
+                                  {inventory.map(i => <option key={i.id} value={i.name} />)}
+                              </datalist>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -186,6 +214,12 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
 
                           <div>
                               <Label>Data da Próxima Dose (Revacina)</Label>
+                              <div className="flex gap-2 mb-2">
+                                  <button onClick={() => setNextDoseByDays(15)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">+15 dias</button>
+                                  <button onClick={() => setNextDoseByDays(21)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">+21 dias</button>
+                                  <button onClick={() => setNextDoseByDays(30)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">+30 dias</button>
+                                  <button onClick={() => setNextDoseByDays(365)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">+1 ano</button>
+                              </div>
                               <Input type="date" value={nextDoseDate} onChange={e => setNextDoseDate(e.target.value)} className="border-purple-200 focus:border-purple-500" />
                           </div>
 

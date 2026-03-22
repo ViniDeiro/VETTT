@@ -30,7 +30,8 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
   // Form State
   const [type, setType] = useState<'industrialized' | 'compounded'>('industrialized');
   const [name, setName] = useState('');
-  const [concentration, setConcentration] = useState('');
+  const [concentration, setConcentration] = useState(''); // Also used for vehicle in compounded
+  const [formula, setFormula] = useState(''); // Specific for compounded
   const [quantity, setQuantity] = useState('');
   const [dosage, setDosage] = useState('');
   const [frequency, setFrequency] = useState('');
@@ -53,6 +54,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
       type,
       name,
       concentration,
+      formula,
       quantity,
       dosage,
       frequency,
@@ -66,6 +68,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
     // Reset Form (keep some fields like route?)
     setName('');
     setConcentration('');
+    setFormula('');
     setQuantity('');
     setDosage('');
     // setFrequency(''); // Often repeated
@@ -160,21 +163,50 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <Label>Nome do Fármaco / Fórmula *</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Amoxicilina + Clavulanato" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Concentração</Label>
-                <Input value={concentration} onChange={e => setConcentration(e.target.value)} placeholder="Ex: 250mg" />
-              </div>
-              <div>
-                <Label>Quantidade *</Label>
-                <Input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Ex: 1 cx / 30 caps" />
-              </div>
-            </div>
+            {type === 'industrialized' ? (
+                <>
+                    <div>
+                        <Label>Nome do Fármaco *</Label>
+                        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Amoxicilina + Clavulanato" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Label>Concentração</Label>
+                            <Input value={concentration} onChange={e => setConcentration(e.target.value)} placeholder="Ex: 250mg" />
+                        </div>
+                        <div>
+                            <Label>Quantidade *</Label>
+                            <Input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Ex: 1 cx / 30 caps" />
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <div>
+                        <Label>Uso (Finalidade / Nome da Fórmula) *</Label>
+                        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Pomada Cicatrizante / Uso Interno" />
+                    </div>
+                    <div>
+                        <Label>Componentes da Fórmula *</Label>
+                        <textarea 
+                            className="w-full border rounded-md p-2 text-sm min-h-[80px]"
+                            value={formula}
+                            onChange={e => setFormula(e.target.value)}
+                            placeholder="Ex: Clorexidina 2%&#10;Cetoconazol 1%"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Label>Veículo q.s.p</Label>
+                            <Input value={concentration} onChange={e => setConcentration(e.target.value)} placeholder="Ex: 100g (Pomada base)" />
+                        </div>
+                        <div>
+                            <Label>Quantidade Total *</Label>
+                            <Input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Ex: 1 pote / 30 sachês" />
+                        </div>
+                    </div>
+                </>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -252,10 +284,17 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                             </span>
                           </div>
                           
-                          <div className="text-sm text-gray-600 space-y-1 ml-4 border-l-2 border-gray-200 pl-3">
+                          <div className="text-sm text-gray-600 space-y-1 ml-4 border-l-2 border-gray-200 pl-3 mt-2">
+                            {item.type === 'compounded' && item.formula && (
+                                <div className="mb-2 bg-purple-50 p-2 rounded text-purple-900 font-mono text-xs whitespace-pre-wrap">
+                                    {item.formula}
+                                    <br/>
+                                    {item.concentration && <span className="font-semibold block mt-1">Veículo q.s.p: {item.concentration}</span>}
+                                </div>
+                            )}
                             <p><span className="font-semibold">Uso:</span> {item.route} - {item.dosage}</p>
                             <p><span className="font-semibold">Frequência:</span> {item.frequency} | <span className="font-semibold">Duração:</span> {item.duration}</p>
-                            {item.instructions && <p className="text-gray-500 italic">"{item.instructions}"</p>}
+                            {item.instructions && <p className="text-gray-500 italic mt-1">"{item.instructions}"</p>}
                           </div>
                         </div>
                         

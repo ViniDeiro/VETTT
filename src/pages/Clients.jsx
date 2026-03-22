@@ -411,7 +411,7 @@ export default function Clients() {
                           <td className="p-4 pl-6 font-medium text-gray-900">{client.name}</td>
                           <td className="p-4">{client.document || '-'}</td>
                           <td className="p-4">{client.phone}</td>
-                          <td className="p-4">{client.address}</td>
+                          <td className="p-4">{client.city ? `${client.city}${client.state ? `/${client.state}` : ''}` : '-'}</td>
                         </tr>
                       ))
                   ) : (

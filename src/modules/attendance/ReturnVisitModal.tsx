@@ -22,13 +22,14 @@ export const ReturnVisitModal: React.FC<ReturnVisitModalProps> = ({
   onSave
 }) => {
   const [date, setDate] = useState('');
+  const [time, setTime] = useState('09:00');
   const [type, setType] = useState<'consulta' | 'vacina' | 'exame' | 'pos-cirurgico' | 'outros'>('consulta');
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
 
   const handleSave = () => {
-    if (!date || !reason) {
-        alert('Preencha a data e o motivo do retorno.');
+    if (!date || !time || !reason) {
+        alert('Preencha a data, horário e o motivo do retorno.');
         return;
     }
 
@@ -36,6 +37,7 @@ export const ReturnVisitModal: React.FC<ReturnVisitModalProps> = ({
       id: Math.random().toString(36).substr(2, 9),
       attendanceId: attendance.id,
       date: date,
+      time: time,
       type: type,
       reason: reason,
       notes: notes
@@ -76,9 +78,15 @@ export const ReturnVisitModal: React.FC<ReturnVisitModalProps> = ({
         {/* Body */}
         <div className="p-6 space-y-4">
             
-            <div>
-                <Label>Data do Retorno</Label>
-                <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label>Data do Retorno</Label>
+                    <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                </div>
+                <div>
+                    <Label>Horário</Label>
+                    <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
+                </div>
             </div>
 
             <div>

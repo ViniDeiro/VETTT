@@ -30,9 +30,15 @@ export interface Property {
   city: string;
   state: string;
   phone?: string;
+  email?: string;
   document?: string; // CNPJ
   registrationNumber?: string; // IE or similar
   ownerId?: string; // Optional if standalone, but usually linked
+  type?: string;
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
 }
 
 export interface Patient {
@@ -71,6 +77,8 @@ export interface Patient {
   color?: string; // Legacy alias for coat
   
   notes?: string; // General notes (Surgeries, etc.)
+  internalNotes?: string; // Internal notes
+  pregnant?: boolean; // If pregnant
 }
 
 export type UnitType = 'ml' | 'un' | 'frasco' | 'g' | 'kg';
@@ -105,23 +113,18 @@ export interface ConsumptionItem {
 export type AttendanceStatus = 'scheduled' | 'in_progress' | 'finished' | 'canceled';
 
 export interface Vitals {
-  heartRate?: number; // bpm
-  respiratoryRate?: number; // rpm
-  temperature?: number; // Celsius
-  tpc?: number; // seconds
-  pressureSystolic?: number;
-  pressureDiastolic?: number;
-  weight?: number; // kg
-  // Equine specific
+  weight?: number;
+  temperature?: number;
+  heartRate?: number;
+  respiratoryRate?: number;
+  mucousMembrane?: string;
+  tpc?: number; // Tempo de preenchimento capilar
   motility?: {
     upperLeft: number;
     upperRight: number;
     lowerLeft: number;
     lowerRight: number;
-  };
-  hydration?: 'Normal' | 'Dehydrated'; // Added for completeness
-  mucousMembranes?: 'Normal' | 'Pale' | 'Cyanotic' | 'Icteric'; // Added for completeness
-  capillaryRefillTime?: number; // TPC alias
+  }; // Equine specific
 }
 
 export interface Attendance {
@@ -238,12 +241,13 @@ export interface AppliedProcedure {
 }
 
 export interface ReturnVisit {
-    id: string;
-    attendanceId: string;
-    date: string;
-    reason: string;
-    type: 'consulta' | 'vacina' | 'exame' | 'pos-cirurgico' | 'outros';
-    notes?: string;
+  id: string;
+  attendanceId: string;
+  date: string;
+  time?: string;
+  type: 'consulta' | 'vacina' | 'exame' | 'pos-cirurgico' | 'outros';
+  reason: string;
+  notes?: string;
 }
 
 export interface PrescriptionItem {
@@ -251,6 +255,7 @@ export interface PrescriptionItem {
   type: 'industrialized' | 'compounded'; // Industrializado / Manipulado
   name: string; // Nome do fármaco ou fórmula
   concentration?: string; // e.g. 50mg, 10%
+  formula?: string; // Multiline formula for compounded
   quantity: string; // e.g. 1 caixa, 30 cápsulas
   dosage: string; // e.g. 1 comprimido
   frequency: string; // e.g. a cada 12 horas
