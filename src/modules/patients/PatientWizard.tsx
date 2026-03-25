@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -47,6 +47,8 @@ export const PatientWizard: React.FC = () => {
   const [allergiesInput, setAllergiesInput] = useState('');
   const [chronicInput, setChronicInput] = useState('');
 
+  const location = useLocation();
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
@@ -59,9 +61,20 @@ export const PatientWizard: React.FC = () => {
   };
 
   useEffect(() => {
-    setOwners(mockDB.getOwners());
+    const loadedOwners = mockDB.getOwners();
+    setOwners(loadedOwners);
     setProperties(mockDB.getAllProperties());
-  }, []);
+
+    const params = new URLSearchParams(location.search);
+    const ownerIdParam = params.get('ownerId');
+    if (ownerIdParam) {
+        const foundOwner = loadedOwners.find(o => o.id === ownerIdParam);
+        if (foundOwner) {
+            setSelectedOwner(foundOwner);
+            // Optionally, we could jump to step 2 or keep it at 1. Better to keep it at 1 so user fills patient data first.
+        }
+    }
+  }, [location.search]);
 
   // --- Helpers ---
   const calculateAge = (dob: string) => {
@@ -510,24 +523,24 @@ export const PatientWizard: React.FC = () => {
                         <div>
                             <Label>Nome do Plano</Label>
                             <Input 
-                                value={patientData.healthPlan?.name || ''} 
-                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, name: e.target.value}})}
+                                value={patientData.healthPlan || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlan: e.target.value})}
                                 placeholder="Ex: PetLove"
                             />
                         </div>
                         <div>
                             <Label>Nº Carteirinha</Label>
                             <Input 
-                                value={patientData.healthPlan?.number || ''} 
-                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, number: e.target.value}})}
+                                value={patientData.healthPlanNumber || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlanNumber: e.target.value})}
                             />
                         </div>
                         <div>
                             <Label>Vencimento</Label>
                             <Input 
                                 type="date"
-                                value={patientData.healthPlan?.expiryDate || ''} 
-                                onChange={e => setPatientData({...patientData, healthPlan: {...patientData.healthPlan!, expiryDate: e.target.value}})}
+                                value={patientData.healthPlanExpiry || ''} 
+                                onChange={e => setPatientData({...patientData, healthPlanExpiry: e.target.value})}
                             />
                         </div>
                     </div>

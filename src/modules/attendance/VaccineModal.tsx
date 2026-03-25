@@ -5,7 +5,7 @@ import { Label } from '../../components/ui/Label';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { VaccineApplication, Patient, Attendance, InventoryItem } from '../../domain/types';
 import { mockDB } from '../../services/mockDatabase';
-import { Syringe, Plus, Calendar, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, Plus, Syringe, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 
 interface VaccineModalProps {
@@ -28,9 +28,13 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
   const [history, setHistory] = useState<VaccineApplication[]>([]);
 
   // Form State
+  const [vaccineType, setVaccineType] = useState('V8');
   const [vaccineNameInput, setVaccineNameInput] = useState('');
+  const [vaccineDose, setVaccineDose] = useState('1ª Dose');
   const [selectedVaccineToAdd, setSelectedVaccineToAdd] = useState<InventoryItem | null>(null);
   const [vaccineBatch, setVaccineBatch] = useState('');
+  const [vaccineManufacturer, setVaccineManufacturer] = useState('');
+  const [vaccineManufacturingDate, setVaccineManufacturingDate] = useState('');
   const [vaccineExpiry, setVaccineExpiry] = useState('');
   const [vaccineNotes, setVaccineNotes] = useState('');
   const [nextDoseDate, setNextDoseDate] = useState('');
@@ -69,9 +73,12 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
               attendanceId: attendance.id,
               patientId: patient.id,
               inventoryItemId: selectedVaccineToAdd?.id || '',
+              type: vaccineType,
               name: finalName,
+              dose: vaccineDose,
               batch: vaccineBatch,
-              manufacturer: selectedVaccineToAdd?.supplier || 'Desconhecido',
+              manufacturer: vaccineManufacturer || selectedVaccineToAdd?.supplier || 'Desconhecido',
+              manufacturingDate: vaccineManufacturingDate,
               expiryDate: vaccineExpiry,
               applicationDate: new Date().toLocaleDateString('pt-BR'),
               price: selectedVaccineToAdd?.salePrice || 0,
@@ -185,15 +192,49 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
                       </h3>
                       
                       <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <Label>Tipo de Vacina *</Label>
+                                  <select 
+                                      className="w-full border rounded-md p-2 mt-1"
+                                      value={vaccineType}
+                                      onChange={e => setVaccineType(e.target.value)}
+                                  >
+                                      <option value="V8">V8</option>
+                                      <option value="V10">V10</option>
+                                      <option value="Raiva">Raiva</option>
+                                      <option value="Giardíase">Giardíase</option>
+                                      <option value="Garrotilho">Garrotilho</option>
+                                      <option value="Gripe">Gripe</option>
+                                      <option value="Leishmaniose">Leishmaniose</option>
+                                      <option value="Outra">Outra</option>
+                                  </select>
+                              </div>
+                              <div>
+                                  <Label>Dose *</Label>
+                                  <select 
+                                      className="w-full border rounded-md p-2 mt-1"
+                                      value={vaccineDose}
+                                      onChange={e => setVaccineDose(e.target.value)}
+                                  >
+                                      <option value="1ª Dose">1ª Dose</option>
+                                      <option value="2ª Dose">2ª Dose</option>
+                                      <option value="3ª Dose">3ª Dose</option>
+                                      <option value="Reforço Anual">Reforço Anual</option>
+                                      <option value="Dose Única">Dose Única</option>
+                                  </select>
+                              </div>
+                          </div>
+
                           <div>
-                              <Label>Vacina (Nome ou Estoque) *</Label>
+                              <Label>Nome do Produto (Estoque ou Manual) *</Label>
                               <Input 
                                   value={selectedVaccineToAdd ? selectedVaccineToAdd.name : vaccineNameInput}
                                   onChange={e => {
                                       setVaccineNameInput(e.target.value);
                                       setSelectedVaccineToAdd(null);
                                   }}
-                                  placeholder="Digite o nome da vacina..."
+                                  placeholder="Ex: Rabisin, Lexton Gold..."
                                   list="vaccine-stock-list"
                               />
                               <datalist id="vaccine-stock-list">
@@ -203,11 +244,22 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                  <Label>Lote</Label>
-                                  <Input value={vaccineBatch} onChange={e => setVaccineBatch(e.target.value)} placeholder="Lote..." />
+                                  <Label>Nome do Fabricante</Label>
+                                  <Input value={vaccineManufacturer} onChange={e => setVaccineManufacturer(e.target.value)} placeholder="Ex: Zoetis, Boehringer..." />
                               </div>
                               <div>
-                                  <Label>Validade (Frasco)</Label>
+                                  <Label>Lote *</Label>
+                                  <Input value={vaccineBatch} onChange={e => setVaccineBatch(e.target.value)} placeholder="Lote do frasco..." />
+                              </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <Label>Data de Fabricação</Label>
+                                  <Input type="date" value={vaccineManufacturingDate} onChange={e => setVaccineManufacturingDate(e.target.value)} />
+                              </div>
+                              <div>
+                                  <Label>Validade (Frasco) *</Label>
                                   <Input type="date" value={vaccineExpiry} onChange={e => setVaccineExpiry(e.target.value)} />
                               </div>
                           </div>
@@ -237,47 +289,148 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
           )}
 
           {activeTab === 'history' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                   {history.length === 0 ? (
                       <div className="text-center py-12 text-gray-400">
                           <Syringe className="h-16 w-16 mx-auto mb-4 opacity-50" />
                           <p>Nenhuma vacina registrada no histórico.</p>
                       </div>
                   ) : (
-                      history.map((vac, idx) => (
-                          <Card key={vac.id || idx} className="border shadow-sm hover:shadow-md transition-shadow">
-                              <CardContent className="p-4">
-                                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                      <div>
-                                          <div className="flex items-center gap-2 mb-1">
-                                              <span className="font-bold text-gray-900 text-lg">{vac.name}</span>
-                                              <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">Lote: {vac.batch}</span>
+                      <>
+                          {/* Categorized Lists */}
+                          {['Atrasadas', 'Programadas', 'Aplicadas'].map(category => {
+                              const filteredHistory = history.filter(vac => {
+                                  const today = new Date();
+                                  today.setHours(0,0,0,0);
+                                  
+                                  if (category === 'Aplicadas') {
+                                      // If it doesn't have a next dose, or if it was applied, it goes here.
+                                      // Wait, we want to separate "Past Applications" from "Future Reminders".
+                                      // Every entry in 'history' IS an application. We just highlight the ones needing return.
+                                      // Let's adjust logic: 
+                                      return true; // Actually, all of them are "Aplicadas" because they are in the history of applications.
+                                  }
+                                  return false;
+                              });
+
+                              // Better Logic: We show all applied. But we extract "Pending Returns" to the top.
+                              return null;
+                          })}
+
+                          {/* Vacinas Atrasadas e Programadas (Based on nextDoseDate) */}
+                          {(() => {
+                              const today = new Date();
+                              today.setHours(0,0,0,0);
+                              
+                              const pendingReturns = history.filter(v => v.nextDoseDate).map(v => ({
+                                  ...v,
+                                  isDelayed: new Date(v.nextDoseDate!) < today
+                              })).sort((a, b) => new Date(a.nextDoseDate!).getTime() - new Date(b.nextDoseDate!).getTime());
+
+                              const delayed = pendingReturns.filter(v => v.isDelayed);
+                              const scheduled = pendingReturns.filter(v => !v.isDelayed);
+
+                              return (
+                                  <>
+                                      {delayed.length > 0 && (
+                                          <div className="mb-6">
+                                              <h3 className="font-bold text-red-600 mb-3 flex items-center gap-2 border-b border-red-100 pb-2">
+                                                  <AlertTriangle className="h-5 w-5" /> Vacinas Atrasadas
+                                              </h3>
+                                              <div className="space-y-3">
+                                                  {delayed.map((vac, idx) => (
+                                                      <Card key={`del-${idx}`} className="border-red-200 bg-red-50 shadow-sm">
+                                                          <CardContent className="p-4 flex justify-between items-center">
+                                                              <div>
+                                                                  <div className="flex items-center gap-2 mb-1">
+                                                                      <span className="bg-red-200 text-red-800 text-xs font-bold px-2 py-0.5 rounded">{vac.type}</span>
+                                                                      <span className="font-bold text-gray-900">{vac.name}</span>
+                                                                  </div>
+                                                                  <p className="text-sm text-red-700 font-medium">Reforço + (Era para {new Date(vac.nextDoseDate!).toLocaleDateString('pt-BR')})</p>
+                                                              </div>
+                                                              <Button size="sm" variant="outline" className="bg-white border-red-200 text-red-600 hover:bg-red-100" onClick={() => {
+                                                                  setActiveTab('new');
+                                                                  setVaccineType(vac.type);
+                                                                  setVaccineNameInput(vac.name);
+                                                                  setVaccineDose('Reforço Anual');
+                                                              }}>
+                                                                  Aplicar Agora
+                                                              </Button>
+                                                          </CardContent>
+                                                      </Card>
+                                                  ))}
+                                              </div>
                                           </div>
-                                          <p className="text-sm text-gray-500 flex items-center gap-2">
-                                              <Calendar className="h-4 w-4" /> Aplicado em: {vac.applicationDate}
-                                          </p>
-                                          {vac.notes && <p className="text-sm text-gray-600 italic mt-1">"{vac.notes}"</p>}
-                                      </div>
-                                      
-                                      <div className="flex flex-col items-end gap-1 min-w-[150px]">
-                                          {vac.nextDoseDate ? (
-                                              <div className={`text-right ${getStatusColor(vac)}`}>
-                                                  <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider">
-                                                      <Clock className="h-3 w-3" />
-                                                      Próxima Dose
+                                      )}
+
+                                      {scheduled.length > 0 && (
+                                          <div className="mb-6">
+                                              <h3 className="font-bold text-blue-600 mb-3 flex items-center gap-2 border-b border-blue-100 pb-2">
+                                                  <Clock className="h-5 w-5" /> Vacinas Programadas
+                                              </h3>
+                                              <div className="space-y-3">
+                                                  {scheduled.map((vac, idx) => (
+                                                      <Card key={`sch-${idx}`} className="border-blue-200 bg-blue-50/50 shadow-sm">
+                                                          <CardContent className="p-4 flex justify-between items-center">
+                                                              <div>
+                                                                  <div className="flex items-center gap-2 mb-1">
+                                                                      <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">{vac.type}</span>
+                                                                      <span className="font-bold text-gray-900">{vac.name}</span>
+                                                                  </div>
+                                                                  <p className="text-sm text-blue-700 font-medium">Reforço + (Agendado para {new Date(vac.nextDoseDate!).toLocaleDateString('pt-BR')})</p>
+                                                              </div>
+                                                          </CardContent>
+                                                      </Card>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      )}
+                                  </>
+                              );
+                          })()}
+
+                          <div>
+                              <h3 className="font-bold text-green-700 mb-3 flex items-center gap-2 border-b border-green-100 pb-2">
+                                  <CheckCircle className="h-5 w-5" /> Histórico de Aplicações
+                              </h3>
+                              <div className="space-y-3">
+                                  {history.map((vac, idx) => (
+                                      <Card key={vac.id || idx} className="border shadow-sm hover:shadow-md transition-shadow">
+                                          <CardContent className="p-4">
+                                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                                  <div>
+                                                      <div className="flex items-center gap-2 mb-1">
+                                                          <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-0.5 rounded">{vac.type}</span>
+                                                          <span className="font-bold text-gray-900 text-lg">{vac.name}</span>
+                                                          <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium">{vac.dose}</span>
+                                                      </div>
+                                                      <p className="text-sm text-gray-600">Fabricante: {vac.manufacturer} | Lote: {vac.batch}</p>
+                                                      <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
+                                                          <Calendar className="h-4 w-4" /> Aplicado em: {vac.applicationDate}
+                                                      </p>
+                                                      {vac.notes && <p className="text-sm text-gray-600 italic mt-1 bg-gray-50 p-2 rounded">"{vac.notes}"</p>}
                                                   </div>
-                                                  <div className="font-bold text-lg">
-                                                      {new Date(vac.nextDoseDate).toLocaleDateString('pt-BR')}
+                                                  
+                                                  <div className="flex flex-col items-end gap-1 min-w-[150px] bg-gray-50 p-3 rounded-lg border">
+                                                      <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                          <Clock className="h-3 w-3" />
+                                                          Reforço +
+                                                      </div>
+                                                      {vac.nextDoseDate ? (
+                                                          <div className={`font-bold text-lg ${getStatusColor(vac)}`}>
+                                                              {new Date(vac.nextDoseDate).toLocaleDateString('pt-BR')}
+                                                          </div>
+                                                      ) : (
+                                                          <span className="text-sm text-gray-400">Não agendado</span>
+                                                      )}
                                                   </div>
                                               </div>
-                                          ) : (
-                                              <span className="text-sm text-gray-400">Sem retorno agendado</span>
-                                          )}
-                                      </div>
-                                  </div>
-                              </CardContent>
-                          </Card>
-                      ))
+                                          </CardContent>
+                                      </Card>
+                                  ))}
+                              </div>
+                          </div>
+                      </>
                   )}
               </div>
           )}

@@ -454,21 +454,37 @@ export default function Clients() {
                   <button onClick={() => setSelectedClient(null)}>X</button>
               </div>
               <div className="space-y-2 text-sm text-gray-600 mb-6">
-                  <p><strong>Email:</strong> {selectedClient.email}</p>
+                  <p><strong>CPF/CNPJ:</strong> {selectedClient.document || 'Não informado'}</p>
                   <p><strong>Telefone:</strong> {selectedClient.phone}</p>
+                  <p><strong>Tel Secundário:</strong> {selectedClient.secondaryPhone || 'Não informado'}</p>
+                  <p><strong>Email:</strong> {selectedClient.email || 'Não informado'}</p>
                   <p><strong>Endereço:</strong> {selectedClient.address}</p>
               </div>
 
-              <h3 className="font-bold text-lg mb-3 border-t pt-4">Pacientes (Animais)</h3>
+              <div className="flex items-center justify-between border-t pt-4 mb-3">
+                  <h3 className="font-bold text-lg">Pacientes (Animais)</h3>
+                  <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-blue-600 hover:bg-blue-50 text-xs py-1 h-auto"
+                      onClick={() => navigate(`/register?ownerId=${selectedClient.id}`)}
+                  >
+                      <Plus className="h-3 w-3 mr-1" /> Novo Pet
+                  </Button>
+              </div>
               <div className="space-y-2">
                   {patients.filter(p => p.ownerId === selectedClient.id).map(p => (
                       <div 
                         key={p.id} 
-                        className="p-3 border rounded hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                        className={cn("p-3 border rounded hover:bg-gray-50 cursor-pointer flex items-center justify-between", p.status === 'Deceased' && "opacity-60 bg-gray-100", p.status === 'Archived' && "opacity-75 bg-yellow-50")}
                         onClick={() => handlePatientClick(p)}
                       >
                           <div>
-                              <p className="font-bold text-gray-900">{p.name}</p>
+                              <p className="font-bold text-gray-900 flex items-center gap-2">
+                                  {p.name}
+                                  {p.status === 'Deceased' && <span className="text-[10px] bg-red-100 text-red-800 px-1.5 rounded">Óbito</span>}
+                                  {p.status === 'Archived' && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 rounded">Arquivado</span>}
+                              </p>
                               <p className="text-xs text-gray-500">{p.species} - {p.breed}</p>
                           </div>
                           <PawPrint className="h-4 w-4 text-gray-400" />

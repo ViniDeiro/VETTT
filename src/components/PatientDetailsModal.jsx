@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Autocomplete } from '../shared/Autocomplete'
@@ -26,6 +27,7 @@ import {
 import { cn } from '@/lib/utils'
 
 export default function PatientDetailsModal({ isOpen, onClose, patient }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview')
   const [isChangingOwner, setIsChangingOwner] = useState(false)
   const [isChangingProperty, setIsChangingProperty] = useState(false)
@@ -147,7 +149,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
           setActiveTab('odontogram');
           break;
         case 'new-procedure':
-          window.location.href = `/attendance-new?patientId=${patient.id}`;
+          navigate(`/attendance-new`, { state: { patient: patient } });
           break;
         case 'pdf':
           console.log('Generating PDF...');
@@ -248,17 +250,42 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                 )}
                 
                 {/* Edit Button */}
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="ml-auto text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                    onClick={() => setIsEditing(true)}
-                >
-                    <Edit2 className="h-4 w-4 mr-2" /> Editar Dados
-                </Button>
+                {patient.status !== 'Deceased' && patient.status !== 'Archived' ? (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="ml-auto text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                        onClick={() => setIsEditing(true)}
+                    >
+                        <Edit2 className="h-4 w-4 mr-2" /> Editar Dados
+                    </Button>
+                ) : (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="ml-auto text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                        onClick={() => {
+                            if(confirm('Este paciente está bloqueado. Deseja reabrir a ficha para edição?')) {
+                                setIsEditing(true);
+                            }
+                        }}
+                    >
+                        <Edit2 className="h-4 w-4 mr-2" /> Ficha Bloqueada
+                    </Button>
+                )}
               </div>
 
               <div className="flex gap-2 mt-2 flex-wrap">
+                {patient.status === 'Deceased' && (
+                    <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold border border-red-200">
+                        Óbito
+                    </span>
+                )}
+                {patient.status === 'Archived' && (
+                    <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold border border-yellow-200">
+                        Arquivado
+                    </span>
+                )}
                 {patient.allergies && patient.allergies.length > 0 && (
                     <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-red-200">
                         <AlertCircle className="h-3 w-3" />
@@ -344,6 +371,30 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Convênio */}
+                  {patient.healthPlan && (
+                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Heart className="h-5 w-5 text-pink-500" />
+                        <h3 className="font-bold text-gray-900">Convênio</h3>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm"><strong>Plano:</strong> {patient.healthPlan}</p>
+                        <p className="text-sm"><strong>Carteirinha:</strong> {patient.healthPlanNumber || 'N/A'}</p>
+                        {(() => {
+                            if (!patient.healthPlanExpiry) return null;
+                            const isExpired = new Date(patient.healthPlanExpiry) < new Date();
+                            return (
+                                <p className={cn("text-sm font-bold", isExpired ? "text-red-600" : "text-green-600")}>
+                                    Vencimento: {new Date(patient.healthPlanExpiry).toLocaleDateString('pt-BR')}
+                                    {isExpired && ' (Vencida)'}
+                                </p>
+                            );
+                        })()}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Anamnese */}
                   <div className="bg-[#0B2C4D] p-5 rounded-xl shadow-sm text-white col-span-1">
@@ -513,7 +564,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                   <div className="flex justify-between items-start mb-2">
                                       <div>
                                           <div className="flex items-center gap-2">
-                                              <p className="font-bold text-gray-900 text-lg">{att.reason}</p>
+                                              <p className="font-bold text-gray-900 text-lg">{att.reason || 'Consulta Geral'}</p>
                                               <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{new Date(att.date).toLocaleDateString()}</span>
                                           </div>
                                           <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
@@ -561,22 +612,25 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
           <div className="w-80 bg-white border-l p-6 space-y-6 hidden xl:block overflow-y-auto">
             <div className="space-y-3">
               <h3 className="font-bold text-gray-900">Ações Rápidas</h3>
-              <Button 
-                onClick={() => handleAction('odontogram')}
-                className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white justify-start"
-              >
-                <Activity className="mr-2 h-4 w-4" /> Abrir Odontograma
-              </Button>
-              <Button 
+              {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
+                  <>
+                      <Button 
+                        onClick={() => handleAction('odontogram')}
+                        className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white justify-start"
+                      >
+                        <Activity className="mr-2 h-4 w-4" /> Abrir Odontograma
+                      </Button>
+                      <Button 
                 onClick={(e) => {
-                  console.log('Button Clicked directly');
                   e.stopPropagation();
                   handleAction('new-procedure');
                 }}
                 className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white justify-start relative z-10 cursor-pointer"
               >
-                <Plus className="mr-2 h-4 w-4" /> Nova Consulta
-              </Button>
+                        <Plus className="mr-2 h-4 w-4" /> Nova Consulta
+                      </Button>
+                  </>
+              )}
               <Button 
                 onClick={() => handleAction('pdf')}
                 className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white justify-start"
@@ -696,6 +750,21 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                             onChange={e => setEditFormData({...editFormData, age: Number(e.target.value)})} 
                           />
                       </div>
+                      <div className="col-span-2 md:col-span-4">
+                          <label className="text-sm font-medium text-red-600 font-bold">Status do Paciente</label>
+                          <select 
+                            className={cn("w-full border rounded p-2 font-bold", editFormData.status === 'Deceased' ? "bg-red-50 text-red-700 border-red-200" : editFormData.status === 'Archived' ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-green-50 text-green-700 border-green-200")}
+                            value={editFormData.status || 'Alive'} 
+                            onChange={e => setEditFormData({...editFormData, status: e.target.value})} 
+                          >
+                              <option value="Alive">Vivo (Ativo)</option>
+                              <option value="Deceased">Óbito</option>
+                              <option value="Archived">Arquivado</option>
+                          </select>
+                          {editFormData.status !== 'Alive' && (
+                              <p className="text-xs text-red-500 mt-1">Atenção: Ao salvar como Óbito ou Arquivado, a ficha do paciente ficará bloqueada para novos atendimentos.</p>
+                          )}
+                      </div>
                       <div>
                           <label className="text-sm font-medium">Sexo</label>
                           <select 
@@ -726,6 +795,37 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                            </label>
                       </div>
                       
+                      <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
+                          <h4 className="text-sm font-bold text-gray-700 mb-2">Convênio / Plano de Saúde</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                  <label className="text-sm font-medium">Nome do Plano</label>
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    value={editFormData.healthPlan || ''} 
+                                    onChange={e => setEditFormData({...editFormData, healthPlan: e.target.value})} 
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-medium">Carteirinha</label>
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    value={editFormData.healthPlanNumber || ''} 
+                                    onChange={e => setEditFormData({...editFormData, healthPlanNumber: e.target.value})} 
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-medium">Validade</label>
+                                  <input 
+                                    type="date"
+                                    className="w-full border rounded p-2"
+                                    value={editFormData.healthPlanExpiry || ''} 
+                                    onChange={e => setEditFormData({...editFormData, healthPlanExpiry: e.target.value})} 
+                                  />
+                              </div>
+                          </div>
+                      </div>
+
                       {/* Clinical Alerts Edit Section */}
                       <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
                           <h4 className="text-sm font-bold text-gray-700 mb-2">Alertas Clínicos</h4>
@@ -862,7 +962,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   {/* Header Status */}
                   <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
                       <div>
-                          <h3 className="font-bold text-lg">{selectedAttendance.reason}</h3>
+                          <h3 className="font-bold text-lg">{selectedAttendance.reason || 'Consulta Geral'}</h3>
                           <p className="text-sm text-gray-500">{new Date(selectedAttendance.date).toLocaleDateString()} - {new Date(selectedAttendance.date).toLocaleTimeString()}</p>
                       </div>
                       <div className="text-right">

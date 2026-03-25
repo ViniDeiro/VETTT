@@ -48,6 +48,30 @@ export const ReturnVisitModal: React.FC<ReturnVisitModalProps> = ({
       returnVisit: newReturn
     };
 
+    // Note: mockDB.updateAttendance handles updating the attendance record.
+    // However, mockDB.finishAttendance handles the actual "Appointment" creation.
+    // Since this can be added mid-attendance, let's create the appointment right now 
+    // to ensure it shows up in the Agenda immediately.
+    
+    const [h, m] = time.split(':');
+    const endHour = String(Number(h) + 1).padStart(2, '0');
+    const endTime = `${endHour}:${m}`;
+
+    const returnAppt = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: `Retorno: ${patient.name} (${type})`,
+        start: new Date(`${date}T${time}:00`).toISOString(),
+        end: new Date(`${date}T${endTime}:00`).toISOString(),
+        patientId: patient.id,
+        doctor: attendance.vetId || 'Dr. Vet',
+        type: type,
+        status: 'confirmed'
+    };
+    
+    // Direct access to mockDB appointments for immediate save
+    mockDB.appointments.push(returnAppt as any);
+    mockDB.save('vet_appointments', mockDB.appointments);
+
     mockDB.updateAttendance(attendance.id, { returnVisit: newReturn });
     onSave(updatedAttendance);
     

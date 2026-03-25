@@ -64,7 +64,7 @@ export interface Patient {
   microchip?: string;
   rg?: string;
   
-  healthPlan?: {
+  healthPlanObj?: {
     name: string;
     number: string;
     expiryDate: string;
@@ -79,6 +79,9 @@ export interface Patient {
   notes?: string; // General notes (Surgeries, etc.)
   internalNotes?: string; // Internal notes
   pregnant?: boolean; // If pregnant
+  healthPlan?: string; // Convênio
+  healthPlanNumber?: string; // Carteirinha
+  healthPlanExpiry?: string; // Validade da carteirinha
 }
 
 export type UnitType = 'ml' | 'un' | 'frasco' | 'g' | 'kg';
@@ -221,9 +224,12 @@ export interface VaccineApplication {
     attendanceId: string;
     patientId: string;
     inventoryItemId: string;
-    name: string;
+    type: string; // V8, V10, Raiva, etc.
+    name: string; // Rabisin, Lexton Gold, etc.
+    dose: string; // e.g., '1ª Dose', 'Reforço', 'Dose Única'
     batch: string;
     manufacturer: string;
+    manufacturingDate?: string;
     expiryDate: string;
     applicationDate: string;
     price: number;

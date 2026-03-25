@@ -223,32 +223,32 @@ class PdfService {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0);
 
-    let body = '';
-
+    doc.text(`Eu, ${ownerName}, responsável pelo paciente ${patient.name}, declaro...`, 20, y);
+    y += 10;
+    
     if (text) {
-        body = text;
+      const splitCustom = doc.splitTextToSize(text, 170);
+      doc.text(splitCustom, 20, y);
+      y += (splitCustom.length * 7) + 10;
     } else {
-        // Default Templates
-        if (type === 'health') {
-            body = `Atesto para os devidos fins que examinei nesta data o animal ${patient.species} de nome "${patient.name}", raça ${patient.breed}, sexo ${patient.gender}, idade ${patient.age} anos, pelagem ${patient.coat || 'não informada'}, de propriedade do Sr(a). ${ownerName}, encontrando-o clinicamente SAUDÁVEL, apto a conviver com outros animais e humanos, não apresentando sinais de doenças infectocontagiosas ou parasitárias no momento do exame.`;
-        } else if (type === 'surgery') {
-            body = `Eu, ${ownerName}, proprietário/responsável pelo animal "${patient.name}", autorizo a realização do procedimento cirúrgico/anestésico indicado pela equipe veterinária. Fui informado(a) sobre os riscos inerentes ao procedimento e à anestesia, bem como sobre os cuidados pós-operatórios necessários.`;
-        } else if (type === 'euthanasia') {
-            body = `Eu, ${ownerName}, proprietário/responsável pelo animal "${patient.name}", solicito e autorizo a realização do procedimento de eutanásia, estando ciente de que é um ato irreversível, realizado por razões humanitárias para aliviar o sofrimento do animal, conforme avaliado e indicado pelo Médico Veterinário.`;
-        }
+      // Default text based on type
+      let defaultText = '';
+      if (type === 'health') defaultText = `Atesto para os devidos fins que o animal ${patient.name}, da espécie ${patient.species}, encontra-se em bom estado geral de saúde.`;
+      if (type === 'surgery') defaultText = `Autorizo a realização do procedimento cirúrgico e anestésico no paciente ${patient.name}, estando ciente dos riscos inerentes.`;
+      if (type === 'euthanasia') defaultText = `Autorizo a eutanásia do paciente ${patient.name} por motivos de saúde e bem-estar animal.`;
+      if (type === 'travel') defaultText = `Atesto que o paciente ${patient.name} encontra-se apto para viajar, com vacinação em dia e sem sinais de doenças infectocontagiosas.`;
+      
+      const splitDefault = doc.splitTextToSize(defaultText, 170);
+      doc.text(splitDefault, 20, y);
+      y += (splitDefault.length * 7) + 10;
     }
 
-    const splitBody = doc.splitTextToSize(body, 170);
-    doc.text(splitBody, 20, y);
-    
-    y += (splitBody.length * 8) + 30;
-
-    // Signatures
+    y += 40;
     doc.line(20, y, 90, y);
-    doc.text('Médico Veterinário', 20, y + 5);
+    doc.text('Médico Veterinário (CRMV)', 20, y + 5);
     
     doc.line(110, y, 180, y);
-    doc.text('Responsável / Tutor', 110, y + 5);
+    doc.text(`Tutor: ${ownerName}`, 110, y + 5);
 
     doc.setFontSize(10);
     doc.text(`Local e Data: Sorocaba, ${date}`, 20, y + 25);

@@ -35,6 +35,7 @@ import { VaccineModal } from './VaccineModal';
 import { ProceduresModal } from './ProceduresModal';
 import { ReturnVisitModal } from './ReturnVisitModal';
 import { CertificateModal } from './CertificateModal';
+import { SurgeryModal } from './SurgeryModal';
 import PatientDetailsModal from '../../components/PatientDetailsModal';
 
 export const AttendancePage: React.FC = () => {
@@ -81,6 +82,7 @@ export const AttendancePage: React.FC = () => {
   const [isExamRequestModalOpen, setIsExamRequestModalOpen] = useState(false);
   const [isVaccineModalOpen, setIsVaccineModalOpen] = useState(false);
   const [isProceduresModalOpen, setIsProceduresModalOpen] = useState(false);
+  const [isSurgeryModalOpen, setIsSurgeryModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
 
@@ -91,13 +93,27 @@ export const AttendancePage: React.FC = () => {
   const patientProperty = allProperties.find(p => p.id === selectedPatient?.propertyId);
 
   useEffect(() => {
-    setPatients(mockDB.getPatients());
+    const loadedPatients = mockDB.getPatients();
+    setPatients(loadedPatients);
     setInventory(mockDB.getInventory());
     setProcedures(mockDB.getProcedures());
-    if (initialPatient) {
-        setSelectedPatient(initialPatient);
+    
+    let targetPatient = initialPatient;
+
+    if (!targetPatient) {
+        const searchParams = new URLSearchParams(location.search);
+        const patientId = searchParams.get('patientId');
+        if (patientId) {
+            targetPatient = loadedPatients.find(p => p.id === patientId) || null;
+        }
     }
-  }, [initialPatient]);
+
+    if (targetPatient) {
+        // Find fresh patient data to get owner details properly
+        const freshPatient = loadedPatients.find(p => p.id === targetPatient?.id);
+        setSelectedPatient(freshPatient || targetPatient);
+    }
+  }, [initialPatient, location.search]);
 
   // Consultation Type State
   const [showConsultationTypes, setShowConsultationTypes] = useState(false);
@@ -116,17 +132,23 @@ export const AttendancePage: React.FC = () => {
   const handleSelectConsultationType = (typeId: string, label: string) => {
     setShowConsultationTypes(false);
     if (selectedPatient) {
+      const isRetorno = typeId === 'retorno';
       const newAttendance = mockDB.createAttendance({
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
-        reason: '', // Set reason to empty by default
-        consultationType: typeId, // Store the type ID
+        reason: isRetorno ? 'Retorno' : '', // Pre-fill Retorno, otherwise empty
+        consultationType: typeId,
         consumedItems: [],
-        vitals: {} // Initialize
+        vitals: {}
       });
       setCurrentAttendance(newAttendance);
+      if (isRetorno) {
+          setServiceFee(0); // Retorno is free by default
+      } else {
+          setServiceFee(150); // Default fee for other types
+      }
       setActiveTab('attendance_active');
     }
   };
@@ -214,6 +236,9 @@ export const AttendancePage: React.FC = () => {
     if (currentAttendance) {
       try {
         currentAttendance.vitals = vitals; // Attach vitals before finishing
+        currentAttendance.anamnesis = anamnesis; // Attach anamnesis
+        currentAttendance.diagnosis = diagnosis; // Attach diagnosis
+        
         mockDB.finishAttendance(
             currentAttendance.id, 
             serviceFee, 
@@ -222,11 +247,21 @@ export const AttendancePage: React.FC = () => {
             currentAttendance.procedures || [],
             currentAttendance.returnVisit
         );
+        
+        // Also update the local state record of the attendance directly so the UI sees it immediately
+        mockDB.updateAttendance(currentAttendance.id, {
+            vitals: vitals,
+            anamnesis: anamnesis,
+            diagnosis: diagnosis
+        });
+
         alert('Atendimento finalizado com sucesso!');
         setCurrentAttendance(null);
         setConsumedItems([]);
         setVaccines([]);
         setVitals({});
+        setAnamnesis('');
+        setDiagnosis('');
         setActiveTab('overview');
       } catch (e: any) {
         console.error('Erro ao finalizar:', e);
@@ -265,7 +300,8 @@ export const AttendancePage: React.FC = () => {
       if (actionId === 'prescricao') setIsPrescriptionModalOpen(true);
       else if (actionId === 'exames') setIsExamRequestModalOpen(true);
       else if (actionId === 'vacinas') setIsVaccineModalOpen(true);
-      else if (actionId === 'procedimentos' || actionId === 'cirurgia') setIsProceduresModalOpen(true);
+      else if (actionId === 'procedimentos') setIsProceduresModalOpen(true);
+      else if (actionId === 'cirurgia') setIsSurgeryModalOpen(true);
       else if (actionId === 'retorno') setIsReturnModalOpen(true);
       else if (actionId === 'termos') setIsCertificateModalOpen(true);
   };
@@ -429,10 +465,42 @@ export const AttendancePage: React.FC = () => {
                                             <p className="text-gray-900 font-medium">{patientProperty ? patientProperty.name : 'Não vinculada'}</p> 
                                         </div>
                                     )}
+                                    {selectedPatient.healthPlan && (
+                                        <div>
+                                            <p className="text-xs text-gray-500 uppercase font-semibold">Convênio</p>
+                                            <p className="text-gray-900 font-medium flex items-center gap-2">
+                                                {selectedPatient.healthPlan}
+                                                {selectedPatient.healthPlanNumber && <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">Nº {selectedPatient.healthPlanNumber}</span>}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="space-y-3">
                                     <div>
-                                        <p className="text-xs text-gray-500 uppercase font-semibold">Alertas</p>
+                                        <p className="text-xs text-gray-500 uppercase font-semibold">Status / Características</p>
+                                        <div className="flex flex-wrap gap-2 mt-1">
+                                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold border">
+                                                {selectedPatient.gender === 'M' ? 'Macho' : 'Fêmea'}
+                                            </span>
+                                            {selectedPatient.neutered && (
+                                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200">
+                                                    Castrado
+                                                </span>
+                                            )}
+                                            {selectedPatient.pregnant && (
+                                                <span className="bg-pink-50 text-pink-700 px-2 py-1 rounded text-xs font-bold border border-pink-200">
+                                                    Prenha
+                                                </span>
+                                            )}
+                                            {selectedPatient.status === 'Deceased' && (
+                                                <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200">
+                                                    Óbito
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-semibold">Alertas de Saúde</p>
                                         <div className="flex flex-wrap gap-2 mt-1">
                                             {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
                                                 <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200">
@@ -453,6 +521,15 @@ export const AttendancePage: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                            
+                            {selectedPatient.internalNotes && (
+                                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-xs text-yellow-800 uppercase font-bold mb-1 flex items-center gap-1">
+                                        <AlertCircle className="w-3 h-3" /> Observação Interna
+                                    </p>
+                                    <p className="text-sm text-yellow-900 whitespace-pre-wrap">{selectedPatient.internalNotes}</p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -465,16 +542,37 @@ export const AttendancePage: React.FC = () => {
                                 <h3 className="font-bold text-gray-900">Sinais Vitais (Recente)</h3>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Freq. Cardíaca</p>
-                                    <span className="text-2xl font-bold text-gray-900">--</span>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Temperatura</p>
-                                    <span className="text-2xl font-bold text-gray-900">--</span>
-                                </div>
-                            </div>
+                            {(() => {
+                                const lastAttendanceWithVitals = mockDB.getAttendancesByPatientId(selectedPatient.id)
+                                    .filter(a => a.vitals && Object.keys(a.vitals).length > 0)
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                                
+                                if (!lastAttendanceWithVitals || !lastAttendanceWithVitals.vitals) {
+                                    return <p className="text-sm text-gray-500 italic">Nenhum registro encontrado.</p>;
+                                }
+                                
+                                const v = lastAttendanceWithVitals.vitals;
+                                return (
+                                    <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Freq. Cardíaca</p>
+                                            <span className="text-2xl font-bold text-gray-900">{v.heartRate ? `${v.heartRate} bpm` : '--'}</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Temperatura</p>
+                                            <span className="text-2xl font-bold text-gray-900">{v.temperature ? `${v.temperature}°C` : '--'}</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Peso</p>
+                                            <span className="text-lg font-bold text-gray-900">{v.weight ? `${v.weight} kg` : '--'}</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Freq. Resp.</p>
+                                            <span className="text-lg font-bold text-gray-900">{v.respiratoryRate ? `${v.respiratoryRate} rpm` : '--'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             </CardContent>
                         </Card>
 
@@ -484,7 +582,22 @@ export const AttendancePage: React.FC = () => {
                                 <Stethoscope className="h-5 w-5 text-blue-600" />
                                 <h3 className="font-bold text-gray-900">Última Anamnese</h3>
                             </div>
-                            <p className="text-gray-600 text-sm">Nenhum registro recente.</p>
+                            {(() => {
+                                const lastAttendanceWithAnamnesis = mockDB.getAttendancesByPatientId(selectedPatient.id)
+                                    .filter(a => a.anamnesis)
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                                
+                                if (!lastAttendanceWithAnamnesis) {
+                                    return <p className="text-gray-600 text-sm italic">Nenhum registro recente.</p>;
+                                }
+                                
+                                return (
+                                    <div>
+                                        <p className="text-xs text-gray-500 mb-2 border-b border-blue-100 pb-2">{lastAttendanceWithAnamnesis.date}</p>
+                                        <p className="text-sm text-gray-800 whitespace-pre-wrap line-clamp-4">{lastAttendanceWithAnamnesis.anamnesis}</p>
+                                    </div>
+                                );
+                            })()}
                             </CardContent>
                         </Card>
                     </div>
@@ -681,6 +794,19 @@ export const AttendancePage: React.FC = () => {
                                         />
                                     </div>
                                 </div>
+                                {historySubTab === 'Procedimentos' && (
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => (a.procedures || []).map(p => ({...p, date: a.date}))).map((proc: any, i) => (
+                                            <div key={i} className="p-4 border rounded-lg bg-orange-50">
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="font-bold text-orange-900">{proc.name}</span>
+                                                    <span className="text-sm text-orange-700">{proc.date}</span>
+                                                </div>
+                                                {proc.notes && <p className="text-sm text-orange-800 mt-2">{proc.notes}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -869,7 +995,7 @@ export const AttendancePage: React.FC = () => {
                             
                             {/* History Sub-tabs */}
                             <div className="flex overflow-x-auto gap-2 border-b pb-2 mb-6">
-                                {['Geral', 'Consultas', 'Peso e Sinais Vitais', 'Vacinas', 'Exames'].map(tab => (
+                                {['Geral', 'Consultas', 'Peso e Sinais Vitais', 'Vacinas', 'Exames', 'Procedimentos'].map(tab => (
                                     <button
                                         key={tab}
                                         onClick={() => setHistorySubTab(tab)}
@@ -887,21 +1013,53 @@ export const AttendancePage: React.FC = () => {
                             
                             <div className="py-4">
                                 {historySubTab === 'Geral' && (
-                                    <div className="text-center py-8 text-gray-500">
-                                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                                        <p>Para ver o histórico geral completo com edições, abra a ficha.</p>
-                                        <Button variant="outline" className="mt-4" onClick={() => setIsHistoryOpen(true)}>Abrir Ficha Completa</Button>
+                                    <div className="space-y-4">
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).map(att => (
+                                            <div key={att.id} className="flex gap-4 items-center p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                                <div className="w-24 shrink-0 text-sm font-bold text-gray-500">{att.date}</div>
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-gray-800">{att.reason || 'Consulta Geral'}</p>
+                                                    <p className="text-xs text-gray-500 flex gap-2 mt-1">
+                                                        {att.vaccines && att.vaccines.length > 0 && <span className="bg-purple-100 text-purple-700 px-2 rounded">Vacina</span>}
+                                                        {att.examRequests && att.examRequests.length > 0 && <span className="bg-teal-100 text-teal-700 px-2 rounded">Exame</span>}
+                                                        {att.procedures && att.procedures.length > 0 && <span className="bg-orange-100 text-orange-700 px-2 rounded">Procedimento</span>}
+                                                    </p>
+                                                </div>
+                                                <Button variant="ghost" size="sm" onClick={() => setIsHistoryOpen(true)} className="text-blue-600 hover:bg-blue-50">
+                                                    Abrir Ficha
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).length === 0 && (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                                                <p>Nenhum registro encontrado para este paciente.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {historySubTab === 'Consultas' && (
                                     <div className="space-y-4">
                                         {mockDB.getAttendancesByPatientId(selectedPatient.id).map(att => (
-                                            <div key={att.id} className="p-4 border rounded-lg bg-gray-50">
+                                            <div 
+                                                key={att.id} 
+                                                className="p-4 border rounded-lg bg-gray-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
+                                                onClick={() => {
+                                                    // Trigger opening the full details modal in the parent context if possible, 
+                                                    // or at least show a simple alert/expansion for now.
+                                                    setIsHistoryOpen(true);
+                                                    // Ideally we would pass the specific attendance ID to the modal
+                                                }}
+                                            >
                                                 <div className="flex justify-between items-start mb-2">
-                                                    <span className="font-bold text-gray-800">{att.date} - {att.reason}</span>
+                                                    <span className="font-bold text-gray-800">{att.date} - {att.reason || 'Consulta Geral'}</span>
                                                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{att.status === 'finished' ? 'Finalizado' : 'Em Andamento'}</span>
                                                 </div>
-                                                {att.diagnosis && <p className="text-sm text-gray-600"><span className="font-semibold">Diagnóstico:</span> {att.diagnosis}</p>}
+                                                {att.diagnosis && <p className="text-sm text-gray-600 mb-2"><span className="font-semibold">Diagnóstico:</span> {att.diagnosis}</p>}
+                                                {att.anamnesis && <p className="text-sm text-gray-500 line-clamp-2"><span className="font-semibold">Anamnese:</span> {att.anamnesis}</p>}
+                                                <div className="mt-2 text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    Clique para abrir ficha completa
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1097,6 +1255,17 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsCertificateModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
+        />
+      )}
+
+      {/* Surgery Modal */}
+      {currentAttendance && selectedPatient && (
+        <SurgeryModal
+            isOpen={isSurgeryModalOpen}
+            onClose={() => setIsSurgeryModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={(updated) => setCurrentAttendance(updated)}
         />
       )}
 

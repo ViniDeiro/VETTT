@@ -45,18 +45,35 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
     };
 
     const currentProcedures = attendance.procedures || [];
+    
+    // Auto-consume materials from template
+    const newItems = template.items.map(pItem => {
+        const invItem = mockDB.getInventory().find(i => i.id === pItem.inventoryItemId);
+        if (invItem) {
+            return {
+                inventoryItemId: invItem.id,
+                itemName: invItem.name,
+                quantityUsed: pItem.quantity,
+                unit: invItem.unit,
+                costAtMoment: invItem.costPrice,
+                priceAtMoment: invItem.salePrice
+            };
+        }
+        return null;
+    }).filter(Boolean) as any[];
+
+    const currentConsumedItems = attendance.consumedItems || [];
+    
     const updatedAttendance = {
       ...attendance,
-      procedures: [...currentProcedures, newProcedure]
+      procedures: [...currentProcedures, newProcedure],
+      consumedItems: [...currentConsumedItems, ...newItems]
     };
 
-    // Note: We are NOT consuming items here automatically yet. 
-    // Ideally, selecting a procedure should also add its items to the consumption list.
-    // For this modal, we focus on the Clinical Procedure Record.
-    // The main attendance page handles "Packages" that add items.
-    // Let's assume this modal is for "Extra Procedures" or specific clinical acts.
-
-    mockDB.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
+    mockDB.updateAttendance(attendance.id, { 
+        procedures: updatedAttendance.procedures,
+        consumedItems: updatedAttendance.consumedItems 
+    });
     onSave(updatedAttendance);
 
     // Reset

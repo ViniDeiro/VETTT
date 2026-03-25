@@ -23,9 +23,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   const [customText, setCustomText] = useState('');
 
   const handleGenerate = () => {
-    // Generate PDF immediately (no need to save to DB for now, as it's a generated doc)
-    // In a real app, we might save a log of generated documents.
-    pdfService.generateCertificatePdf(patient, 'Tutor (Demo)', type, customText);
+    // We pass the actual owner details dynamically so the PDF can be accurate
+    const ownerName = patient.ownerName || 'Desconhecido';
+    pdfService.generateCertificatePdf(patient, ownerName, type, customText);
     onClose();
   };
 

@@ -417,10 +417,11 @@ export default function Agenda() {
 
                   return (
                     <div key={date.toString()} className={cn(
-                      "p-4 text-center text-sm font-semibold border-r border-gray-50 last:border-r-0 flex items-center justify-center capitalize",
+                      "p-4 text-center text-sm font-semibold border-r border-gray-50 last:border-r-0 flex flex-col items-center justify-center capitalize",
                       isToday ? "text-[#00BFA5]" : "text-gray-700"
                     )}>
-                      {dayName} <span className="text-xs font-normal ml-1">{date.getDate()}</span>
+                      <span>{dayName}</span>
+                      <span className={cn("text-lg font-bold mt-1 w-8 h-8 flex items-center justify-center rounded-full", isToday ? "bg-[#00BFA5] text-white" : "")}>{date.getDate()}</span>
                     </div>
                   )
                 })}
@@ -429,12 +430,26 @@ export default function Agenda() {
               {/* Linhas de Horário */}
               <div className="relative">
                 {hours.map(hour => (
-                  <div key={hour} className="grid h-32 border-b border-gray-50" style={{ gridTemplateColumns: `50px repeat(${visibleDays.length}, 1fr)` }}>
-                    <div className="p-2 text-xs text-gray-400 text-right border-r border-gray-50 relative -top-3">
+                  <div key={hour} className="grid h-24 border-b border-gray-50" style={{ gridTemplateColumns: `50px repeat(${visibleDays.length}, 1fr)` }}>
+                    <div className="p-2 text-[10px] font-bold text-gray-400 text-right border-r border-gray-50 relative -top-3">
                       {hour}:00
                     </div>
                     {visibleDays.map((date, colIndex) => (
-                      <div key={`${date}-${hour}`} className="border-r border-gray-50 last:border-r-0 relative group hover:bg-gray-50/50 transition-colors">
+                      <div 
+                        key={`${date}-${hour}`} 
+                        className="border-r border-gray-50 last:border-r-0 relative group hover:bg-blue-50/30 transition-colors cursor-pointer"
+                        onClick={() => {
+                            // Quick Add logic can go here if clicked on empty slot
+                            const dStr = date.toISOString().split('T')[0];
+                            setNewAppointment(prev => ({
+                                ...prev,
+                                date: dStr,
+                                startTime: `${String(hour).padStart(2, '0')}:00`,
+                                endTime: `${String(hour+1).padStart(2, '0')}:00`
+                            }));
+                            setIsModalOpen(true);
+                        }}
+                      >
                         {/* Renderizar agendamentos aqui */}
                         {appointments.filter(apt => {
                           const aptDate = new Date(apt.start)
@@ -449,18 +464,21 @@ export default function Agenda() {
                         }).map(apt => (
                           <div
                             key={apt.id}
-                            onClick={() => setSelectedAppointment(apt)}
+                            onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); }}
                             className={cn(
-                              "absolute inset-x-1 p-2 rounded-lg text-xs cursor-pointer hover:opacity-90 transition-opacity overflow-hidden border-l-4 shadow-sm z-10",
-                              apt.color
+                              "absolute inset-x-1 p-2 rounded-lg text-xs cursor-pointer hover:opacity-90 transition-opacity overflow-hidden border-l-4 shadow-sm z-10 flex flex-col justify-between",
+                              apt.color || 'bg-blue-100 border-blue-500 text-blue-900'
                             )}
                             style={{ 
                               top: '2px', 
                               height: 'calc(100% - 4px)',
                             }}
                           >
-                            <div className="font-bold truncate">{apt.type}</div>
-                            <div className="truncate font-medium">{apt.patient}</div>
+                            <div>
+                                <div className="font-bold truncate text-[11px] uppercase tracking-wider opacity-80">{apt.type}</div>
+                                <div className="truncate font-bold text-sm mt-0.5">{apt.patient}</div>
+                            </div>
+                            {apt.procedure && <div className="truncate text-[10px] mt-1 opacity-90">{apt.procedure}</div>}
                           </div>
                         ))}
                       </div>
@@ -474,13 +492,23 @@ export default function Agenda() {
         </div>
 
         {/* Sidebar Direita - Detalhes (Desktop) */}
-        <div className="hidden xl:flex w-80 bg-white rounded-xl shadow-sm p-6 flex-col h-full overflow-y-auto">
-             <AppointmentDetails 
-                appointment={selectedAppointment} 
-                onConfirm={handleConfirmAppointment}
-                onReschedule={handleReschedule}
-                onMessage={handleSendMessage}
-             />
+        <div className="hidden xl:flex w-80 flex-shrink-0 bg-white rounded-xl shadow-sm flex-col h-full overflow-hidden border border-gray-100">
+             <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                <h3 className="font-bold text-gray-900">Detalhes do Agendamento</h3>
+                {selectedAppointment && (
+                    <button onClick={() => setSelectedAppointment(null)} className="p-1 hover:bg-gray-200 rounded-full">
+                        <X className="h-4 w-4 text-gray-500" />
+                    </button>
+                )}
+             </div>
+             <div className="p-6 overflow-y-auto flex-1">
+                 <AppointmentDetails 
+                    appointment={selectedAppointment} 
+                    onConfirm={handleConfirmAppointment}
+                    onReschedule={handleReschedule}
+                    onMessage={handleSendMessage}
+                 />
+             </div>
         </div>
 
         {/* Drawer Mobile/Tablet para Detalhes */}
