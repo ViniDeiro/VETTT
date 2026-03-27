@@ -168,6 +168,10 @@ export default function Clients() {
           ...patient,
           ownerName: owner?.name || 'Desconhecido'
       }
+      
+      // Fechar a sidebar do tutor se estiver aberta para não conflitar visualmente
+      setSelectedClient(null);
+      
       setSelectedPatient(patientWithDetails)
       setIsPatientDetailsOpen(true)
   }
