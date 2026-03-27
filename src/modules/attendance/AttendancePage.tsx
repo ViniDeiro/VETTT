@@ -254,15 +254,27 @@ export const AttendancePage: React.FC = () => {
         );
         
         // Update patient weight if a new weight was recorded in vitals
-        if (vitals.weight && selectedPatient) {
-            mockDB.updatePatient(selectedPatient.id, { weight: vitals.weight });
-            // Update local state to reflect the new weight immediately
-            setSelectedPatient({ ...selectedPatient, weight: vitals.weight });
+        let updatedPatient = { ...selectedPatient };
+        let hasPatientUpdates = false;
+
+        if (vitals.weight) {
+            updatedPatient.weight = vitals.weight;
+            hasPatientUpdates = true;
         }
         
         // Update patient anesthetic risk if recorded in vitals
-        if (vitals.anestheticRisk && selectedPatient) {
-            mockDB.updatePatient(selectedPatient.id, { anestheticRisk: vitals.anestheticRisk });
+        if (vitals.anestheticRisk) {
+            updatedPatient.anestheticRisk = vitals.anestheticRisk;
+            hasPatientUpdates = true;
+        }
+
+        if (hasPatientUpdates) {
+            mockDB.updatePatient(selectedPatient.id, { 
+                weight: updatedPatient.weight,
+                anestheticRisk: updatedPatient.anestheticRisk
+            });
+            // Update local state to reflect the new data immediately without F5
+            setSelectedPatient(updatedPatient);
         }
 
         // Also update the local state record of the attendance directly so the UI sees it immediately

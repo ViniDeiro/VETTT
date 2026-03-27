@@ -1178,21 +1178,6 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                     onChange={e => setEditFormData({...editFormData, chronicDiseases: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
                                   />
                               </div>
-                              <div>
-                                  <label className="text-sm font-medium text-orange-600">Risco Anestésico</label>
-                                  <select 
-                                    className="w-full border rounded p-2 border-orange-100 bg-orange-50"
-                                    value={editFormData.anestheticRisk || ''} 
-                                    onChange={e => setEditFormData({...editFormData, anestheticRisk: e.target.value})} 
-                                  >
-                                      <option value="">Não avaliado</option>
-                                      <option value="ASA I">ASA I - Paciente saudável</option>
-                                      <option value="ASA II">ASA II - Doença sistêmica leve</option>
-                                      <option value="ASA III">ASA III - Doença sistêmica grave</option>
-                                      <option value="ASA IV">ASA IV - Risco de vida constante</option>
-                                      <option value="ASA V">ASA V - Moribundo</option>
-                                  </select>
-                              </div>
                           </div>
                       </div>
                   </div>
