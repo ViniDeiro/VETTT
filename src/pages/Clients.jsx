@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import { Select } from '../components/ui/Select'
 import { Modal } from '../components/ui/Modal'
-import { Plus, Search, Users, PawPrint, Edit2 } from 'lucide-react'
+import { Plus, Search, Users, PawPrint, Edit2, Trash2, Filter } from 'lucide-react'
 import ClientDetailsSidebar from '../components/ClientDetailsSidebar'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 import { cn } from '@/lib/utils'
@@ -28,6 +28,7 @@ export default function Clients() {
   
   // Filter State
   const [searchTerm, setSearchTerm] = useState('')
+  const [speciesFilter, setSpeciesFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState('all')
 
   // Modals State
@@ -150,14 +151,15 @@ export default function Clients() {
 
   // --- Filtering Logic ---
   const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) || client.document?.includes(searchTerm)
     if (!matchesSearch) return false
     return true
   })
 
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase())
-    if (!matchesSearch) return false
+    const matchesSpecies = speciesFilter === 'all' || patient.species === speciesFilter
+    if (!matchesSearch || !matchesSpecies) return false
     return true
   })
 
@@ -462,12 +464,25 @@ export default function Clients() {
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder={viewMode === 'owners' ? "Pesquisar tutor" : "Pesquisar paciente"}
+              placeholder={viewMode === 'owners' ? "Pesquisar tutor por nome ou CPF" : "Pesquisar paciente"}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 rounded-full border-gray-200"
             />
           </div>
+          
+          {viewMode === 'patients' && (
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                  <Filter className="h-4 w-4 text-gray-400" />
+                  <Select value={speciesFilter} onChange={e => setSpeciesFilter(e.target.value)} className="w-full md:w-48">
+                      <option value="all">Todas as Espécies</option>
+                      <option value="Canine">Canino</option>
+                      <option value="Feline">Felino</option>
+                      <option value="Equine">Equino</option>
+                      <option value="Other">Outros</option>
+                  </Select>
+              </div>
+          )}
         </div>
 
         {/* Clients Table (Simplified for Mock) */}
@@ -483,6 +498,7 @@ export default function Clients() {
                             <th className="p-4">CPF/CNPJ</th>
                             <th className="p-4">Telefone</th>
                             <th className="p-4">Cidade</th>
+                            <th className="p-4">Ações</th>
                         </>
                     ) : (
                         <>
@@ -501,15 +517,27 @@ export default function Clients() {
                         <tr
                           key={client.id}
                           className={cn(
-                            "hover:bg-gray-50 cursor-pointer transition-colors text-sm text-gray-600",
+                            "hover:bg-gray-50 transition-colors text-sm text-gray-600",
                             selectedClient?.id === client.id ? "bg-blue-50/50" : ""
                           )}
-                          onClick={() => setSelectedClient(client)}
                         >
-                          <td className="p-4 pl-6 font-medium text-gray-900">{client.name}</td>
-                          <td className="p-4">{client.document || '-'}</td>
-                          <td className="p-4">{client.phone}</td>
-                          <td className="p-4">{client.city ? `${client.city}${client.state ? `/${client.state}` : ''}` : '-'}</td>
+                          <td className="p-4 pl-6 font-medium text-gray-900 cursor-pointer" onClick={() => setSelectedClient(client)}>{client.name}</td>
+                          <td className="p-4 cursor-pointer" onClick={() => setSelectedClient(client)}>{client.document || '-'}</td>
+                          <td className="p-4 cursor-pointer" onClick={() => setSelectedClient(client)}>{client.phone}</td>
+                          <td className="p-4 cursor-pointer" onClick={() => setSelectedClient(client)}>{client.city ? `${client.city}${client.state ? `/${client.state}` : ''}` : '-'}</td>
+                          <td className="p-4">
+                              <div className="flex gap-2">
+                                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(client); setOpenOwnerModal(true); }} className="text-blue-600 p-1 h-auto"><Edit2 className="w-4 h-4"/></Button>
+                                  <Button variant="ghost" size="sm" onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if(confirm('Tem certeza que deseja excluir este tutor?')) {
+                                          mockDB.deleteOwner(client.id);
+                                          setClients(mockDB.getOwners());
+                                          if(selectedClient?.id === client.id) setSelectedClient(null);
+                                      }
+                                  }} className="text-red-600 p-1 h-auto hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
+                              </div>
+                          </td>
                         </tr>
                       ))
                   ) : (
@@ -531,7 +559,16 @@ export default function Clients() {
                               <td className="p-4">{patient.breed}</td>
                               <td className="p-4">{owner?.name || 'Desconhecido'}</td>
                               <td className="p-4">
-                                  <Button variant="ghost" size="sm" className="text-blue-600">Ver Prontuário</Button>
+                                  <div className="flex items-center gap-2">
+                                      <Button variant="ghost" size="sm" className="text-blue-600">Ver Prontuário</Button>
+                                      <Button variant="ghost" size="sm" onClick={(e) => { 
+                                          e.stopPropagation(); 
+                                          if(confirm('Tem certeza que deseja excluir este paciente?')) {
+                                              mockDB.deletePatient(patient.id);
+                                              setPatients(mockDB.getPatients());
+                                          }
+                                      }} className="text-red-600 p-1 h-auto hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
+                                  </div>
                               </td>
                             </tr>
                           )

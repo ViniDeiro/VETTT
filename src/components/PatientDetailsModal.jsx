@@ -788,7 +788,17 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                               <p>Nenhum atendimento registrado para este paciente.</p>
                           </div>
                       ) : (
-                          attendances.map(att => (
+                          attendances.map(att => {
+                              // Ensure date parsing works correctly for DD/MM/YYYY or ISO strings
+                              let parsedDate;
+                              if (att.date.includes('/')) {
+                                  const [d, m, y] = att.date.split('/');
+                                  parsedDate = new Date(`${y}-${m}-${d}`);
+                              } else {
+                                  parsedDate = new Date(att.date);
+                              }
+                              
+                              return (
                               <div 
                                 key={att.id} 
                                 onClick={() => setSelectedAttendance(att)} 
@@ -798,7 +808,9 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                       <div>
                                           <div className="flex items-center gap-2">
                                               <p className="font-bold text-gray-900 text-lg">{att.reason || 'Consulta Geral'}</p>
-                                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{new Date(att.date).toLocaleDateString()}</span>
+                                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+                                                {isNaN(parsedDate.getTime()) ? att.date : parsedDate.toLocaleDateString('pt-BR')}
+                                              </span>
                                           </div>
                                           <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
                                               <User className="h-3 w-3" /> Vet: {att.vetId}
@@ -808,9 +820,6 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                           <span className={cn("px-3 py-1 rounded-full text-xs font-bold", att.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
                                               {att.status === 'finished' ? 'Finalizado' : 'Em Andamento'}
                                           </span>
-                                          {att.updatedAt && (
-                                              <span className="text-[10px] text-gray-400">Editado em {new Date(att.updatedAt).toLocaleDateString()}</span>
-                                          )}
                                       </div>
                                   </div>
                                   
@@ -829,7 +838,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                       )}
                                   </div>
                               </div>
-                          ))
+                          )})
                       )}
                   </div>
               )}

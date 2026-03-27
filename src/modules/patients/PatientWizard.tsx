@@ -215,9 +215,14 @@ export const PatientWizard: React.FC = () => {
             // Note: 'age' in Patient interface is number (years). We might want to store birthDate primarily.
         }
 
+        const finalSpecies = patientData.species === 'Other' && patientData.customSpecies 
+            ? patientData.customSpecies 
+            : patientData.species;
+
         const newPatient: Patient = {
           id: Math.random().toString(36).substr(2, 9),
           ...patientData,
+          species: finalSpecies,
           ownerId: selectedOwner.id,
           propertyId: selectedProperty?.id,
           age: finalAgeYears,
@@ -315,13 +320,25 @@ export const PatientWizard: React.FC = () => {
                             <Label>Espécie *</Label>
                             <Select 
                                 value={patientData.species} 
-                                onChange={e => setPatientData({...patientData, species: e.target.value as any, breed: ''})}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    setPatientData({...patientData, species: val as any, breed: val === 'Other' ? patientData.breed : ''});
+                                }}
                             >
                                 <option value="Canine">Canino</option>
                                 <option value="Feline">Felino</option>
                                 <option value="Equine">Equino</option>
                                 <option value="Other">Outros</option>
                             </Select>
+                            {patientData.species === 'Other' && (
+                                <Input 
+                                    className="mt-2"
+                                    placeholder="Qual espécie?"
+                                    value={patientData.customSpecies || ''}
+                                    onChange={e => setPatientData({...patientData, customSpecies: e.target.value})}
+                                    autoFocus
+                                />
+                            )}
                         </div>
                         <div className="col-span-1">
                             <Label>Raça</Label>

@@ -174,6 +174,11 @@ class MockDatabaseService {
       return null;
   }
 
+  deletePatient(id: string) {
+    this.patients = this.patients.filter(p => p.id !== id);
+    this.save('vet_patients', this.patients);
+  }
+
   updateOwner(id: string, updates: Partial<Owner>) {
       const index = this.owners.findIndex(o => o.id === id);
       if (index !== -1) {
@@ -182,6 +187,13 @@ class MockDatabaseService {
           return this.owners[index];
       }
       return null;
+  }
+
+  deleteOwner(id: string) {
+    this.owners = this.owners.filter(o => o.id !== id);
+    this.save('vet_owners', this.owners);
+    // Optional: cascade delete or un-link patients
+    // this.patients.filter(p => p.ownerId === id).forEach(p => this.deletePatient(p.id));
   }
   
   updateProperty(id: string, updates: Partial<Property>) {
