@@ -884,18 +884,54 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                 <h3 className="font-bold">Alertas</h3>
               </div>
               <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-bold text-gray-700">Hoje, 09:15</p>
-                  <p className="text-xs text-gray-600">Confirmação pendente para cirurgia de 15/11/2026.</p>
-                </div>
-                <div className="border-t border-red-100 pt-2">
-                  <p className="text-xs font-bold text-gray-700">Ontem, 14:30</p>
-                  <p className="text-xs text-gray-600">Resultado de exame de sangue liberado.</p>
-                </div>
-                <div className="border-t border-red-100 pt-2">
-                  <p className="text-xs font-bold text-gray-700">28/04/2026</p>
-                  <p className="text-xs text-gray-600">Vencimento da vacina antirrábica em 15/05/2026.</p>
-                </div>
+                {(() => {
+                    const patientAlerts = [];
+                    
+                    // Vaccine Expiry Alerts
+                    const vaccines = mockDB.getAttendancesByPatientId(patient.id)
+                        .flatMap(a => a.vaccines || [])
+                        .filter(v => v.nextDoseDate);
+                        
+                    vaccines.forEach(v => {
+                        const nextDose = new Date(v.nextDoseDate);
+                        const diffDays = Math.ceil((nextDose.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays < 0) {
+                            patientAlerts.push({
+                                date: nextDose.toLocaleDateString('pt-BR'),
+                                text: `Vacina ${v.type} em atraso!`,
+                                urgent: true
+                            });
+                        } else if (diffDays <= 30) {
+                            patientAlerts.push({
+                                date: nextDose.toLocaleDateString('pt-BR'),
+                                text: `Reforço da vacina ${v.type} próximo.`,
+                                urgent: false
+                            });
+                        }
+                    });
+
+                    // Return Visit Alerts
+                    const scheduledReturns = mockDB.appointments.filter(a => a.patientId === patient.id && new Date(a.start) >= new Date());
+                    scheduledReturns.forEach(r => {
+                         patientAlerts.push({
+                            date: new Date(r.start).toLocaleDateString('pt-BR'),
+                            text: `${r.title} agendado para as ${new Date(r.start).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.`,
+                            urgent: false
+                        });
+                    });
+
+                    if (patientAlerts.length === 0) {
+                        return <p className="text-xs text-gray-500 italic">Nenhum alerta pendente no momento.</p>;
+                    }
+
+                    return patientAlerts.sort((a,b) => b.urgent ? 1 : -1).map((alert, idx) => (
+                        <div key={idx} className={cn("pt-2", idx > 0 && "border-t border-red-100")}>
+                          <p className={cn("text-xs font-bold", alert.urgent ? "text-red-700" : "text-gray-700")}>{alert.date}</p>
+                          <p className="text-xs text-gray-600">{alert.text}</p>
+                        </div>
+                    ));
+                })()}
               </div>
             </div>
           </div>

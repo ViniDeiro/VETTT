@@ -226,7 +226,7 @@ export const PatientWizard: React.FC = () => {
           weight: Number(patientData.weight),
           allergies: allergiesInput.split(',').map(s => s.trim()).filter(Boolean),
           chronicDiseases: chronicInput.split(',').map(s => s.trim()).filter(Boolean),
-          healthPlan: patientData.healthPlan,
+          healthPlan: patientData.healthPlan, // Ensures it's a string, not object
         } as Patient;
 
         console.log('Salvando paciente:', newPatient);

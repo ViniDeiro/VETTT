@@ -133,6 +133,11 @@ export const AttendancePage: React.FC = () => {
     setShowConsultationTypes(false);
     if (selectedPatient) {
       const isRetorno = typeId === 'retorno';
+      
+      // Ensure we have the actual owner name dynamically, falling back to what's on the patient, or 'Desconhecido'
+      const actualOwner = mockDB.getOwners().find(o => o.id === selectedPatient.ownerId);
+      const ownerName = actualOwner ? actualOwner.name : (selectedPatient.ownerName || 'Desconhecido');
+      
       const newAttendance = mockDB.createAttendance({
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
