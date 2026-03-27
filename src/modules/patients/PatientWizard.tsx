@@ -458,7 +458,10 @@ export const PatientWizard: React.FC = () => {
                                         type="number" 
                                         placeholder="0"
                                         value={patientData.age || ''}
-                                        onChange={e => setPatientData({...patientData, age: Number(e.target.value)})}
+                                        onChange={e => {
+                                            const val = Number(e.target.value);
+                                            setPatientData({...patientData, age: val});
+                                        }}
                                         className="bg-white"
                                     />
                                     <span className="text-xs text-gray-500 mt-1 block">Anos</span>
@@ -468,7 +471,15 @@ export const PatientWizard: React.FC = () => {
                                         type="number" 
                                         placeholder="0"
                                         value={patientData.ageMonths || ''}
-                                        onChange={e => setPatientData({...patientData, ageMonths: Number(e.target.value)})}
+                                        onChange={e => {
+                                            let m = Number(e.target.value);
+                                            let y = Number(patientData.age || 0);
+                                            if (m >= 12) {
+                                                y += Math.floor(m / 12);
+                                                m = m % 12;
+                                            }
+                                            setPatientData({...patientData, ageMonths: m, age: y});
+                                        }}
                                         className="bg-white"
                                     />
                                     <span className="text-xs text-gray-500 mt-1 block">Meses</span>
