@@ -330,6 +330,18 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                         Arquivado
                     </span>
                 )}
+                {patient.healthPlan && (
+                    <span className={cn(
+                        "px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border",
+                        patient.healthPlanExpiry && new Date(patient.healthPlanExpiry) < new Date() 
+                            ? "bg-red-50 text-red-700 border-red-200" 
+                            : "bg-green-50 text-green-700 border-green-200"
+                    )}>
+                        <Heart className="h-3 w-3" />
+                        Convênio: {patient.healthPlan}
+                        {patient.healthPlanExpiry && new Date(patient.healthPlanExpiry) < new Date() && " (Vencido)"}
+                    </span>
+                )}
                 {patient.allergies && patient.allergies.length > 0 && (
                     <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-red-200">
                         <AlertCircle className="h-3 w-3" />
@@ -395,7 +407,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                     <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1 md:col-span-2 lg:col-span-3">
                       <div className="flex items-center gap-2 mb-4">
                         <FileText className="h-5 w-5 text-purple-600" />
-                        <h3 className="font-bold text-gray-900">Observações e Histórico Clínico</h3>
+                        <h3 className="font-bold text-gray-900">Observações</h3>
                       </div>
                       
                       {patient.chronicDiseases && patient.chronicDiseases.length > 0 && (
@@ -425,30 +437,49 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                     <div className="flex items-center gap-2 mb-4">
                       <Activity className="h-5 w-5 text-[#00BFA5]" />
                       <h3 className="font-bold text-gray-900">Sinais Vitais</h3>
-                      <span className="text-xs text-gray-400 ml-auto">Última medição: 10/05/2026</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500">Freq. Cardíaca</p>
-                        <p className="text-xl font-bold text-gray-900">110 bpm</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Pressão Arterial</p>
-                        <p className="text-xl font-bold text-gray-900">130/80 mmHg</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Freq. Respiratória</p>
-                        <p className="text-xl font-bold text-gray-900">24 rpm</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Temperatura</p>
-                        <p className="text-xl font-bold text-gray-900">38.5 °C</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Peso</p>
-                        <p className="text-xl font-bold text-gray-900">{patient.weight || 25.4} kg</p>
-                      </div>
-                    </div>
+                    {(() => {
+                        const lastAttendance = mockDB.getAttendancesByPatientId(patient.id)
+                            .filter(a => a.vitals && Object.keys(a.vitals).length > 0)
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                            
+                        if (!lastAttendance || !lastAttendance.vitals) {
+                            return <p className="text-sm text-gray-500 italic">Nenhum registro de sinais vitais encontrado.</p>;
+                        }
+                        
+                        const v = lastAttendance.vitals;
+                        return (
+                            <>
+                                <span className="text-xs text-gray-400 block mb-3">Última medição: {lastAttendance.date}</span>
+                                <div className="grid grid-cols-2 gap-4">
+                                  {v.heartRate && (
+                                      <div>
+                                        <p className="text-xs text-gray-500">Freq. Cardíaca</p>
+                                        <p className="text-xl font-bold text-gray-900">{v.heartRate} bpm</p>
+                                      </div>
+                                  )}
+                                  {v.temperature && (
+                                      <div>
+                                        <p className="text-xs text-gray-500">Temperatura</p>
+                                        <p className="text-xl font-bold text-gray-900">{v.temperature} °C</p>
+                                      </div>
+                                  )}
+                                  {v.respiratoryRate && (
+                                      <div>
+                                        <p className="text-xs text-gray-500">Freq. Respiratória</p>
+                                        <p className="text-xl font-bold text-gray-900">{v.respiratoryRate} rpm</p>
+                                      </div>
+                                  )}
+                                  {v.weight && (
+                                      <div>
+                                        <p className="text-xs text-gray-500">Peso Medido</p>
+                                        <p className="text-xl font-bold text-gray-900">{v.weight} kg</p>
+                                      </div>
+                                  )}
+                                </div>
+                            </>
+                        );
+                    })()}
                   </div>
 
                   {/* Convênio */}
@@ -481,12 +512,24 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                       <Stethoscope className="h-5 w-5 text-[#00BFA5]" />
                       <h3 className="font-bold">Anamnese</h3>
                     </div>
-                    <p className="text-sm text-blue-100 leading-relaxed">
-                      Queixa Principal: Halitose intensa, relutância em mastigar.<br/>
-                      Histórico: Diagnosticado com doença periodontal estágio 2 há 6 meses.<br/>
-                      Alimentação: Ração seca.<br/>
-                      Comportamento: Apatia leve, sensibilidade oral.
-                    </p>
+                    {(() => {
+                        const lastAnamnesis = mockDB.getAttendancesByPatientId(patient.id)
+                            .filter(a => a.anamnesis)
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                            
+                        if (!lastAnamnesis) {
+                            return <p className="text-sm text-blue-200 italic">Nenhuma anamnese registrada recentemente.</p>;
+                        }
+                        
+                        return (
+                            <>
+                                <p className="text-xs text-blue-300 mb-2 border-b border-blue-800 pb-2">Registrada em: {lastAnamnesis.date}</p>
+                                <p className="text-sm text-blue-50 leading-relaxed whitespace-pre-wrap">
+                                  {lastAnamnesis.anamnesis}
+                                </p>
+                            </>
+                        );
+                    })()}
                   </div>
 
                   {/* Procedimentos Recentes */}
@@ -495,60 +538,83 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                       <FileText className="h-5 w-5 text-blue-600" />
                       <h3 className="font-bold text-gray-900">Procedimentos Recentes</h3>
                     </div>
-                    <div className="space-y-4">
-                      <div className="border-l-2 border-green-500 pl-3">
-                        <p className="text-xs text-gray-500">25/04/2026</p>
-                        <p className="font-medium text-gray-900">Consulta de Retorno</p>
-                        <span className="text-xs text-green-600 font-bold">Concluído</span>
-                        <p className="text-xs text-gray-400">(Dra. Ana Lima)</p>
-                      </div>
-                      <div className="border-l-2 border-yellow-500 pl-3">
-                        <p className="text-xs text-gray-500">10/04/2026</p>
-                        <p className="font-medium text-gray-900">Exame de Sangue</p>
-                        <span className="text-xs text-green-600 font-bold">Resultado Disponível</span>
-                      </div>
-                    </div>
-                    <Button variant="outline" className="w-full mt-4 text-xs h-8">Ver todos</Button>
+                    {(() => {
+                        const allProcedures = mockDB.getAttendancesByPatientId(patient.id)
+                            .flatMap(a => (a.procedures || []).map(p => ({...p, date: a.date, vet: a.vetId})))
+                            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                            .slice(0, 3); // Take last 3
+                            
+                        if (allProcedures.length === 0) {
+                            return <p className="text-sm text-gray-500 italic">Nenhum procedimento registrado ainda.</p>;
+                        }
+                        
+                        return (
+                            <div className="space-y-4">
+                              {allProcedures.map((proc, idx) => (
+                                  <div key={idx} className="border-l-2 border-blue-500 pl-3">
+                                    <p className="text-xs text-gray-500">{proc.date}</p>
+                                    <p className="font-medium text-gray-900">{proc.name}</p>
+                                    <p className="text-xs text-gray-400">({proc.vet || 'Dr. Vet'})</p>
+                                  </div>
+                              ))}
+                            </div>
+                        );
+                    })()}
+                    <Button variant="outline" className="w-full mt-4 text-xs h-8" onClick={() => setActiveTab('history')}>Ver histórico completo</Button>
                   </div>
 
-                  {/* Deuanto / Notas */}
+                  {/* Notas Clínicas Livres */}
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1">
                     <div className="flex items-center gap-2 mb-4">
                       <StickyNote className="h-5 w-5 text-yellow-500" />
                       <h3 className="font-bold text-gray-900">Notas Clínicas</h3>
                     </div>
-                    <p className="text-sm text-gray-600 italic">
-                      "Paciente apresentou melhora significativa após a medicação. Recomendo retorno em 15 dias para reavaliação da gengiva."
-                    </p>
+                    {patient.internalNotes ? (
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap bg-yellow-50 p-3 rounded border border-yellow-100">
+                          {patient.internalNotes}
+                        </p>
+                    ) : (
+                        <p className="text-sm text-gray-400 italic">Nenhuma nota interna registrada. (Edite a ficha para adicionar)</p>
+                    )}
                   </div>
 
-                  {/* Plano Terapêutico */}
+                  {/* Últimos Exames */}
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1">
                     <div className="flex items-center gap-2 mb-4">
-                      <Heart className="h-5 w-5 text-red-500" />
-                      <h3 className="font-bold text-gray-900">Plano Terapêutico</h3>
+                      <File className="h-5 w-5 text-teal-500" />
+                      <h3 className="font-bold text-gray-900">Últimos Exames Solicitados</h3>
                     </div>
-                    <p className="text-sm text-gray-600">
-                      <strong>Curto prazo:</strong> Profilaxia dental completa sob anestesia geral.<br/>
-                      <strong>Longo prazo:</strong> Escovação diária, dieta odontológica, acompanhamento trimestral.
-                    </p>
+                    {(() => {
+                        const allExams = mockDB.getAttendancesByPatientId(patient.id)
+                            .flatMap(a => (a.examRequests || []).map(e => ({...e, date: a.date})))
+                            .slice(0, 3); // Take last 3
+                            
+                        if (allExams.length === 0) {
+                            return <p className="text-sm text-gray-400 italic">Nenhum exame solicitado recentemente.</p>;
+                        }
+                        
+                        return (
+                            <div className="space-y-2">
+                                {allExams.map((exam, idx) => (
+                                    <div key={idx} className="flex items-center justify-between border-b border-gray-50 pb-2">
+                                        <p className="text-sm text-gray-800 font-medium">{exam.examName}</p>
+                                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{exam.date}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
                   </div>
 
                   {/* Anexos */}
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1">
                     <div className="flex items-center gap-2 mb-4">
                       <Paperclip className="h-5 w-5 text-gray-500" />
-                      <h3 className="font-bold text-gray-900">Anexos</h3>
+                      <h3 className="font-bold text-gray-900">Anexos Recentes</h3>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-gray-100 rounded p-2 flex flex-col items-center justify-center text-center">
-                        <File className="h-8 w-8 text-red-500 mb-1" />
-                        <span className="text-xs truncate w-full">Exame_Sangue.pdf</span>
-                      </div>
-                      <div className="bg-gray-100 rounded p-2 flex flex-col items-center justify-center text-center">
-                        <ImageIcon className="h-8 w-8 text-blue-500 mb-1" />
-                        <span className="text-xs truncate w-full">Raio-X_Caninos.jpg</span>
-                      </div>
+                    <div className="text-center py-4">
+                        <p className="text-sm text-gray-400 italic mb-2">Nenhum arquivo anexado.</p>
+                        <Button variant="outline" size="sm" className="text-xs" onClick={() => setActiveTab('files')}>Ir para Arquivos</Button>
                     </div>
                   </div>
                 </div>
