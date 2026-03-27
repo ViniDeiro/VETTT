@@ -32,7 +32,7 @@ export const PatientWizard: React.FC = () => {
     species: 'Canine',
     status: 'Alive',
     gender: 'M',
-    healthPlan: { name: '', number: '', expiryDate: '' }
+    healthPlan: ''
   });
   const [newOwnerData, setNewOwnerData] = useState<Partial<Owner>>({});
   const [newPropertyData, setNewPropertyData] = useState<Partial<Property>>({});
