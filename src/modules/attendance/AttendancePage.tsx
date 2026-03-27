@@ -521,7 +521,7 @@ export const AttendancePage: React.FC = () => {
                                         <div className="flex flex-wrap gap-2 mt-1">
                                             {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
                                                 <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200">
-                                                    Alergia: {selectedPatient.allergies.join(', ')}
+                                                    Alergia: {Array.isArray(selectedPatient.allergies) ? selectedPatient.allergies.join(', ') : selectedPatient.allergies}
                                                 </span>
                                             ) : (
                                                 <span className="text-xs text-gray-400 italic">Sem alergias registradas</span>
