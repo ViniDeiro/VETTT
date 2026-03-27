@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import { Select } from '../components/ui/Select'
 import { Modal } from '../components/ui/Modal'
-import { Plus, Search, Users, PawPrint } from 'lucide-react'
+import { Plus, Search, Users, PawPrint, Edit2 } from 'lucide-react'
 import ClientDetailsSidebar from '../components/ClientDetailsSidebar'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 import { cn } from '@/lib/utils'
@@ -47,7 +47,28 @@ export default function Clients() {
   const [selectedProperty, setSelectedProperty] = useState(null)
   
   // --- Property Registration Logic ---
-  const [newProperty, setNewProperty] = useState({})
+  const handleCepSearch = async (cep, type) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+            if (type === 'client' && selectedClient) {
+                setSelectedClient({
+                    ...selectedClient,
+                    street: data.logradouro,
+                    neighborhood: data.bairro,
+                    city: data.localidade,
+                    state: data.uf
+                });
+            }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar CEP:", error);
+      }
+    }
+  };
 
   const handleCreateProperty = () => {
     if (newProperty.name && newProperty.city && newProperty.state) {
@@ -374,7 +395,14 @@ export default function Clients() {
                       </div>
                       <div>
                           <Label>CEP</Label>
-                          <Input value={selectedClient.zipCode || ''} onChange={e => setSelectedClient({...selectedClient, zipCode: e.target.value})} />
+                          <Input 
+                              value={selectedClient.zipCode || ''} 
+                              onChange={e => {
+                                  const newCep = e.target.value;
+                                  setSelectedClient({...selectedClient, zipCode: newCep});
+                                  if(newCep.length >= 8) handleCepSearch(newCep, 'client');
+                              }} 
+                          />
                       </div>
                       <div className="md:col-span-2">
                           <Label>Rua/Avenida</Label>
