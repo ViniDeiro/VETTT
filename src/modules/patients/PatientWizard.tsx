@@ -403,7 +403,7 @@ export const PatientWizard: React.FC = () => {
                                 <span className="font-medium text-gray-700">Castrado?</span>
                             </label>
                             
-                            {patientData.gender === 'F' && !patientData.neutered && (
+                            {patientData.gender === 'F' && patientData.species !== 'Equine' && !patientData.neutered && (
                                 <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
                                     <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.pregnant ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300")}>
                                         {patientData.pregnant && <CheckCircle className="w-3.5 h-3.5" />}

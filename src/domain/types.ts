@@ -82,6 +82,8 @@ export interface Patient {
   healthPlan?: string; // Convênio
   healthPlanNumber?: string; // Carteirinha
   healthPlanExpiry?: string; // Validade da carteirinha
+  rg?: string; // RG Animal
+  microchip?: string; // Microchip
 }
 
 export type UnitType = 'ml' | 'un' | 'frasco' | 'g' | 'kg';

@@ -235,11 +235,27 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   <span className="font-medium">{patient.species || 'Canino'} {patient.breed && `- ${patient.breed}`}</span>
                 </div>
                 <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{patient.gender === 'M' ? 'Macho' : 'Fêmea'}</span>
-                  {patient.age && <span>, {patient.age} anos</span>}
-                </div>
-                {patient.weight && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{patient.gender === 'M' ? 'Macho' : 'Fêmea'}</span>
+                    {patient.age && <span>, {patient.age} anos</span>}
+                  </div>
+                  {patient.rg && (
+                    <>
+                      <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-blue-700">RG: {patient.rg}</span>
+                      </div>
+                    </>
+                  )}
+                  {patient.microchip && (
+                    <>
+                      <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-purple-700">Microchip: {patient.microchip}</span>
+                      </div>
+                    </>
+                  )}
+                  {patient.weight && (
                   <>
                     <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                     <div className="flex items-center gap-2">
@@ -714,10 +730,17 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                       {/* Property Contacts (Equine) */}
                       {patient.species === 'Equine' && (
                            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                    <Home className="h-5 w-5 text-orange-600" />
-                                    Dados da Propriedade
-                                </h3>
+                                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                    <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                        <Home className="h-5 w-5 text-orange-600" />
+                                        Dados da Propriedade
+                                    </h3>
+                                    {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
+                                        <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
+                                            <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
+                                        </Button>
+                                    )}
+                                </div>
                                 {(() => {
                                   const prop = properties.find(p => p.id === patient.propertyId);
                                   return prop ? (
@@ -728,11 +751,25 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                           </div>
                                           <div>
                                               <label className="text-xs text-gray-500 uppercase font-semibold">CNPJ / Inscrição</label>
-                                              <p className="font-medium text-gray-700">{prop.registrationNumber || '-'}</p>
+                                              <p className="font-medium text-gray-700">{prop.document || prop.registrationNumber || '-'}</p>
+                                          </div>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Telefone</label>
+                                              <div className="flex items-center gap-2">
+                                                  <p className="font-medium text-lg">{prop.phone || 'Não informado'}</p>
+                                              </div>
+                                          </div>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
+                                              <p className="font-medium text-gray-700">{prop.email || 'Não informado'}</p>
                                           </div>
                                           <div className="md:col-span-2">
                                               <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
-                                              <p className="font-medium text-gray-700">{prop.address} - {prop.city}/{prop.state}</p>
+                                              <p className="font-medium text-gray-700">
+                                                  {prop.address || prop.street} {prop.number && `, ${prop.number}`} {prop.neighborhood && `- ${prop.neighborhood}`}
+                                                  <br/>
+                                                  {prop.city && `${prop.city}/${prop.state}`} {prop.zipCode && `- CEP: ${prop.zipCode}`}
+                                              </p>
                                           </div>
                                       </div>
                                   ) : (
@@ -985,11 +1022,15 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                <input 
                                   type="checkbox"
                                   checked={editFormData.neutered || false}
-                                  onChange={e => setEditFormData({...editFormData, neutered: e.target.checked})}
+                                  disabled={patient.neutered} // If already neutered, cannot un-neuter
+                                  onChange={e => {
+                                      const isNeutered = e.target.checked;
+                                      setEditFormData({...editFormData, neutered: isNeutered, pregnant: isNeutered ? false : editFormData.pregnant})
+                                  }}
                                />
-                               <span className="text-sm font-medium">Castrado?</span>
+                               <span className={cn("text-sm font-medium", patient.neutered ? "text-gray-400" : "")}>Castrado?</span>
                            </label>
-                           {editFormData.gender === 'F' && (
+                           {editFormData.gender === 'F' && editFormData.species !== 'Equine' && !editFormData.neutered && (
                                <label className="flex items-center gap-2 cursor-pointer">
                                    <input 
                                       type="checkbox"
@@ -1000,6 +1041,30 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                </label>
                            )}
                        </div>
+                      <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
+                          <h4 className="text-sm font-bold text-gray-700 mb-2">Identificação Animal</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-sm font-medium">RG Animal</label>
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    placeholder="Ex: 12.345.678"
+                                    value={editFormData.rg || ''} 
+                                    onChange={e => setEditFormData({...editFormData, rg: e.target.value})} 
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-medium">Microchip</label>
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    placeholder="Ex: 982000000000000"
+                                    value={editFormData.microchip || ''} 
+                                    onChange={e => setEditFormData({...editFormData, microchip: e.target.value})} 
+                                  />
+                              </div>
+                          </div>
+                      </div>
+
                       <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
                           <h4 className="text-sm font-bold text-gray-700 mb-2">Comportamento</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
