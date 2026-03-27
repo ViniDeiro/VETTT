@@ -345,12 +345,78 @@ export default function Clients() {
         </Modal>
 
         {/* Other Modals (Placeholders for now) */}
-        <Modal isOpen={openOwnerModal} onClose={() => setOpenOwnerModal(false)} title="Alteração de Proprietário">
-            <p>Formulário de alteração...</p>
-        </Modal>
-        <Modal isOpen={openPropertyCreateModal} onClose={() => setOpenPropertyCreateModal(false)} title="Cadastro de Propriedade">
-            <p>Formulário de propriedade...</p>
-        </Modal>
+        <Modal isOpen={openOwnerModal} onClose={() => setOpenOwnerModal(false)} title="Editar Tutor" className="max-w-2xl">
+          {selectedClient && (
+              <div className="space-y-4 p-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                          <Label>Nome Completo *</Label>
+                          <Input value={selectedClient.name} onChange={e => setSelectedClient({...selectedClient, name: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>CPF/CNPJ</Label>
+                          <Input value={selectedClient.document || ''} onChange={e => setSelectedClient({...selectedClient, document: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Email</Label>
+                          <Input type="email" value={selectedClient.email || ''} onChange={e => setSelectedClient({...selectedClient, email: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Telefone Principal *</Label>
+                          <Input value={selectedClient.phone || ''} onChange={e => setSelectedClient({...selectedClient, phone: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Telefone Secundário</Label>
+                          <Input value={selectedClient.secondaryPhone || ''} onChange={e => setSelectedClient({...selectedClient, secondaryPhone: e.target.value})} />
+                      </div>
+                      <div className="md:col-span-2 border-t pt-4 mt-2">
+                          <h4 className="font-bold text-sm mb-2 text-gray-700">Endereço</h4>
+                      </div>
+                      <div>
+                          <Label>CEP</Label>
+                          <Input value={selectedClient.zipCode || ''} onChange={e => setSelectedClient({...selectedClient, zipCode: e.target.value})} />
+                      </div>
+                      <div className="md:col-span-2">
+                          <Label>Rua/Avenida</Label>
+                          <Input value={selectedClient.street || ''} onChange={e => setSelectedClient({...selectedClient, street: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Número</Label>
+                          <Input value={selectedClient.number || ''} onChange={e => setSelectedClient({...selectedClient, number: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Bairro</Label>
+                          <Input value={selectedClient.neighborhood || ''} onChange={e => setSelectedClient({...selectedClient, neighborhood: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Cidade</Label>
+                          <Input value={selectedClient.city || ''} onChange={e => setSelectedClient({...selectedClient, city: e.target.value})} />
+                      </div>
+                      <div>
+                          <Label>Estado (UF)</Label>
+                          <Input value={selectedClient.state || ''} onChange={e => setSelectedClient({...selectedClient, state: e.target.value})} />
+                      </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6 border-t pt-4">
+                      <Button variant="outline" onClick={() => setOpenOwnerModal(false)}>Cancelar</Button>
+                      <Button onClick={() => {
+                          const updated = {
+                              ...selectedClient,
+                              address: [selectedClient.street, selectedClient.number ? `nº ${selectedClient.number}` : '', selectedClient.neighborhood].filter(Boolean).join(', ')
+                          };
+                          mockDB.updateOwner(selectedClient.id, updated);
+                          setOwners(mockDB.getOwners());
+                          setOpenOwnerModal(false);
+                      }} className="bg-blue-600 text-white">Salvar Alterações</Button>
+                  </div>
+              </div>
+          )}
+      </Modal>
+        <Modal isOpen={openPropertyCreateModal} onClose={() => setOpenPropertyCreateModal(false)} title="Editar Propriedade" className="max-w-2xl">
+          <div className="space-y-4 p-2">
+              <p className="text-gray-500 italic text-sm">O gerenciamento completo de propriedades será liberado em breve no módulo Rural/Equinos.</p>
+          </div>
+      </Modal>
         
         {/* PATIENT DETAILS MODAL */}
         <PatientDetailsModal 
@@ -451,7 +517,10 @@ export default function Clients() {
           <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-lg p-6 transform transition-transform z-50 overflow-y-auto">
               <div className="flex justify-between mb-4">
                   <h2 className="font-bold text-xl">{selectedClient.name}</h2>
-                  <button onClick={() => setSelectedClient(null)}>X</button>
+                  <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setOpenOwnerModal(true)} className="text-blue-600 p-1 h-auto"><Edit2 className="w-4 h-4"/></Button>
+                      <button onClick={() => setSelectedClient(null)}>X</button>
+                  </div>
               </div>
               <div className="space-y-2 text-sm text-gray-600 mb-6">
                   <p><strong>CPF/CNPJ:</strong> {selectedClient.document || 'Não informado'}</p>

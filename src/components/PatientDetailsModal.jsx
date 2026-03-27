@@ -83,36 +83,44 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
   };
 
   const handleSaveEdit = () => {
-      // Save Patient
-      const { ownerData, propertyData, ...patientUpdates } = editFormData;
-      mockDB.updatePatient(patient.id, patientUpdates);
-      
-      // Save Owner
-      if (patient.ownerId && ownerData) {
-          mockDB.updateOwner(patient.ownerId, ownerData);
-      }
+    // Save Patient
+    const { ownerData, propertyData, ...patientUpdates } = editFormData;
+    
+    // Convert allergies/chronicDiseases back to array if they are strings
+    if (typeof patientUpdates.allergies === 'string') {
+        patientUpdates.allergies = patientUpdates.allergies.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (typeof patientUpdates.chronicDiseases === 'string') {
+        patientUpdates.chronicDiseases = patientUpdates.chronicDiseases.split(',').map(s => s.trim()).filter(Boolean);
+    }
 
-      // Save Property
-      if (patient.propertyId && propertyData && patient.species === 'Equine') {
-          mockDB.updateProperty(patient.propertyId, propertyData);
-      }
+    mockDB.updatePatient(patient.id, patientUpdates);
+    
+    // Save Owner
+    if (patient.ownerId && ownerData) {
+        mockDB.updateOwner(patient.ownerId, ownerData);
+    }
 
-      // Update local 'patient' prop reference for immediate UI feedback (React won't re-render parent automatically here without callback)
-      Object.assign(patient, patientUpdates);
-      if(ownerData) patient.ownerName = ownerData.name; // Sync name
+    // Save Property
+    if (patient.propertyId && propertyData && patient.species === 'Equine') {
+        mockDB.updateProperty(patient.propertyId, propertyData);
+    }
 
-      setIsEditing(false);
-      alert('Dados atualizados com sucesso!');
+    // Update local 'patient' prop reference for immediate UI feedback (React won't re-render parent automatically here without callback)
+    Object.assign(patient, patientUpdates);
+    if(ownerData) patient.ownerName = ownerData.name; // Sync name
+
+    setIsEditing(false);
+    alert('Dados atualizados com sucesso!');
   };
 
   if (!patient) return null
 
   const handleSaveOwnerChange = () => {
       if (newOwner) {
-          // In a real app, we would call an API to update the patient
-          // For now, we simulate updating the local patient object (which is a prop, so this is a bit hacky but works for UI feedback in this session)
           patient.ownerId = newOwner.id;
           patient.ownerName = newOwner.name;
+          mockDB.updatePatient(patient.id, { ownerId: newOwner.id, ownerName: newOwner.name });
           alert(`Tutor alterado para: ${newOwner.name}`);
           setIsChangingOwner(false);
           setNewOwner(null);
@@ -122,7 +130,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
   const handleSavePropertyChange = () => {
       if (newProperty) {
           patient.propertyId = newProperty.id;
-          // Assuming patient object has propertyName or we just rely on ID in backend
+          mockDB.updatePatient(patient.id, { propertyId: newProperty.id });
           alert(`Propriedade alterada para: ${newProperty.name}`);
           setIsChangingProperty(false);
           setNewProperty(null);
@@ -212,15 +220,51 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                 <h2 className="text-3xl font-bold text-gray-900">{patient.name}</h2>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Clock className="h-4 w-4" />
-                  <span>Próxima Consulta: 15/11/2026 - 10:30</span>
+                  {(() => {
+                      const nextAppt = mockDB.appointments.find(a => a.patientId === patient.id && new Date(a.start) > new Date());
+                      if (nextAppt) {
+                          return <span>Próxima Consulta: {new Date(nextAppt.start).toLocaleString('pt-BR')}</span>;
+                      }
+                      return <span className="italic">Sem consultas futuras</span>;
+                  })()}
                 </div>
               </div>
               
               <div className="flex items-center gap-4 text-gray-600 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{patient.species || 'Canino'}</span>
+                  <span className="font-medium">{patient.species || 'Canino'} {patient.breed && `- ${patient.breed}`}</span>
                 </div>
                 <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{patient.gender === 'M' ? 'Macho' : 'Fêmea'}</span>
+                  {patient.age && <span>, {patient.age} anos</span>}
+                </div>
+                {patient.weight && (
+                  <>
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{patient.weight} kg</span>
+                    </div>
+                  </>
+                )}
+                {patient.coat && (
+                  <>
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Pelagem: {patient.coat}</span>
+                    </div>
+                  </>
+                )}
+                {patient.temperament && (
+                  <>
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-orange-600">Comportamento: {patient.temperament}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-4 text-gray-600 flex-wrap mt-1">
                 <div className="flex items-center gap-2 group relative">
                   <User className="h-4 w-4" />
                   <span>Tutor: {patient.ownerName || 'Ana Souza'}</span>
@@ -303,6 +347,11 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                         Castrado
                     </span>
                 )}
+                {patient.pregnant && (
+                     <span className="bg-pink-50 text-pink-700 px-3 py-1 rounded-full text-xs font-bold border border-pink-200">
+                        Prenha
+                    </span>
+                )}
               </div>
             </div>
           </div>
@@ -341,6 +390,36 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
             <div className="flex-1 overflow-y-auto p-6">
               {activeTab === 'overview' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Observações Gerais */}
+                  {(patient.notes || (patient.chronicDiseases && patient.chronicDiseases.length > 0)) && (
+                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1 md:col-span-2 lg:col-span-3">
+                      <div className="flex items-center gap-2 mb-4">
+                        <FileText className="h-5 w-5 text-purple-600" />
+                        <h3 className="font-bold text-gray-900">Observações e Histórico Clínico</h3>
+                      </div>
+                      
+                      {patient.chronicDiseases && patient.chronicDiseases.length > 0 && (
+                          <div className="mb-4">
+                              <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Doenças Crônicas</p>
+                              <div className="flex flex-wrap gap-2">
+                                  {patient.chronicDiseases.map((disease, idx) => (
+                                      <span key={idx} className="bg-red-50 text-red-700 px-2 py-1 rounded text-sm border border-red-100">
+                                          {disease}
+                                      </span>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+                      
+                      {patient.notes && (
+                          <div>
+                              <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Observações Gerais</p>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{patient.notes}</p>
+                          </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Sinais Vitais */}
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 col-span-1">
                     <div className="flex items-center gap-2 mb-4">
@@ -835,7 +914,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                             onChange={e => setEditFormData({...editFormData, coat: e.target.value, color: e.target.value})} 
                           />
                       </div>
-                       <div className="flex items-center pt-6">
+                       <div className="flex items-center pt-6 gap-4">
                            <label className="flex items-center gap-2 cursor-pointer">
                                <input 
                                   type="checkbox"
@@ -844,6 +923,30 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                />
                                <span className="text-sm font-medium">Castrado?</span>
                            </label>
+                           {editFormData.gender === 'F' && (
+                               <label className="flex items-center gap-2 cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={editFormData.pregnant || false}
+                                      onChange={e => setEditFormData({...editFormData, pregnant: e.target.checked})}
+                                   />
+                                   <span className="text-sm font-medium">Prenha?</span>
+                               </label>
+                           )}
+                       </div>
+                      <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
+                          <h4 className="text-sm font-bold text-gray-700 mb-2">Comportamento</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-sm font-medium">Temperamento</label>
+                                  <input 
+                                    className="w-full border rounded p-2"
+                                    placeholder="Ex: Dócil, Agressivo, Assustado"
+                                    value={editFormData.temperament || ''} 
+                                    onChange={e => setEditFormData({...editFormData, temperament: e.target.value})} 
+                                  />
+                              </div>
+                          </div>
                       </div>
                       
                       <div className="col-span-2 md:col-span-4 border-t pt-4 mt-2">
@@ -963,6 +1066,14 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                             onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, address: e.target.value}})} 
                           />
                       </div>
+                      <div>
+                          <label className="text-sm font-medium">Telefone Secundário</label>
+                          <input 
+                            className="w-full border rounded p-2"
+                            value={editFormData.ownerData?.secondaryPhone || ''} 
+                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, secondaryPhone: e.target.value}})} 
+                          />
+                      </div>
                   </div>
               </div>
 
@@ -983,8 +1094,24 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                               <label className="text-sm font-medium">CNPJ/Inscrição</label>
                               <input 
                                 className="w-full border rounded p-2"
-                                value={editFormData.propertyData?.registrationNumber || ''} 
-                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, registrationNumber: e.target.value}})} 
+                                value={editFormData.propertyData?.document || editFormData.propertyData?.registrationNumber || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, document: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Telefone da Propriedade</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.phone || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, phone: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Email da Propriedade</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.email || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, email: e.target.value}})} 
                               />
                           </div>
                           <div className="md:col-span-2">
