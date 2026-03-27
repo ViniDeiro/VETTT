@@ -478,20 +478,30 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   <div className="space-y-6">
                       {/* Tutor Contacts */}
                       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                              <User className="h-5 w-5 text-blue-600" />
-                              Contatos do Tutor
-                          </h3>
+                          <div className="flex justify-between items-center mb-4 border-b pb-2">
+                              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                  <User className="h-5 w-5 text-blue-600" />
+                                  Contatos do Tutor
+                              </h3>
+                              {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
+                                  <Button variant="outline" size="sm" onClick={() => setIsChangingOwner(true)} className="text-xs">
+                                      <Edit2 className="h-3 w-3 mr-1" /> Alterar Tutor
+                                  </Button>
+                              )}
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div>
                                   <label className="text-xs text-gray-500 uppercase font-semibold">Nome Completo</label>
                                   <p className="font-medium text-lg">{patient.ownerName}</p>
                               </div>
-                              {/* We need owner object, find it from owners array or use what we have */}
                               {(() => {
                                   const owner = owners.find(o => o.id === patient.ownerId);
                                   return owner ? (
                                       <>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">CPF/CNPJ</label>
+                                              <p className="font-medium text-gray-700">{owner.document || 'Não informado'}</p>
+                                          </div>
                                           <div>
                                               <label className="text-xs text-gray-500 uppercase font-semibold">Telefone Principal</label>
                                               <div className="flex items-center gap-2">
@@ -500,20 +510,61 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                                               </div>
                                           </div>
                                           <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
-                                              <p className="font-medium text-gray-700">{owner.email}</p>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Telefone Secundário</label>
+                                              <p className="font-medium text-gray-700">{owner.secondaryPhone || 'Não informado'}</p>
                                           </div>
                                           <div className="md:col-span-2">
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço</label>
-                                              <p className="font-medium text-gray-700">{owner.address} {owner.city && `- ${owner.city}/${owner.state}`}</p>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
+                                              <p className="font-medium text-gray-700">{owner.email || 'Não informado'}</p>
                                           </div>
-                                      </>
-                                  ) : (
-                                      <p className="text-red-500">Dados do tutor não encontrados.</p>
-                                  )
-                              })()}
-                          </div>
-                      </div>
+                                          <div className="md:col-span-2">
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
+                                              <p className="font-medium text-gray-700">
+                                                  {owner.address || owner.street} {owner.number && `, ${owner.number}`} {owner.neighborhood && `- ${owner.neighborhood}`}
+                                                  <br/>
+                                                  {owner.city && `${owner.city}/${owner.state}`} {owner.zipCode && `- CEP: ${owner.zipCode}`}
+                                              </p>
+                                          </div>
+                                       </>
+                                   ) : (
+                                       <p className="text-red-500">Dados do tutor não encontrados.</p>
+                                   )
+                               })()}
+                           </div>
+                       </div>
+
+                       {/* Convênio no Contatos */}
+                       {patient.healthPlan && (
+                           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                               <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                                   <Heart className="h-5 w-5 text-pink-500" />
+                                   Dados do Convênio / Plano de Saúde
+                               </h3>
+                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                   <div>
+                                       <label className="text-xs text-gray-500 uppercase font-semibold">Nome do Plano</label>
+                                       <p className="font-medium text-gray-900">{patient.healthPlan}</p>
+                                   </div>
+                                   <div>
+                                       <label className="text-xs text-gray-500 uppercase font-semibold">Carteirinha</label>
+                                       <p className="font-medium text-gray-900">{patient.healthPlanNumber || 'N/A'}</p>
+                                   </div>
+                                   <div>
+                                       <label className="text-xs text-gray-500 uppercase font-semibold">Vencimento</label>
+                                       {(() => {
+                                           if (!patient.healthPlanExpiry) return <p className="font-medium text-gray-700">N/A</p>;
+                                           const isExpired = new Date(patient.healthPlanExpiry) < new Date();
+                                           return (
+                                               <p className={cn("font-medium", isExpired ? "text-red-600 font-bold" : "text-green-600")}>
+                                                   {new Date(patient.healthPlanExpiry).toLocaleDateString('pt-BR')}
+                                                   {isExpired && ' (Vencida)'}
+                                               </p>
+                                           );
+                                       })()}
+                                   </div>
+                               </div>
+                           </div>
+                       )}
 
                       {/* Property Contacts (Equine) */}
                       {patient.species === 'Equine' && (
