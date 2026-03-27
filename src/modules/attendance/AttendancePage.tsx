@@ -259,6 +259,11 @@ export const AttendancePage: React.FC = () => {
             // Update local state to reflect the new weight immediately
             setSelectedPatient({ ...selectedPatient, weight: vitals.weight });
         }
+        
+        // Update patient anesthetic risk if recorded in vitals
+        if (vitals.anestheticRisk && selectedPatient) {
+            mockDB.updatePatient(selectedPatient.id, { anestheticRisk: vitals.anestheticRisk });
+        }
 
         // Also update the local state record of the attendance directly so the UI sees it immediately
         mockDB.updateAttendance(currentAttendance.id, {
@@ -717,6 +722,20 @@ export const AttendancePage: React.FC = () => {
                                         value={vitals.tpc || ''}
                                         onChange={e => setVitals({...vitals, tpc: Number(e.target.value)})}
                                     />
+                                </div>
+                                <div>
+                                    <Label>Risco Anestésico</Label>
+                                    <Select 
+                                        value={vitals.anestheticRisk || ''}
+                                        onChange={e => setVitals({...vitals, anestheticRisk: e.target.value as any})}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        <option value="I - Baixo">Grau I - Baixo Risco</option>
+                                        <option value="II - Moderado">Grau II - Risco Moderado</option>
+                                        <option value="III - Alto">Grau III - Alto Risco</option>
+                                        <option value="IV - Muito Alto">Grau IV - Risco Muito Alto</option>
+                                        <option value="V - Extremo">Grau V - Risco Extremo</option>
+                                    </Select>
                                 </div>
                             </div>
 
