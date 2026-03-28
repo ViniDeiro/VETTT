@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { EmailInput } from '../../components/ui/EmailInput';
 import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -751,7 +752,7 @@ export const PatientWizard: React.FC = () => {
                         </div>
                         <div>
                              <Label>E-mail</Label>
-                             <Input 
+                             <EmailInput 
                                 value={newOwnerData.email || ''}
                                 onChange={e => setNewOwnerData({...newOwnerData, email: e.target.value})}
                                 placeholder="email@exemplo.com"
@@ -945,10 +946,10 @@ export const PatientWizard: React.FC = () => {
                         </div>
                         <div>
                              <Label>E-mail</Label>
-                             <Input 
+                             <EmailInput 
                                 value={newPropertyData.email || ''}
                                 onChange={e => setNewPropertyData({...newPropertyData, email: e.target.value})}
-                                type="email"
+                                placeholder="email@exemplo.com"
                               />
                         </div>
                     </div>

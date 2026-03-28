@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Autocomplete } from '../shared/Autocomplete'
+import { EmailInput } from './ui/EmailInput'
 import { mockDB } from '../services/mockDatabase'
 import { getBreedsBySpecies } from '../domain/breeds'
 import { 
@@ -260,6 +261,16 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                     <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{patient.weight} kg</span>
+                    </div>
+                  </>
+                )}
+                {patient.size && (
+                  <>
+                    <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                          Porte: {patient.size === 'Small' ? 'Pequeno' : patient.size === 'Medium' ? 'Médio' : 'Grande'}
+                      </span>
                     </div>
                   </>
                 )}
@@ -1212,13 +1223,13 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                           />
                       </div>
                       <div>
-                          <label className="text-sm font-medium">Email</label>
-                          <input 
-                            className="w-full border rounded p-2"
-                            value={editFormData.ownerData?.email || ''} 
-                            onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, email: e.target.value}})} 
-                          />
-                      </div>
+                              <label className="text-sm font-medium">Email</label>
+                              <EmailInput 
+                                className="w-full border rounded p-2"
+                                value={editFormData.ownerData?.email || ''} 
+                                onChange={e => setEditFormData({...editFormData, ownerData: {...editFormData.ownerData, email: e.target.value}})} 
+                              />
+                          </div>
                       <div className="md:col-span-2">
                           <label className="text-sm font-medium">Endereço Completo</label>
                           <input 
@@ -1553,13 +1564,54 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input 
                       className="border rounded p-2" 
-                      placeholder="Nome Completo"
+                      placeholder="Nome Completo *"
                       onChange={e => setNewOwner(prev => ({...prev, name: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
-                      placeholder="Telefone"
+                      placeholder="CPF/Documento"
+                      onChange={e => setNewOwner(prev => ({...prev, document: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Telefone *"
                       onChange={e => setNewOwner(prev => ({...prev, phone: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Email"
+                      onChange={e => setNewOwner(prev => ({...prev, email: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="CEP"
+                      onChange={e => setNewOwner(prev => ({...prev, zipCode: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Endereço / Rua"
+                      onChange={e => setNewOwner(prev => ({...prev, address: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Número e Complemento"
+                      onChange={e => setNewOwner(prev => ({...prev, number: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Bairro"
+                      onChange={e => setNewOwner(prev => ({...prev, neighborhood: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Cidade"
+                      onChange={e => setNewOwner(prev => ({...prev, city: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Estado (UF)"
+                      maxLength={2}
+                      onChange={e => setNewOwner(prev => ({...prev, state: e.target.value, isNew: true}))}
                   />
               </div>
 
@@ -1613,18 +1665,53 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input 
-                      className="border rounded p-2 md:col-span-2" 
-                      placeholder="Nome da Propriedade"
+                      className="border rounded p-2" 
+                      placeholder="Nome da Propriedade *"
                       onChange={e => setNewProperty(prev => ({...prev, name: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
-                      placeholder="Cidade"
+                      placeholder="CNPJ/Inscrição"
+                      onChange={e => setNewProperty(prev => ({...prev, document: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Telefone"
+                      onChange={e => setNewProperty(prev => ({...prev, phone: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Email"
+                      onChange={e => setNewProperty(prev => ({...prev, email: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="CEP"
+                      onChange={e => setNewProperty(prev => ({...prev, zipCode: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Endereço / Rua"
+                      onChange={e => setNewProperty(prev => ({...prev, address: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Número e Complemento"
+                      onChange={e => setNewProperty(prev => ({...prev, number: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Bairro"
+                      onChange={e => setNewProperty(prev => ({...prev, neighborhood: e.target.value, isNew: true}))}
+                  />
+                  <input 
+                      className="border rounded p-2" 
+                      placeholder="Cidade *"
                       onChange={e => setNewProperty(prev => ({...prev, city: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
-                      placeholder="Estado (UF)"
+                      placeholder="Estado (UF) *"
                       maxLength={2}
                       onChange={e => setNewProperty(prev => ({...prev, state: e.target.value, isNew: true}))}
                   />

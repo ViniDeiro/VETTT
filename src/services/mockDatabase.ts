@@ -175,6 +175,11 @@ class MockDatabaseService {
   }
 
   deletePatient(id: string) {
+    // 1. Delete attendances linked to this patient
+    this.attendances = this.attendances.filter(a => a.patientId !== id);
+    this.save('vet_attendances', this.attendances);
+
+    // 2. Delete patient
     this.patients = this.patients.filter(p => p.id !== id);
     this.save('vet_patients', this.patients);
   }
@@ -190,10 +195,18 @@ class MockDatabaseService {
   }
 
   deleteOwner(id: string) {
+    // Cascade delete
+    // 1. Get all patients of this owner
+    const ownerPatients = this.patients.filter(p => p.ownerId === id);
+    
+    // 2. For each patient, delete attendances and the patient itself
+    ownerPatients.forEach(patient => {
+        this.deletePatient(patient.id);
+    });
+
+    // 3. Delete the owner
     this.owners = this.owners.filter(o => o.id !== id);
     this.save('vet_owners', this.owners);
-    // Optional: cascade delete or un-link patients
-    // this.patients.filter(p => p.ownerId === id).forEach(p => this.deletePatient(p.id));
   }
   
   updateProperty(id: string, updates: Partial<Property>) {
