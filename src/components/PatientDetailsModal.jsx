@@ -6,6 +6,7 @@ import { Autocomplete } from '../shared/Autocomplete'
 import { EmailInput } from './ui/EmailInput'
 import { mockDB } from '../services/mockDatabase'
 import { getBreedsBySpecies } from '../domain/breeds'
+import { formatPhone, formatDocument, formatCEP } from '../lib/formatters'
 import { 
   Heart, 
   Activity, 
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function PatientDetailsModal({ isOpen, onClose, patient }) {
+export default function PatientDetailsModal({ isOpen, onClose, patient, onPatientUpdated }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview')
   const [isChangingOwner, setIsChangingOwner] = useState(false)
@@ -45,6 +46,41 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
   
   // Edit Form State
   const [editFormData, setEditFormData] = useState({})
+
+  const handleCepSearch = async (cep, type) => {
+    const cleanCep = (cep || '').replace(/\D/g, '')
+    if (cleanCep.length !== 8) return
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+      const data = await response.json()
+      if (data.erro) return
+
+      if (type === 'owner') {
+        setNewOwner(prev => ({
+          ...(prev || {}),
+          street: data.logradouro || '',
+          address: data.logradouro || '',
+          neighborhood: data.bairro || '',
+          city: data.localidade || '',
+          state: data.uf || '',
+          isNew: true
+        }))
+      } else {
+        setNewProperty(prev => ({
+          ...(prev || {}),
+          street: data.logradouro || '',
+          address: data.logradouro || '',
+          neighborhood: data.bairro || '',
+          city: data.localidade || '',
+          state: data.uf || '',
+          isNew: true
+        }))
+      }
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -122,6 +158,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
           patient.ownerId = newOwner.id;
           patient.ownerName = newOwner.name;
           mockDB.updatePatient(patient.id, { ownerId: newOwner.id, ownerName: newOwner.name });
+          onPatientUpdated?.({ ...patient, ownerId: newOwner.id, ownerName: newOwner.name });
           alert(`Tutor alterado para: ${newOwner.name}`);
           setIsChangingOwner(false);
           setNewOwner(null);
@@ -132,6 +169,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
       if (newProperty) {
           patient.propertyId = newProperty.id;
           mockDB.updatePatient(patient.id, { propertyId: newProperty.id });
+          onPatientUpdated?.({ ...patient, propertyId: newProperty.id });
           alert(`Propriedade alterada para: ${newProperty.name}`);
           setIsChangingProperty(false);
           setNewProperty(null);
@@ -244,7 +282,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                     <>
                       <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-blue-700">RG: {patient.rg}</span>
+                        <span className="font-medium text-blue-700">RGA: {patient.rg}</span>
                       </div>
                     </>
                   )}
@@ -1101,7 +1139,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                           <h4 className="text-sm font-bold text-gray-700 mb-2">Identificação Animal</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                  <label className="text-sm font-medium">RG Animal</label>
+                                  <label className="text-sm font-medium">RGA</label>
                                   <input 
                                     className="w-full border rounded p-2"
                                     placeholder="Ex: 12.345.678"
@@ -1565,53 +1603,67 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   <input 
                       className="border rounded p-2" 
                       placeholder="Nome Completo *"
+                      value={newOwner?.name || ''}
                       onChange={e => setNewOwner(prev => ({...prev, name: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="CPF/Documento"
-                      onChange={e => setNewOwner(prev => ({...prev, document: e.target.value, isNew: true}))}
+                      value={newOwner?.document || ''}
+                      onChange={e => setNewOwner(prev => ({...prev, document: formatDocument(e.target.value), isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Telefone *"
-                      onChange={e => setNewOwner(prev => ({...prev, phone: e.target.value, isNew: true}))}
+                      value={newOwner?.phone || ''}
+                      onChange={e => setNewOwner(prev => ({...prev, phone: formatPhone(e.target.value), isNew: true}))}
                   />
-                  <input 
-                      className="border rounded p-2" 
+                  <EmailInput
+                      className="border rounded p-2"
                       placeholder="Email"
+                      value={newOwner?.email || ''}
                       onChange={e => setNewOwner(prev => ({...prev, email: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="CEP"
-                      onChange={e => setNewOwner(prev => ({...prev, zipCode: e.target.value, isNew: true}))}
+                      value={newOwner?.zipCode || ''}
+                      onChange={e => {
+                        const val = formatCEP(e.target.value)
+                        setNewOwner(prev => ({...prev, zipCode: val, isNew: true}))
+                        if (val.replace(/\D/g, '').length === 8) handleCepSearch(val, 'owner')
+                      }}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Endereço / Rua"
-                      onChange={e => setNewOwner(prev => ({...prev, address: e.target.value, isNew: true}))}
+                      value={newOwner?.street || newOwner?.address || ''}
+                      onChange={e => setNewOwner(prev => ({...prev, street: e.target.value, address: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Número e Complemento"
+                      value={newOwner?.number || ''}
                       onChange={e => setNewOwner(prev => ({...prev, number: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Bairro"
+                      value={newOwner?.neighborhood || ''}
                       onChange={e => setNewOwner(prev => ({...prev, neighborhood: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Cidade"
+                      value={newOwner?.city || ''}
                       onChange={e => setNewOwner(prev => ({...prev, city: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Estado (UF)"
                       maxLength={2}
-                      onChange={e => setNewOwner(prev => ({...prev, state: e.target.value, isNew: true}))}
+                      value={newOwner?.state || ''}
+                      onChange={e => setNewOwner(prev => ({...prev, state: e.target.value.toUpperCase(), isNew: true}))}
                   />
               </div>
 
@@ -1623,12 +1675,15 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                               alert('Preencha nome e telefone do novo tutor.');
                               return;
                           }
-                          const created = mockDB.createOwner(newOwner);
+                          const finalAddress = [newOwner.street || newOwner.address, newOwner.number ? `nº ${newOwner.number}` : '', newOwner.neighborhood].filter(Boolean).join(', ')
+                          const created = mockDB.createOwner({ ...newOwner, address: finalAddress || newOwner.address || '' });
                           setOwners(mockDB.getOwners());
                           setNewOwner(created);
                           
                           patient.ownerId = created.id;
                           patient.ownerName = created.name;
+                          mockDB.updatePatient(patient.id, { ownerId: created.id, ownerName: created.name });
+                          onPatientUpdated?.({ ...patient, ownerId: created.id, ownerName: created.name });
                           alert(`Tutor cadastrado e alterado para: ${created.name}`);
                       } else {
                           handleSaveOwnerChange();
@@ -1667,53 +1722,80 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                   <input 
                       className="border rounded p-2" 
                       placeholder="Nome da Propriedade *"
+                      value={newProperty?.name || ''}
                       onChange={e => setNewProperty(prev => ({...prev, name: e.target.value, isNew: true}))}
                   />
+                  <select
+                      className="border rounded p-2"
+                      value={newProperty?.type || ''}
+                      onChange={e => setNewProperty(prev => ({...prev, type: e.target.value, isNew: true}))}
+                  >
+                      <option value="">Tipo de Propriedade</option>
+                      <option value="Haras">Haras</option>
+                      <option value="Fazenda">Fazenda</option>
+                      <option value="Sítio">Sítio</option>
+                      <option value="Hípica">Hípica</option>
+                      <option value="Centro de Treinamento">Centro de Treinamento</option>
+                      <option value="Outro">Outro</option>
+                  </select>
                   <input 
                       className="border rounded p-2" 
                       placeholder="CNPJ/Inscrição"
-                      onChange={e => setNewProperty(prev => ({...prev, document: e.target.value, isNew: true}))}
+                      value={newProperty?.document || ''}
+                      onChange={e => setNewProperty(prev => ({...prev, document: formatDocument(e.target.value), isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Telefone"
-                      onChange={e => setNewProperty(prev => ({...prev, phone: e.target.value, isNew: true}))}
+                      value={newProperty?.phone || ''}
+                      onChange={e => setNewProperty(prev => ({...prev, phone: formatPhone(e.target.value), isNew: true}))}
                   />
-                  <input 
-                      className="border rounded p-2" 
+                  <EmailInput
+                      className="border rounded p-2"
                       placeholder="Email"
+                      value={newProperty?.email || ''}
                       onChange={e => setNewProperty(prev => ({...prev, email: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="CEP"
-                      onChange={e => setNewProperty(prev => ({...prev, zipCode: e.target.value, isNew: true}))}
+                      value={newProperty?.zipCode || ''}
+                      onChange={e => {
+                        const val = formatCEP(e.target.value)
+                        setNewProperty(prev => ({...prev, zipCode: val, isNew: true}))
+                        if (val.replace(/\D/g, '').length === 8) handleCepSearch(val, 'property')
+                      }}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Endereço / Rua"
-                      onChange={e => setNewProperty(prev => ({...prev, address: e.target.value, isNew: true}))}
+                      value={newProperty?.street || newProperty?.address || ''}
+                      onChange={e => setNewProperty(prev => ({...prev, street: e.target.value, address: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Número e Complemento"
+                      value={newProperty?.number || ''}
                       onChange={e => setNewProperty(prev => ({...prev, number: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Bairro"
+                      value={newProperty?.neighborhood || ''}
                       onChange={e => setNewProperty(prev => ({...prev, neighborhood: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Cidade *"
+                      value={newProperty?.city || ''}
                       onChange={e => setNewProperty(prev => ({...prev, city: e.target.value, isNew: true}))}
                   />
                   <input 
                       className="border rounded p-2" 
                       placeholder="Estado (UF) *"
                       maxLength={2}
-                      onChange={e => setNewProperty(prev => ({...prev, state: e.target.value, isNew: true}))}
+                      value={newProperty?.state || ''}
+                      onChange={e => setNewProperty(prev => ({...prev, state: e.target.value.toUpperCase(), isNew: true}))}
                   />
               </div>
 
@@ -1725,11 +1807,14 @@ export default function PatientDetailsModal({ isOpen, onClose, patient }) {
                               alert('Preencha nome, cidade e estado da nova propriedade.');
                               return;
                           }
-                          const created = mockDB.createProperty(newProperty);
+                          const finalAddress = [newProperty.street || newProperty.address, newProperty.number ? `nº ${newProperty.number}` : '', newProperty.neighborhood].filter(Boolean).join(', ')
+                          const created = mockDB.createProperty({ ...newProperty, address: finalAddress || newProperty.address || '' });
                           setProperties(mockDB.getAllProperties());
                           setNewProperty(created);
                           
                           patient.propertyId = created.id;
+                          mockDB.updatePatient(patient.id, { propertyId: created.id });
+                          onPatientUpdated?.({ ...patient, propertyId: created.id });
                           alert(`Propriedade cadastrada e alterada para: ${created.name}`);
                       } else {
                           handleSavePropertyChange();

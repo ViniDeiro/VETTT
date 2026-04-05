@@ -17,24 +17,26 @@ import {
   FileText,
   MessageCircle,
   Calendar as CalendarIcon,
-  CheckCircle,
-  Menu,
-  X
+  CheckCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
+import PatientDetailsModal from '../components/PatientDetailsModal'
 
 export default function Agenda() {
   const [view, setView] = useState('Semana') // Hoje, Semana, Mês
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [appointments, setAppointments] = useState([]) // Initialize empty, load from DB
   const [selectedAppointment, setSelectedAppointment] = useState(null)
+  const [selectedPatient, setSelectedPatient] = useState(null)
   
-  // Drawer state for mobile/tablet details
+  // Appointment details modal
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
 
   // Autocomplete Data
   const [patients, setPatients] = useState([])
+  const [owners, setOwners] = useState([])
+  const [properties, setProperties] = useState([])
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -50,19 +52,61 @@ export default function Agenda() {
     notes: ''
   })
 
+  const buildAppointmentDetails = (appointment, sources = {}) => {
+    const patientsList = sources.patients || patients
+    const ownersList = sources.owners || owners
+    const propertiesList = sources.properties || properties
+
+    const patientData = patientsList.find(p => p.id === appointment.patientId) || null
+    const ownerData = patientData ? ownersList.find(o => o.id === patientData.ownerId) || null : null
+    const propertyData = patientData?.propertyId
+      ? propertiesList.find(p => p.id === patientData.propertyId) || null
+      : null
+
+    return {
+      ...appointment,
+      patient: appointment.patient || appointment.patientName || patientData?.name || 'Paciente',
+      type: appointment.type || patientData?.species || 'Canino',
+      ownerName: ownerData?.name || appointment.ownerName || 'Não informado',
+      ownerData,
+      propertyData,
+      patientData: patientData
+        ? {
+            ...patientData,
+            ownerName: ownerData?.name || 'Não informado',
+            ownerData: ownerData || {},
+            propertyData: propertyData || {}
+          }
+        : null
+    }
+  }
+
+  const handleAppointmentClick = (appointment) => {
+    const enriched = buildAppointmentDetails(appointment)
+    setSelectedAppointment(enriched)
+    setIsDetailsOpen(true)
+  }
+
   useEffect(() => {
     // Load from mockDB on mount
-    const loaded = mockDB.getAppointments()
-    setAppointments(loaded)
-    setPatients(mockDB.getPatients())
-  }, [])
+    const loadedPatients = mockDB.getPatients()
+    const loadedOwners = mockDB.getOwners()
+    const loadedProperties = mockDB.getAllProperties()
+    const loadedAppointments = mockDB.getAppointments()
 
-  // Update details visibility when appointment selected
-  useEffect(() => {
-    if (selectedAppointment) {
-        setIsDetailsOpen(true)
-    }
-  }, [selectedAppointment])
+    setPatients(loadedPatients)
+    setOwners(loadedOwners)
+    setProperties(loadedProperties)
+    setAppointments(
+      loadedAppointments.map(appointment =>
+        buildAppointmentDetails(appointment, {
+          patients: loadedPatients,
+          owners: loadedOwners,
+          properties: loadedProperties
+        })
+      )
+    )
+  }, [])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -86,8 +130,9 @@ export default function Agenda() {
     try {
       const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
       if (updated) {
-          setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
-          setSelectedAppointment(updated);
+          const enrichedUpdated = buildAppointmentDetails(updated);
+          setAppointments(prev => prev.map(a => a.id === updated.id ? enrichedUpdated : a));
+          setSelectedAppointment(enrichedUpdated);
           alert('Agendamento confirmado com sucesso!');
       } else {
           alert('Erro: Agendamento não encontrado no banco de dados.');
@@ -111,9 +156,10 @@ export default function Agenda() {
         date: start.toISOString().split('T')[0],
         startTime: start.toTimeString().substr(0, 5),
         endTime: end.toTimeString().substr(0, 5),
-        procedure: selectedAppointment.procedure.split(' - ')[1] || selectedAppointment.procedure,
+        procedure: selectedAppointment.procedure?.split(' - ')[1] || selectedAppointment.procedure || '',
         notes: selectedAppointment.notes
     });
+    setIsDetailsOpen(false)
     setIsModalOpen(true);
   };
 
@@ -148,7 +194,7 @@ export default function Agenda() {
     }
 
     const created = mockDB.createAppointment(appointment)
-    setAppointments([...appointments, created])
+    setAppointments([...appointments, buildAppointmentDetails(created)])
     setIsModalOpen(false)
     
     // Reset form
@@ -394,7 +440,7 @@ export default function Agenda() {
                                     <span className={cn("text-sm font-semibold p-1 rounded-full w-6 h-6 flex items-center justify-center", date.toDateString() === new Date().toDateString() ? "bg-blue-600 text-white" : "")}>{i}</span>
                                     <div className="mt-1 space-y-1">
                                         {daysAppts.slice(0, 3).map(apt => (
-                                            <div key={apt.id} onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); }} className={cn("text-[10px] px-1 rounded truncate cursor-pointer", apt.color)}>
+                                            <div key={apt.id} onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }} className={cn("text-[10px] px-1 rounded truncate cursor-pointer", apt.color)}>
                                                 {apt.patient}
                                             </div>
                                         ))}
@@ -438,7 +484,7 @@ export default function Agenda() {
                       <div 
                         key={`${date}-${hour}`} 
                         className="border-r border-gray-50 last:border-r-0 relative group hover:bg-blue-50/30 transition-colors cursor-pointer"
-                        onClick={() => {
+                            onClick={() => {
                             // Quick Add logic can go here if clicked on empty slot
                             const dStr = date.toISOString().split('T')[0];
                             setNewAppointment(prev => ({
@@ -464,7 +510,7 @@ export default function Agenda() {
                         }).map(apt => (
                           <div
                             key={apt.id}
-                            onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); }}
+                            onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }}
                             className={cn(
                               "absolute inset-x-1 p-2 rounded-lg text-xs cursor-pointer hover:opacity-90 transition-opacity overflow-hidden border-l-4 shadow-sm z-10 flex flex-col justify-between",
                               apt.color || 'bg-blue-100 border-blue-500 text-blue-900'
@@ -491,44 +537,38 @@ export default function Agenda() {
           </div>
         </div>
 
-        {/* Sidebar Direita - Detalhes (Desktop) */}
-        <div className="hidden xl:flex w-80 flex-shrink-0 bg-white rounded-xl shadow-sm flex-col h-full overflow-hidden border border-gray-100">
-             <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-                <h3 className="font-bold text-gray-900">Detalhes do Agendamento</h3>
-                {selectedAppointment && (
-                    <button onClick={() => setSelectedAppointment(null)} className="p-1 hover:bg-gray-200 rounded-full">
-                        <X className="h-4 w-4 text-gray-500" />
-                    </button>
-                )}
-             </div>
-             <div className="p-6 overflow-y-auto flex-1">
-                 <AppointmentDetails 
-                    appointment={selectedAppointment} 
-                    onConfirm={handleConfirmAppointment}
-                    onReschedule={handleReschedule}
-                    onMessage={handleSendMessage}
-                 />
-             </div>
-        </div>
-
-        {/* Drawer Mobile/Tablet para Detalhes */}
-        {isDetailsOpen && (
-            <div className="fixed inset-0 z-50 flex justify-end xl:hidden bg-black/50" onClick={() => setIsDetailsOpen(false)}>
-                <div className="w-full max-w-sm bg-white h-full shadow-xl p-6 overflow-y-auto" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-gray-900">Detalhes</h2>
-                        <button onClick={() => setIsDetailsOpen(false)}><X className="h-6 w-6 text-gray-500" /></button>
-                    </div>
-                    <AppointmentDetails 
-                        appointment={selectedAppointment} 
-                        onConfirm={handleConfirmAppointment}
-                        onReschedule={handleReschedule}
-                        onMessage={handleSendMessage}
-                    />
-                </div>
-            </div>
-        )}
       </div>
+
+      <Modal
+        isOpen={isDetailsOpen}
+        onClose={() => {
+          setIsDetailsOpen(false)
+          setSelectedAppointment(null)
+        }}
+        title="Detalhes do Agendamento"
+        className="max-w-4xl"
+      >
+        <div className="max-h-[80vh] overflow-y-auto p-1">
+          <AppointmentDetails
+            appointment={selectedAppointment}
+            onConfirm={handleConfirmAppointment}
+            onReschedule={handleReschedule}
+            onMessage={handleSendMessage}
+            onOpenPatientRecord={() => {
+              if (selectedAppointment?.patientData) {
+                setSelectedPatient(selectedAppointment.patientData)
+                setIsDetailsOpen(false)
+              }
+            }}
+          />
+        </div>
+      </Modal>
+
+      <PatientDetailsModal
+        isOpen={!!selectedPatient}
+        onClose={() => setSelectedPatient(null)}
+        patient={selectedPatient}
+      />
 
       <Modal
         isOpen={isModalOpen}
@@ -629,7 +669,7 @@ export default function Agenda() {
   )
 }
 
-function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage }) {
+function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, onOpenPatientRecord }) {
     if (!appointment) return (
         <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
@@ -640,51 +680,104 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage })
     return (
         <>
               <div className="space-y-6 flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <InfoItem
+                    icon={CalendarIcon}
+                    color="bg-blue-50 text-blue-600"
+                    label="Data e Horário"
+                    value={`${new Date(appointment.start).toLocaleDateString('pt-BR')} - ${new Date(appointment.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${new Date(appointment.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                  />
+                  <InfoItem
+                    icon={CheckCircle}
+                    color="bg-emerald-50 text-emerald-600"
+                    label="Status"
+                    value={appointment.status || 'pendente'}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <InfoItem
+                    icon={Stethoscope}
+                    color="bg-indigo-50 text-indigo-600"
+                    label="Procedimento"
+                    value={appointment.procedure || 'Não informado'}
+                  />
+                  <InfoItem
+                    icon={User}
+                    color="bg-slate-50 text-slate-700"
+                    label="Veterinário"
+                    value={appointment.doctor || 'Não informado'}
+                  />
+                </div>
+
+                {appointment.notes && (
+                  <div className="rounded-xl border border-gray-200 p-4">
+                    <p className="text-sm font-bold text-gray-900 mb-1">Observações do Agendamento</p>
+                    <p className="text-sm text-gray-600">{appointment.notes}</p>
+                  </div>
+                )}
+
                 {/* Tutor */}
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <User className="h-5 w-5 text-[#0B2C4D]" />
+                <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <p className="text-sm font-bold text-gray-900">Tutor</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InfoItem icon={User} color="bg-blue-50 text-[#0B2C4D]" label="Nome" value={appointment.ownerData?.name || appointment.ownerName || 'Desconhecido'} />
+                    <InfoItem icon={MessageCircle} color="bg-green-50 text-green-600" label="Telefone" value={appointment.ownerData?.phone || 'Não informado'} />
+                    <InfoItem icon={FileText} color="bg-gray-50 text-gray-700" label="CPF/CNPJ" value={appointment.ownerData?.document || 'Não informado'} />
+                    <InfoItem icon={MapPin} color="bg-orange-50 text-orange-600" label="Endereço" value={appointment.ownerData?.address || 'Não informado'} />
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Tutor:</p>
-                    <p className="text-sm text-gray-600">{appointment.ownerName || 'Desconhecido'}</p>
-                  </div>
+                  {(appointment.ownerData?.email || appointment.ownerData?.secondaryPhone) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <InfoItem icon={MessageCircle} color="bg-cyan-50 text-cyan-700" label="E-mail" value={appointment.ownerData?.email || 'Não informado'} />
+                      <InfoItem icon={MessageCircle} color="bg-cyan-50 text-cyan-700" label="Telefone Secundário" value={appointment.ownerData?.secondaryPhone || 'Não informado'} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Paciente */}
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center flex-shrink-0">
-                    <PawPrint className="h-5 w-5 text-teal-600" />
+                <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-bold text-gray-900">Paciente</p>
+                    {appointment.patientData && (
+                      <Button variant="outline" onClick={onOpenPatientRecord}>
+                        Abrir ficha completa
+                      </Button>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Paciente:</p>
-                    <p className="text-sm text-gray-600">{appointment.patient}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Nome" value={appointment.patientData?.name || appointment.patient} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Espécie" value={appointment.patientData?.species || appointment.type || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Raça" value={appointment.patientData?.breed || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Sexo" value={appointment.patientData?.gender === 'M' ? 'Macho' : appointment.patientData?.gender === 'F' ? 'Fêmea' : 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Idade" value={appointment.patientData?.age ? `${appointment.patientData.age} anos` : 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Peso" value={appointment.patientData?.weight ? `${appointment.patientData.weight} kg` : 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Porte" value={appointment.patientData?.size || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Pelagem" value={appointment.patientData?.coat || appointment.patientData?.color || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="RGA" value={appointment.patientData?.rg || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Microchip" value={appointment.patientData?.microchip || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Temperamento" value={appointment.patientData?.temperament || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Risco Anestésico" value={appointment.patientData?.anestheticRisk || 'Não informado'} />
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <InfoItem icon={FileText} color="bg-red-50 text-red-600" label="Alergias" value={Array.isArray(appointment.patientData?.allergies) && appointment.patientData.allergies.length > 0 ? appointment.patientData.allergies.join(', ') : 'Não informado'} />
+                    <InfoItem icon={FileText} color="bg-amber-50 text-amber-700" label="Doenças Crônicas" value={Array.isArray(appointment.patientData?.chronicDiseases) && appointment.patientData.chronicDiseases.length > 0 ? appointment.patientData.chronicDiseases.join(', ') : 'Não informado'} />
                   </div>
                 </div>
 
-                {/* Motivo */}
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                    <Stethoscope className="h-5 w-5 text-indigo-600" />
+                {appointment.propertyData && (
+                  <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                    <p className="text-sm font-bold text-gray-900">Propriedade</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <InfoItem icon={MapPin} color="bg-violet-50 text-violet-700" label="Nome" value={appointment.propertyData?.name || 'Não informado'} />
+                      <InfoItem icon={MapPin} color="bg-violet-50 text-violet-700" label="Tipo" value={appointment.propertyData?.type || 'Não informado'} />
+                      <InfoItem icon={MapPin} color="bg-violet-50 text-violet-700" label="Cidade/UF" value={appointment.propertyData?.city ? `${appointment.propertyData.city}${appointment.propertyData.state ? ` - ${appointment.propertyData.state}` : ''}` : 'Não informado'} />
+                      <InfoItem icon={MapPin} color="bg-violet-50 text-violet-700" label="Telefone" value={appointment.propertyData?.phone || 'Não informado'} />
+                      <InfoItem icon={FileText} color="bg-violet-50 text-violet-700" label="CNPJ/Inscrição" value={appointment.propertyData?.document || 'Não informado'} />
+                      <InfoItem icon={MessageCircle} color="bg-violet-50 text-violet-700" label="E-mail" value={appointment.propertyData?.email || 'Não informado'} />
+                    </div>
+                    <InfoItem icon={MapPin} color="bg-violet-50 text-violet-700" label="Endereço" value={appointment.propertyData?.address || 'Não informado'} />
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Motivo:</p>
-                    <p className="text-sm text-gray-600">{appointment.procedure}</p>
-                  </div>
-                </div>
-
-                {/* Horário */}
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
-                    <Clock className="h-5 w-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Horário:</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date(appointment.start).toLocaleDateString('pt-BR')} - {new Date(appointment.start).getHours()}:00 às {new Date(appointment.end).getHours()}:00
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Botões de Ação */}
@@ -713,4 +806,18 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage })
               </div>
         </>
     )
+}
+
+function InfoItem({ icon: Icon, color, label, value }) {
+  return (
+    <div className="flex gap-3">
+      <div className={cn("w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0", color)}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <p className="text-sm font-bold text-gray-900">{label}:</p>
+        <p className="text-sm text-gray-600 break-words">{value}</p>
+      </div>
+    </div>
+  )
 }

@@ -457,6 +457,13 @@ export default function Clients() {
             isOpen={isPatientDetailsOpen}
             onClose={() => setIsPatientDetailsOpen(false)}
             patient={selectedPatient}
+            onPatientUpdated={(updatedPatient) => {
+              setSelectedPatient(updatedPatient)
+              setPatients(mockDB.getPatients())
+              const updatedOwners = mockDB.getOwners()
+              setOwners(updatedOwners)
+              setClients(updatedOwners)
+            }}
         />
 
         {/* Filters and Search */}
