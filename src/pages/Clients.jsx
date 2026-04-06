@@ -29,6 +29,7 @@ export default function Clients() {
   // Filter State
   const [searchTerm, setSearchTerm] = useState('')
   const [speciesFilter, setSpeciesFilter] = useState('all')
+  const [propertyFilter, setPropertyFilter] = useState('all')
   const [activeFilter, setActiveFilter] = useState('all')
 
   // Modals State
@@ -157,9 +158,17 @@ export default function Clients() {
   })
 
   const filteredPatients = patients.filter(patient => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const owner = owners.find(o => o.id === patient.ownerId)
+    const property = properties.find(p => p.id === patient.propertyId)
+    const normalizedSearch = searchTerm.toLowerCase()
+
+    const matchesSearch =
+      patient.name.toLowerCase().includes(normalizedSearch) ||
+      owner?.name?.toLowerCase().includes(normalizedSearch) ||
+      property?.name?.toLowerCase().includes(normalizedSearch)
     const matchesSpecies = speciesFilter === 'all' || patient.species === speciesFilter
-    if (!matchesSearch || !matchesSpecies) return false
+    const matchesProperty = propertyFilter === 'all' || patient.propertyId === propertyFilter
+    if (!matchesSearch || !matchesSpecies || !matchesProperty) return false
     return true
   })
 
@@ -479,7 +488,7 @@ export default function Clients() {
           </div>
           
           {viewMode === 'patients' && (
-              <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
                   <Filter className="h-4 w-4 text-gray-400" />
                   <Select value={speciesFilter} onChange={e => setSpeciesFilter(e.target.value)} className="w-full md:w-48">
                       <option value="all">Todas as Espécies</option>
@@ -487,6 +496,17 @@ export default function Clients() {
                       <option value="Feline">Felino</option>
                       <option value="Equine">Equino</option>
                       <option value="Other">Outros</option>
+                  </Select>
+                  <Select value={propertyFilter} onChange={e => setPropertyFilter(e.target.value)} className="w-full md:w-64">
+                      <option value="all">Todas as Propriedades</option>
+                      {properties
+                        .filter(property => property?.name)
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map(property => (
+                          <option key={property.id} value={property.id}>
+                            {property.name}
+                          </option>
+                        ))}
                   </Select>
               </div>
           )}
@@ -513,6 +533,7 @@ export default function Clients() {
                             <th className="p-4">Espécie</th>
                             <th className="p-4">Raça</th>
                             <th className="p-4">Tutor</th>
+                            <th className="p-4">Propriedade</th>
                             <th className="p-4">Ações</th>
                         </>
                     )}
@@ -550,6 +571,7 @@ export default function Clients() {
                   ) : (
                       filteredPatients.map((patient) => {
                           const owner = owners.find(o => o.id === patient.ownerId)
+                          const property = properties.find(p => p.id === patient.propertyId)
                           return (
                             <tr
                               key={patient.id}
@@ -565,6 +587,7 @@ export default function Clients() {
                               <td className="p-4">{patient.species}</td>
                               <td className="p-4">{patient.breed}</td>
                               <td className="p-4">{owner?.name || 'Desconhecido'}</td>
+                              <td className="p-4">{property?.name || '-'}</td>
                               <td className="p-4">
                                   <div className="flex items-center gap-2">
                                       <Button variant="ghost" size="sm" className="text-blue-600">Ver Prontuário</Button>

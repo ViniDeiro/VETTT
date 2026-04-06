@@ -302,7 +302,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                     </div>
                   </>
                 )}
-                {patient.size && (
+                {patient.species !== 'Equine' && patient.size && (
                   <>
                     <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                     <div className="flex items-center gap-2">
@@ -797,6 +797,10 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                                           <div>
                                               <label className="text-xs text-gray-500 uppercase font-semibold">Nome da Propriedade</label>
                                               <p className="font-medium text-lg">{prop.name}</p>
+                                          </div>
+                                          <div>
+                                              <label className="text-xs text-gray-500 uppercase font-semibold">Tipo da Propriedade</label>
+                                              <p className="font-medium text-gray-700">{prop.type || 'Não informado'}</p>
                                           </div>
                                           <div>
                                               <label className="text-xs text-gray-500 uppercase font-semibold">CNPJ / Inscrição</label>
@@ -1301,6 +1305,22 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                               />
                           </div>
                           <div>
+                              <label className="text-sm font-medium">Tipo da Propriedade</label>
+                              <select
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.type || ''}
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, type: e.target.value}})}
+                              >
+                                <option value="">Selecione...</option>
+                                <option value="Haras">Haras</option>
+                                <option value="Fazenda">Fazenda</option>
+                                <option value="Sítio">Sítio</option>
+                                <option value="Centro Equestre">Centro Equestre</option>
+                                <option value="Clínica">Clínica</option>
+                                <option value="Outro">Outro</option>
+                              </select>
+                          </div>
+                          <div>
                               <label className="text-sm font-medium">CNPJ/Inscrição</label>
                               <input 
                                 className="w-full border rounded p-2"
@@ -1617,6 +1637,12 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       placeholder="Telefone *"
                       value={newOwner?.phone || ''}
                       onChange={e => setNewOwner(prev => ({...prev, phone: formatPhone(e.target.value), isNew: true}))}
+                  />
+                  <input
+                      className="border rounded p-2"
+                      placeholder="Telefone Secundário"
+                      value={newOwner?.secondaryPhone || ''}
+                      onChange={e => setNewOwner(prev => ({...prev, secondaryPhone: formatPhone(e.target.value), isNew: true}))}
                   />
                   <EmailInput
                       className="border rounded p-2"

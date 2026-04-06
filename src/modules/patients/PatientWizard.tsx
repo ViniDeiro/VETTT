@@ -323,7 +323,12 @@ export const PatientWizard: React.FC = () => {
                                 value={patientData.species} 
                                 onChange={e => {
                                     const val = e.target.value;
-                                    setPatientData({...patientData, species: val as any, breed: val === 'Other' ? patientData.breed : ''});
+                                    setPatientData({
+                                        ...patientData,
+                                        species: val as any,
+                                        breed: val === 'Other' ? patientData.breed : '',
+                                        size: val === 'Equine' ? undefined : patientData.size
+                                    });
                                 }}
                             >
                                 <option value="Canine">Canino</option>
@@ -520,7 +525,7 @@ export const PatientWizard: React.FC = () => {
                     </h3>
                     
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {patientData.species === 'Equine' && (
+                        {patientData.species !== 'Equine' && (
                             <div>
                                 <Label>Porte</Label>
                                 <Select 

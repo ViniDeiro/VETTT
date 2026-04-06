@@ -21,7 +21,10 @@ import {
   ArrowLeft,
   Package,
   Weight,
-  Syringe
+  Syringe,
+  Scissors,
+  Trash2,
+  Printer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pdfService } from '../../services/pdfService';
@@ -53,6 +56,7 @@ export const AttendancePage: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [procedures, setProcedures] = useState<ProcedureTemplate[]>([]);
+  const [confirmedAppointments, setConfirmedAppointments] = useState<any[]>([]);
   
   // State
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient);
@@ -68,6 +72,9 @@ export const AttendancePage: React.FC = () => {
   const [consumedItems, setConsumedItems] = useState<ConsumptionItem[]>([]);
   const [selectedItemToAdd, setSelectedItemToAdd] = useState<InventoryItem | null>(null);
   const [qtyToAdd, setQtyToAdd] = useState(0);
+  const [selectedProcedureId, setSelectedProcedureId] = useState('');
+  const [procedureCustomPrice, setProcedureCustomPrice] = useState('');
+  const [procedureNotes, setProcedureNotes] = useState('');
 
   // Vaccines State
   const [vaccines, setVaccines] = useState<any[]>([]);
@@ -94,9 +101,33 @@ export const AttendancePage: React.FC = () => {
 
   useEffect(() => {
     const loadedPatients = mockDB.getPatients();
+    const loadedOwners = mockDB.getOwners();
+    const loadedAppointments = mockDB.getAppointments();
     setPatients(loadedPatients);
     setInventory(mockDB.getInventory());
     setProcedures(mockDB.getProcedures());
+
+    const today = new Date().toDateString();
+    const todaysConfirmedAppointments = loadedAppointments
+      .filter(appt => {
+        const appointmentDate = new Date(appt.start).toDateString();
+        const status = String(appt.status || '').toLowerCase();
+        return appointmentDate === today && (status === 'confirmado' || status === 'confirmed');
+      })
+      .map(appt => {
+        const patient = loadedPatients.find(p => p.id === appt.patientId) || null;
+        const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
+
+        return {
+          ...appt,
+          patient,
+          patientName: patient?.name || appt.patientName || 'Paciente',
+          ownerName: owner?.name || appt.ownerName || 'Não informado',
+        };
+      })
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+    setConfirmedAppointments(todaysConfirmedAppointments);
     
     let targetPatient = initialPatient;
 
@@ -129,6 +160,18 @@ export const AttendancePage: React.FC = () => {
     setShowConsultationTypes(true);
   };
 
+  const resetProcedureForm = () => {
+    setSelectedProcedureId('');
+    setProcedureCustomPrice('');
+    setProcedureNotes('');
+  };
+
+  const syncAttendanceState = (updatedAttendance: Attendance) => {
+    setCurrentAttendance(updatedAttendance);
+    setConsumedItems(updatedAttendance.consumedItems || []);
+    setVaccines(updatedAttendance.vaccines || []);
+  };
+
   const handleSelectConsultationType = (typeId: string, label: string) => {
     setShowConsultationTypes(false);
     if (selectedPatient) {
@@ -149,6 +192,9 @@ export const AttendancePage: React.FC = () => {
         vitals: {}
       });
       setCurrentAttendance(newAttendance);
+      setConsumedItems([]);
+      setVaccines([]);
+      resetProcedureForm();
       if (isRetorno) {
           setServiceFee(0); // Retorno is free by default
       } else {
@@ -158,33 +204,68 @@ export const AttendancePage: React.FC = () => {
     }
   };
 
-  const handleSelectProcedure = (procId: string) => {
-      const proc = procedures.find(p => p.id === procId);
-      if (proc) {
-          // Set Fee
-          setServiceFee(proc.baseCost);
-          
-          // Add Items
-          const newItems: ConsumptionItem[] = [];
-          proc.items.forEach(pItem => {
+  const handleAddProcedure = () => {
+      if (!currentAttendance || !selectedProcedureId) return;
+
+      const template = procedures.find(proc => proc.id === selectedProcedureId);
+      if (!template) return;
+
+      const price = procedureCustomPrice ? Number(procedureCustomPrice) : template.baseCost;
+
+      const newProcedure = {
+          id: Math.random().toString(36).substr(2, 9),
+          attendanceId: currentAttendance.id,
+          name: template.name,
+          price,
+          notes: procedureNotes,
+          timestamp: new Date().toISOString()
+      };
+
+      const autoConsumedItems: ConsumptionItem[] = template.items
+          .map(pItem => {
               const invItem = inventory.find(i => i.id === pItem.inventoryItemId);
-              if (invItem) {
-                  newItems.push({
-                      inventoryItemId: invItem.id,
-                      itemName: invItem.name,
-                      quantityUsed: pItem.quantity,
-                      unit: invItem.unit,
-                      costAtMoment: invItem.costPrice,
-                      priceAtMoment: invItem.salePrice
-                  });
-              }
-          });
-          
-          // Merge or Replace? Let's append but check for duplicates? 
-          // For simplicity, we'll append.
-          setConsumedItems(prev => [...prev, ...newItems]);
-          alert(`Procedimento "${proc.name}" aplicado! Honorários e materiais atualizados.`);
-      }
+              if (!invItem) return null;
+
+              return {
+                  inventoryItemId: invItem.id,
+                  itemName: invItem.name,
+                  quantityUsed: pItem.quantity,
+                  unit: invItem.unit,
+                  costAtMoment: invItem.costPrice,
+                  priceAtMoment: invItem.salePrice
+              };
+          })
+          .filter(Boolean) as ConsumptionItem[];
+
+      const updatedProcedures = [...(currentAttendance.procedures || []), newProcedure];
+      const updatedConsumedItems = [...consumedItems, ...autoConsumedItems];
+      const updatedAttendance = {
+          ...currentAttendance,
+          procedures: updatedProcedures,
+          consumedItems: updatedConsumedItems
+      };
+
+      mockDB.updateAttendance(currentAttendance.id, {
+          procedures: updatedProcedures,
+          consumedItems: updatedConsumedItems
+      });
+
+      syncAttendanceState(updatedAttendance);
+      resetProcedureForm();
+      alert(`Procedimento "${template.name}" adicionado com sucesso.`);
+  };
+
+  const handleRemoveProcedure = (procedureId: string) => {
+      if (!currentAttendance) return;
+
+      const updatedProcedures = (currentAttendance.procedures || []).filter(proc => proc.id !== procedureId);
+      const updatedAttendance = {
+          ...currentAttendance,
+          procedures: updatedProcedures
+      };
+
+      mockDB.updateAttendance(currentAttendance.id, { procedures: updatedProcedures });
+      setCurrentAttendance(updatedAttendance);
   };
 
 
@@ -315,6 +396,9 @@ export const AttendancePage: React.FC = () => {
                   vitals: {}
               });
               setCurrentAttendance(activeAttendance);
+              setConsumedItems([]);
+              setVaccines([]);
+              resetProcedureForm();
               setActiveTab('attendance_active');
           } else {
               return;
@@ -339,27 +423,85 @@ export const AttendancePage: React.FC = () => {
   if (!selectedPatient) {
     return (
       <Layout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)] bg-gray-50">
-          <Card className="w-full max-w-md border-none shadow-lg">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Search className="h-8 w-8 text-blue-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Iniciar Atendimento</h2>
-              <p className="text-gray-500 mb-8">Busque um paciente para acessar o prontuário e iniciar o procedimento.</p>
-              
-              <div className="text-left">
-                <Autocomplete 
-                  options={(patients || []).map(p => ({ id: p.id, label: `${p.name} (${p.species})` }))}
-                  onSelect={(opt) => {
-                    const p = patients.find(pat => pat.id === opt.id);
-                    if (p) setSelectedPatient(p);
-                  }}
-                  placeholder="Digite o nome do paciente..."
-                />
-              </div>
-            </CardContent>
-          </Card>
+        <div className="min-h-[calc(100vh-8rem)] bg-gray-50 py-8">
+          <div className="mx-auto w-full max-w-5xl space-y-6 px-4">
+            <Card className="border-none shadow-lg">
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Search className="h-8 w-8 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Iniciar Atendimento</h2>
+                <p className="text-gray-500 mb-8">Busque um paciente para acessar o prontuário e iniciar o procedimento.</p>
+                
+                <div className="text-left">
+                  <Autocomplete 
+                    options={(patients || []).map(p => ({ id: p.id, label: `${p.name} (${p.species})` }))}
+                    onSelect={(opt) => {
+                      const p = patients.find(pat => pat.id === opt.id);
+                      if (p) setSelectedPatient(p);
+                    }}
+                    placeholder="Digite o nome do paciente..."
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Confirmados de Hoje</h3>
+                    <p className="text-sm text-gray-500">Agendamentos confirmados na agenda e prontos para atendimento.</p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-medium border border-green-100">
+                    {confirmedAppointments.length} na fila
+                  </span>
+                </div>
+
+                {confirmedAppointments.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+                    Nenhum agendamento confirmado para hoje.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {confirmedAppointments.map(appt => (
+                      <div key={appt.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-16 w-16 flex-col items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm">
+                            <span className="text-lg font-bold text-gray-900">
+                              {new Date(appt.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="font-bold text-gray-900">{appt.patientName}</p>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                              <span>{appt.ownerName}</span>
+                              <span className="text-gray-300">•</span>
+                              <span>{appt.doctor || 'Veterinário não informado'}</span>
+                              {appt.procedure && (
+                                <>
+                                  <span className="text-gray-300">•</span>
+                                  <span>{appt.procedure}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={() => appt.patient && setSelectedPatient(appt.patient)}
+                          className="bg-[#0B2C4D] text-white hover:bg-[#0B2C4D]/90"
+                          disabled={!appt.patient}
+                        >
+                          Abrir Atendimento
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </Layout>
     );
@@ -921,6 +1063,167 @@ export const AttendancePage: React.FC = () => {
                         </div>
                     )}
 
+                    <Card className="border-none shadow-sm">
+                        <CardContent className="p-6">
+                            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                        <Scissors className="h-5 w-5 text-orange-600" />
+                                        Procedimentos
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Adicione procedimentos realizados neste atendimento e registre os materiais consumidos automaticamente.
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    className="border-orange-200 text-orange-700 hover:bg-orange-50"
+                                    onClick={() => setIsProceduresModalOpen(true)}
+                                >
+                                    <Package className="h-4 w-4 mr-2" />
+                                    Abrir modal completo
+                                </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                                <div className="xl:col-span-1 space-y-4 bg-orange-50 border border-orange-100 rounded-xl p-5">
+                                    <div>
+                                        <Label>Procedimento</Label>
+                                        <select
+                                            className="w-full border rounded-md p-2 text-sm mt-1 bg-white"
+                                            value={selectedProcedureId}
+                                            onChange={e => {
+                                                const nextId = e.target.value;
+                                                setSelectedProcedureId(nextId);
+                                                const selectedTemplate = procedures.find(proc => proc.id === nextId);
+                                                setProcedureCustomPrice(selectedTemplate ? selectedTemplate.baseCost.toString() : '');
+                                            }}
+                                        >
+                                            <option value="">Selecione...</option>
+                                            {procedures.map(proc => (
+                                                <option key={proc.id} value={proc.id}>
+                                                    {proc.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <Label>Valor (R$)</Label>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={procedureCustomPrice}
+                                            onChange={e => setProcedureCustomPrice(e.target.value)}
+                                            placeholder="0,00"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label>Observações</Label>
+                                        <textarea
+                                            className="w-full border rounded-md p-3 text-sm min-h-[100px] bg-white"
+                                            value={procedureNotes}
+                                            onChange={e => setProcedureNotes(e.target.value)}
+                                            placeholder="Detalhes do procedimento realizado..."
+                                        />
+                                    </div>
+
+                                    {selectedProcedureId && (
+                                        <div className="rounded-lg bg-white border border-orange-100 p-3">
+                                            <p className="text-xs font-semibold text-orange-800 uppercase tracking-wide mb-2">
+                                                Materiais vinculados
+                                            </p>
+                                            <div className="space-y-2">
+                                                {(procedures.find(proc => proc.id === selectedProcedureId)?.items || []).length > 0 ? (
+                                                    (procedures.find(proc => proc.id === selectedProcedureId)?.items || []).map((item, index) => {
+                                                        const inventoryItem = inventory.find(inv => inv.id === item.inventoryItemId);
+                                                        return (
+                                                            <div key={`${item.inventoryItemId}-${index}`} className="flex justify-between text-sm text-gray-600">
+                                                                <span>{inventoryItem?.name || 'Item não encontrado'}</span>
+                                                                <span>{item.quantity} {inventoryItem?.unit || ''}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <p className="text-sm text-gray-500">Sem materiais vinculados a este procedimento.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <Button onClick={handleAddProcedure} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white">
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Adicionar
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={resetProcedureForm}
+                                            className="border-gray-200"
+                                        >
+                                            Limpar
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="xl:col-span-2 border border-gray-100 rounded-xl p-5 bg-gray-50">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="font-semibold text-gray-800">Procedimentos do atendimento</h4>
+                                        <span className="text-sm text-gray-500">
+                                            {(currentAttendance.procedures || []).length} item(ns)
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {(currentAttendance.procedures || []).length === 0 ? (
+                                            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-400">
+                                                <Scissors className="h-10 w-10 mx-auto mb-3" />
+                                                <p className="font-medium text-gray-500">Nenhum procedimento registrado neste atendimento.</p>
+                                                <p className="text-sm mt-1">Selecione um procedimento ao lado para começar.</p>
+                                            </div>
+                                        ) : (
+                                            currentAttendance.procedures!.map(proc => (
+                                                <div key={proc.id} className="flex items-start justify-between gap-4 rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-semibold text-gray-800">{proc.name}</span>
+                                                            <span className="text-xs text-gray-400">
+                                                                {new Date(proc.timestamp).toLocaleTimeString('pt-BR', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </span>
+                                                        </div>
+                                                        {proc.notes && (
+                                                            <p className="text-sm text-gray-500 mt-1">"{proc.notes}"</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-orange-700 whitespace-nowrap">
+                                                            R$ {proc.price.toFixed(2)}
+                                                        </span>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                                                            onClick={() => handleRemoveProcedure(proc.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Procedures List (Feedback) */}
                     {currentAttendance.procedures && currentAttendance.procedures.length > 0 && (
                         <div className="mt-6 bg-orange-50 p-4 rounded-lg border border-orange-100">
@@ -1254,7 +1557,7 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsPrescriptionModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
-            onSave={(updated) => setCurrentAttendance(updated)}
+            onSave={syncAttendanceState}
         />
       )}
 
@@ -1265,7 +1568,7 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsExamRequestModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
-            onSave={(updated) => setCurrentAttendance(updated)}
+            onSave={syncAttendanceState}
         />
       )}
 
@@ -1276,7 +1579,18 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsVaccineModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
-            onSave={(updated) => setCurrentAttendance(updated)}
+            onSave={syncAttendanceState}
+        />
+      )}
+
+      {/* Procedures Modal */}
+      {currentAttendance && selectedPatient && (
+        <ProceduresModal
+            isOpen={isProceduresModalOpen}
+            onClose={() => setIsProceduresModalOpen(false)}
+            attendance={currentAttendance}
+            patient={selectedPatient}
+            onSave={syncAttendanceState}
         />
       )}
 
@@ -1287,7 +1601,7 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsReturnModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
-            onSave={(updated) => setCurrentAttendance(updated)}
+            onSave={syncAttendanceState}
         />
       )}
 
@@ -1308,7 +1622,7 @@ export const AttendancePage: React.FC = () => {
             onClose={() => setIsSurgeryModalOpen(false)}
             attendance={currentAttendance}
             patient={selectedPatient}
-            onSave={(updated) => setCurrentAttendance(updated)}
+            onSave={syncAttendanceState}
         />
       )}
 

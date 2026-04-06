@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Search, Bell, ChevronDown, User, LogOut, Settings } from 'lucide-react'
+import { Bell, ChevronDown, User, LogOut, Settings } from 'lucide-react'
 import { Button } from './ui/Button'
 import { useAuth } from '../modules/auth/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
@@ -16,21 +16,8 @@ export default function TopBar() {
     }
 
     return (
-        <div className="h-16 px-8 flex items-center justify-between bg-white border-b border-gray-200 sticky top-0 z-50">
-            {/* Search */}
-            <div className="flex-1 max-w-xl">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar paciente, tutor, ID..."
-                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                </div>
-            </div>
-
-            {/* Right Actions */}
-            <div className="flex items-center gap-4 ml-4 relative">
+        <div className="h-16 px-8 flex items-center justify-end bg-white border-b border-gray-200 sticky top-0 z-50">
+            <div className="flex items-center gap-4 relative">
                 {/* Notifications */}
                 <div className="relative">
                     <Button 

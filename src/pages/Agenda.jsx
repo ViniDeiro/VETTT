@@ -133,7 +133,7 @@ export default function Agenda() {
           const enrichedUpdated = buildAppointmentDetails(updated);
           setAppointments(prev => prev.map(a => a.id === updated.id ? enrichedUpdated : a));
           setSelectedAppointment(enrichedUpdated);
-          alert('Agendamento confirmado com sucesso!');
+          alert('Agendamento confirmado com sucesso! Ele já está disponível em Atendimento.');
       } else {
           alert('Erro: Agendamento não encontrado no banco de dados.');
       }
@@ -327,25 +327,40 @@ export default function Agenda() {
               <span>Do</span><span>Se</span><span>Te</span><span>Qu</span><span>Qu</span><span>Se</span><span>Sa</span>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center text-sm">
-              {getDaysInMonth(selectedDate).map(day => {
-                const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day)
-                const isSelected = date.toDateString() === selectedDate.toDateString()
-                const isToday = date.toDateString() === new Date().toDateString()
-                
-                return (
-                  <button
-                    key={day}
-                    onClick={() => setSelectedDate(date)}
-                    className={cn(
-                      "h-7 w-7 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors",
-                      isSelected && "bg-[#00BFA5] text-white hover:bg-[#00BFA5]",
-                      isToday && !isSelected && "bg-blue-100 text-blue-700"
-                    )}
-                  >
-                    {day}
-                  </button>
-                )
-              })}
+              {(() => {
+                const year = selectedDate.getFullYear()
+                const month = selectedDate.getMonth()
+                const firstDayOfMonth = new Date(year, month, 1).getDay()
+                const miniCalendarCells = []
+
+                for (let i = 0; i < firstDayOfMonth; i++) {
+                  miniCalendarCells.push(
+                    <div key={`mini-empty-${month}-${i}`} className="h-7 w-7" />
+                  )
+                }
+
+                getDaysInMonth(selectedDate).forEach(day => {
+                  const date = new Date(year, month, day)
+                  const isSelected = date.toDateString() === selectedDate.toDateString()
+                  const isToday = date.toDateString() === new Date().toDateString()
+
+                  miniCalendarCells.push(
+                    <button
+                      key={day}
+                      onClick={() => setSelectedDate(date)}
+                      className={cn(
+                        "h-7 w-7 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors",
+                        isSelected && "bg-[#00BFA5] text-white hover:bg-[#00BFA5]",
+                        isToday && !isSelected && "bg-blue-100 text-blue-700"
+                      )}
+                    >
+                      {day}
+                    </button>
+                  )
+                })
+
+                return miniCalendarCells
+              })()}
             </div>
           </div>
 
@@ -751,7 +766,9 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Sexo" value={appointment.patientData?.gender === 'M' ? 'Macho' : appointment.patientData?.gender === 'F' ? 'Fêmea' : 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Idade" value={appointment.patientData?.age ? `${appointment.patientData.age} anos` : 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Peso" value={appointment.patientData?.weight ? `${appointment.patientData.weight} kg` : 'Não informado'} />
-                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Porte" value={appointment.patientData?.size || 'Não informado'} />
+                    {appointment.patientData?.species !== 'Equine' && (
+                      <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Porte" value={appointment.patientData?.size || 'Não informado'} />
+                    )}
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Pelagem" value={appointment.patientData?.coat || appointment.patientData?.color || 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="RGA" value={appointment.patientData?.rg || 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Microchip" value={appointment.patientData?.microchip || 'Não informado'} />
@@ -787,7 +804,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
                 >
                   <CheckCircle className="mr-2 h-5 w-5" />
-                  Confirmar
+                  Confirmar e Enviar para Atendimento
                 </Button>
                 <Button 
                     onClick={onReschedule}
