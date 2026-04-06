@@ -45,6 +45,15 @@ export const AttendancePage: React.FC = () => {
   const location = useLocation();
   const initialPatient = location.state?.patient as Patient | null;
 
+  const parseAttendanceDate = (dateValue?: string) => {
+    if (!dateValue) return 0;
+    if (dateValue.includes('/')) {
+      const [day, month, year] = dateValue.split('/');
+      return new Date(`${year}-${month}-${day}T00:00:00`).getTime();
+    }
+    return new Date(dateValue).getTime();
+  };
+
   const handlePrintRecord = () => {
     if (currentAttendance && selectedPatient) {
       pdfService.generateMedicalRecord(selectedPatient, currentAttendance, 'Tutor (Demo)'); // Ideally get real owner name
@@ -57,10 +66,12 @@ export const AttendancePage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [procedures, setProcedures] = useState<ProcedureTemplate[]>([]);
   const [confirmedAppointments, setConfirmedAppointments] = useState<any[]>([]);
+  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
   
   // State
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient);
   const [activeTab, setActiveTab] = useState('overview');
+  const [dashboardTab, setDashboardTab] = useState('confirmed');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historySubTab, setHistorySubTab] = useState('Geral');
   
@@ -103,6 +114,7 @@ export const AttendancePage: React.FC = () => {
     const loadedPatients = mockDB.getPatients();
     const loadedOwners = mockDB.getOwners();
     const loadedAppointments = mockDB.getAppointments();
+    const loadedAttendances = mockDB.getAttendances();
     setPatients(loadedPatients);
     setInventory(mockDB.getInventory());
     setProcedures(mockDB.getProcedures());
@@ -128,6 +140,27 @@ export const AttendancePage: React.FC = () => {
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
     setConfirmedAppointments(todaysConfirmedAppointments);
+
+    const finishedAttendances = loadedAttendances
+      .filter(att => att.status === 'finished')
+      .map(att => {
+        const patient = loadedPatients.find(p => p.id === att.patientId) || null;
+        const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
+
+        return {
+          ...att,
+          patient,
+          patientName: patient?.name || att.patientName || 'Paciente',
+          ownerName: owner?.name || patient?.ownerName || 'Não informado'
+        };
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.finishedAt || a.updatedAt || parseAttendanceDate(a.date)).getTime();
+        const dateB = new Date(b.finishedAt || b.updatedAt || parseAttendanceDate(b.date)).getTime();
+        return dateB - dateA;
+      });
+
+    setAttendanceHistory(finishedAttendances);
     
     let targetPatient = initialPatient;
 
@@ -366,6 +399,21 @@ export const AttendancePage: React.FC = () => {
         });
 
         alert('Atendimento finalizado com sucesso!');
+        const owner = mockDB.getOwners().find(o => o.id === selectedPatient.ownerId);
+        setAttendanceHistory(prev => [
+          {
+            ...currentAttendance,
+            status: 'finished',
+            diagnosis,
+            anamnesis,
+            vitals,
+            patient: selectedPatient,
+            patientName: selectedPatient.name,
+            ownerName: owner?.name || selectedPatient.ownerName || 'Não informado',
+            finishedAt: new Date().toISOString()
+          },
+          ...prev
+        ]);
         setCurrentAttendance(null);
         setConsumedItems([]);
         setVaccines([]);
@@ -450,19 +498,46 @@ export const AttendancePage: React.FC = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4 mb-6">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">Confirmados de Hoje</h3>
-                    <p className="text-sm text-gray-500">Agendamentos confirmados na agenda e prontos para atendimento.</p>
+                    <h3 className="text-xl font-bold text-gray-900">Central de Atendimento</h3>
+                    <p className="text-sm text-gray-500">Acompanhe a fila do dia e o histórico recente dos atendimentos.</p>
                   </div>
-                  <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-medium border border-green-100">
-                    {confirmedAppointments.length} na fila
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 text-sm font-medium border border-green-100">
+                      {confirmedAppointments.length} na fila
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-medium border border-blue-100">
+                      {attendanceHistory.length} finalizados
+                    </span>
+                  </div>
                 </div>
 
-                {confirmedAppointments.length === 0 ? (
+                <div className="flex gap-2 border-b pb-3 mb-6 overflow-x-auto">
+                  {[
+                    { id: 'confirmed', label: 'Confirmados de Hoje' },
+                    { id: 'history', label: 'Histórico de Atendimentos' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setDashboardTab(tab.id)}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all',
+                        dashboardTab === tab.id
+                          ? 'bg-[#0B2C4D] text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {dashboardTab === 'confirmed' && confirmedAppointments.length === 0 && (
                   <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
                     Nenhum agendamento confirmado para hoje.
                   </div>
-                ) : (
+                )}
+
+                {dashboardTab === 'confirmed' && confirmedAppointments.length > 0 && (
                   <div className="space-y-3">
                     {confirmedAppointments.map(appt => (
                       <div key={appt.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -494,6 +569,55 @@ export const AttendancePage: React.FC = () => {
                           disabled={!appt.patient}
                         >
                           Abrir Atendimento
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {dashboardTab === 'history' && attendanceHistory.length === 0 && (
+                  <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+                    Nenhum atendimento finalizado ainda.
+                  </div>
+                )}
+
+                {dashboardTab === 'history' && attendanceHistory.length > 0 && (
+                  <div className="space-y-3">
+                    {attendanceHistory.slice(0, 12).map(att => (
+                      <div key={att.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-gray-900">{att.patientName}</p>
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                              {att.status === 'finished' ? 'Finalizado' : 'Em andamento'}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                            <span>{att.date}</span>
+                            <span className="text-gray-300">•</span>
+                            <span>{att.ownerName}</span>
+                            <span className="text-gray-300">•</span>
+                            <span>{att.reason || 'Consulta Geral'}</span>
+                          </div>
+                          {att.diagnosis && (
+                            <p className="text-sm text-gray-600 line-clamp-2">
+                              Diagnóstico: {att.diagnosis}
+                            </p>
+                          )}
+                        </div>
+
+                        <Button
+                          onClick={() => {
+                            if (att.patient) {
+                              setSelectedPatient(att.patient);
+                              setActiveTab('history');
+                              setHistorySubTab('Geral');
+                            }
+                          }}
+                          className="bg-[#0B2C4D] text-white hover:bg-[#0B2C4D]/90"
+                          disabled={!att.patient}
+                        >
+                          Abrir Histórico
                         </Button>
                       </div>
                     ))}

@@ -24,6 +24,125 @@ import { cn } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 
+const DEFAULT_START_TIME = '09:00'
+const DEFAULT_END_TIME = '10:00'
+
+const getTodayISODate = () => new Date().toISOString().split('T')[0]
+
+const createEmptyAppointment = () => ({
+  patientId: '',
+  patientName: '',
+  appointmentMode: 'patient',
+  type: 'Canino',
+  doctor: 'Dr. Silva',
+  date: getTodayISODate(),
+  startTime: DEFAULT_START_TIME,
+  endTime: DEFAULT_END_TIME,
+  procedure: '',
+  customType: '',
+  notes: '',
+  serviceLocation: ''
+})
+
+const getSpeciesLabel = (species) => {
+  const normalized = String(species || '').trim().toLowerCase()
+
+  if (['equine', 'equino'].includes(normalized)) return 'Equino'
+  if (['canine', 'canino'].includes(normalized)) return 'Canino'
+  if (['feline', 'felino'].includes(normalized)) return 'Felino'
+  if (['other', 'outro', 'outros'].includes(normalized)) return 'Outro'
+
+  return species || 'Outro'
+}
+
+const getSizeLabel = (size) => {
+  if (size === 'Small') return 'Pequeno'
+  if (size === 'Medium') return 'Médio'
+  if (size === 'Large') return 'Grande'
+  return size || 'Não informado'
+}
+
+const getAppointmentColor = (type) => {
+  const normalizedType = getSpeciesLabel(type)
+
+  if (normalizedType === 'Equino') return 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
+  if (normalizedType === 'Canino') return 'bg-[#00BFA5] border-[#00BFA5] text-white'
+  if (normalizedType === 'Felino') return 'bg-[#60A5FA] border-[#60A5FA] text-white'
+
+  return 'bg-violet-500 border-violet-500 text-white'
+}
+
+const timeToMinutes = (time) => {
+  if (!time || !time.includes(':')) return 0
+
+  const [hours, minutes] = time.split(':').map(Number)
+  return (hours * 60) + minutes
+}
+
+const minutesToTime = (totalMinutes) => {
+  const safeMinutes = Math.max(0, Math.min((23 * 60) + 59, totalMinutes))
+  const hours = Math.floor(safeMinutes / 60)
+  const minutes = safeMinutes % 60
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+const getSuggestedEndTime = (startTime) => {
+  const startMinutes = timeToMinutes(startTime)
+  return minutesToTime(startMinutes + 60)
+}
+
+const normalizeAppointmentStatus = (status) => String(status || '').trim().toLowerCase()
+
+const getStatusLabel = (status, appointment) => {
+  if (isAppointmentLate(appointment)) return 'Atrasado'
+
+  const normalized = normalizeAppointmentStatus(status)
+
+  if (['confirmed', 'confirmado'].includes(normalized)) return 'Confirmado'
+  if (['cancelled', 'cancelado'].includes(normalized)) return 'Cancelado'
+  if (['finished', 'realizado'].includes(normalized)) return 'Realizado'
+  if (['pending', 'pendente'].includes(normalized)) return 'Pendente'
+
+  return status || 'Pendente'
+}
+
+const isAppointmentLate = (appointment) => {
+  if (!appointment?.start) return false
+
+  const normalizedStatus = normalizeAppointmentStatus(appointment.status)
+  if (!['pending', 'pendente', 'confirmed', 'confirmado'].includes(normalizedStatus)) {
+    return false
+  }
+
+  const now = new Date()
+  const start = new Date(appointment.start)
+  const isSameDay = start.toDateString() === now.toDateString()
+
+  return isSameDay && now.getTime() >= (start.getTime() + (10 * 60 * 1000))
+}
+
+const getAppointmentDisplayColor = (appointment) => {
+  if (isAppointmentLate(appointment)) {
+    return 'bg-red-500 border-red-600 text-white'
+  }
+
+  return appointment.color || getAppointmentColor(appointment.type)
+}
+
+const formatDateForInput = (dateValue) => {
+  const date = new Date(dateValue)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const formatTimeForInput = (dateValue) => {
+  const date = new Date(dateValue)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 export default function Agenda() {
   const location = useLocation()
   const [view, setView] = useState('Semana') // Hoje, Semana, Mês
@@ -42,18 +161,19 @@ export default function Agenda() {
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newAppointment, setNewAppointment] = useState({
-    patientId: '',
-    patientName: '',
-    type: 'Canino',
-    doctor: 'Dr. Silva',
-    date: new Date().toISOString().split('T')[0],
-    startTime: '09:00',
-    endTime: '10:00',
-    procedure: '',
-    notes: ''
-  })
+  const [newAppointment, setNewAppointment] = useState(createEmptyAppointment)
+  const [editingAppointmentId, setEditingAppointmentId] = useState(null)
   const [hasAppliedInitialSchedule, setHasAppliedInitialSchedule] = useState(false)
+
+  const resetAppointmentForm = () => {
+    setNewAppointment(createEmptyAppointment())
+    setEditingAppointmentId(null)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    resetAppointmentForm()
+  }
 
   const buildAppointmentDetails = (appointment, sources = {}) => {
     const patientsList = sources.patients || patients
@@ -68,11 +188,13 @@ export default function Agenda() {
 
     return {
       ...appointment,
-      patient: appointment.patient || appointment.patientName || patientData?.name || 'Paciente',
-      type: appointment.type || patientData?.species || 'Canino',
+      patient: appointment.patient || appointment.patientName || appointment.customType || patientData?.name || 'Agendamento',
+      type: getSpeciesLabel(appointment.type || patientData?.species || 'Canino'),
+      color: appointment.color || getAppointmentColor(appointment.type || patientData?.species || 'Canino'),
       ownerName: ownerData?.name || appointment.ownerName || 'Não informado',
       ownerData,
       propertyData,
+      serviceLocation: appointment.serviceLocation || '',
       patientData: patientData
         ? {
             ...patientData,
@@ -123,9 +245,10 @@ export default function Agenda() {
     setSelectedDate(today)
     setNewAppointment(prev => ({
       ...prev,
+      appointmentMode: 'patient',
       patientId: patient.id,
       patientName: patient.name,
-      type: patient.species || 'Canino',
+      type: getSpeciesLabel(patient.species || 'Canino'),
       date: today.toISOString().split('T')[0]
     }))
     setIsModalOpen(true)
@@ -134,7 +257,39 @@ export default function Agenda() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setNewAppointment(prev => ({ ...prev, [name]: value }))
+
+    setNewAppointment(prev => {
+      if (name === 'appointmentMode') {
+        if (value === 'other') {
+          return {
+            ...prev,
+            appointmentMode: 'other',
+            patientId: '',
+            patientName: '',
+            type: 'Outro',
+            procedure: '',
+            serviceLocation: ''
+          }
+        }
+
+        return {
+          ...prev,
+          appointmentMode: 'patient',
+          customType: '',
+          type: prev.patientId ? prev.type : 'Canino'
+        }
+      }
+
+      if (name === 'startTime') {
+        return {
+          ...prev,
+          startTime: value,
+          endTime: getSuggestedEndTime(value)
+        }
+      }
+
+      return { ...prev, [name]: value }
+    })
   }
 
   const handlePatientSelect = (item) => {
@@ -142,9 +297,10 @@ export default function Agenda() {
       if (p) {
           setNewAppointment(prev => ({
               ...prev,
+              appointmentMode: 'patient',
               patientId: p.id,
               patientName: p.name,
-              type: p.species || 'Canino'
+              type: getSpeciesLabel(p.species || 'Canino')
           }))
       }
   }
@@ -157,6 +313,8 @@ export default function Agenda() {
           const enrichedUpdated = buildAppointmentDetails(updated);
           setAppointments(prev => prev.map(a => a.id === updated.id ? enrichedUpdated : a));
           setSelectedAppointment(enrichedUpdated);
+          setIsDetailsOpen(false);
+          setSelectedAppointment(null);
           alert('Agendamento confirmado com sucesso! Ele já está disponível em Atendimento.');
       } else {
           alert('Erro: Agendamento não encontrado no banco de dados.');
@@ -169,19 +327,21 @@ export default function Agenda() {
 
   const handleReschedule = () => {
     if (!selectedAppointment) return;
-    const start = new Date(selectedAppointment.start);
-    const end = new Date(selectedAppointment.end);
     
+    setEditingAppointmentId(selectedAppointment.id)
     setNewAppointment({
         patientId: selectedAppointment.patientId,
         patientName: selectedAppointment.patient,
+        appointmentMode: selectedAppointment.appointmentMode || (selectedAppointment.patientId ? 'patient' : 'other'),
         type: selectedAppointment.type,
         doctor: selectedAppointment.doctor,
-        date: start.toISOString().split('T')[0],
-        startTime: start.toTimeString().substr(0, 5),
-        endTime: end.toTimeString().substr(0, 5),
+        date: formatDateForInput(selectedAppointment.start),
+        startTime: formatTimeForInput(selectedAppointment.start),
+        endTime: formatTimeForInput(selectedAppointment.end),
         procedure: selectedAppointment.procedure?.split(' - ')[1] || selectedAppointment.procedure || '',
-        notes: selectedAppointment.notes
+        customType: selectedAppointment.customType || '',
+        notes: selectedAppointment.notes || '',
+        serviceLocation: selectedAppointment.serviceLocation || ''
     });
     setIsDetailsOpen(false)
     setIsModalOpen(true);
@@ -192,51 +352,110 @@ export default function Agenda() {
     alert(`Mensagem enviada para o tutor de ${selectedAppointment.patient}: "Olá, lembramos do seu agendamento para amanhã."`);
   };
 
+  const handleDeleteAppointment = () => {
+    if (!selectedAppointment) return
+
+    if (!confirm(`Tem certeza que deseja excluir o agendamento de ${selectedAppointment.patient}?`)) {
+      return
+    }
+
+    const deleted = mockDB.deleteAppointment(selectedAppointment.id)
+    if (!deleted) {
+      alert('Não foi possível excluir o agendamento.')
+      return
+    }
+
+    setAppointments(prev => prev.filter(appointment => appointment.id !== selectedAppointment.id))
+    setIsDetailsOpen(false)
+    setSelectedAppointment(null)
+    alert('Agendamento excluído com sucesso.')
+  }
+
   const handleSaveAppointment = () => {
-    if (!newAppointment.patientName || !newAppointment.date || !newAppointment.startTime || !newAppointment.endTime) {
+    const isPatientAppointment = newAppointment.appointmentMode === 'patient'
+    const appointmentLabel = isPatientAppointment ? newAppointment.patientName : newAppointment.customType
+    const startMinutes = timeToMinutes(newAppointment.startTime)
+    const endMinutes = timeToMinutes(newAppointment.endTime)
+
+    if (!appointmentLabel || !newAppointment.date || !newAppointment.startTime || !newAppointment.endTime) {
         alert("Preencha os campos obrigatórios");
         return;
     }
 
+    if (endMinutes <= startMinutes) {
+      alert('A hora final precisa ser maior que a hora inicial.')
+      return
+    }
+
+    if (isPatientAppointment) {
+      const hasConflict = appointments.some(existingAppointment => {
+        if (existingAppointment.id === editingAppointmentId) return false
+
+        const existingMode = existingAppointment.appointmentMode || (existingAppointment.patientId ? 'patient' : 'other')
+        if (existingMode !== 'patient') return false
+        if ((existingAppointment.doctor || '') !== newAppointment.doctor) return false
+        if (formatDateForInput(existingAppointment.start) !== newAppointment.date) return false
+
+        const existingStartMinutes = timeToMinutes(formatTimeForInput(existingAppointment.start))
+        const existingEndMinutes = timeToMinutes(formatTimeForInput(existingAppointment.end))
+
+        return startMinutes < existingEndMinutes && endMinutes > existingStartMinutes
+      })
+
+      if (hasConflict) {
+        alert(`Já existe um agendamento de paciente para ${newAppointment.doctor} nesse horário.`)
+        return
+      }
+    }
+
     const start = `${newAppointment.date}T${newAppointment.startTime}:00`
     const end = `${newAppointment.date}T${newAppointment.endTime}:00`
+    const appointmentType = isPatientAppointment ? newAppointment.type : 'Outro'
+    const procedureLabel = isPatientAppointment ? newAppointment.procedure : ''
+    const existingAppointment = editingAppointmentId
+      ? appointments.find(appointment => appointment.id === editingAppointmentId)
+      : null
 
     const appointment = {
-      title: `${newAppointment.patientName} - ${newAppointment.procedure}`,
-      patient: newAppointment.patientName,
-      patientId: newAppointment.patientId,
-      type: newAppointment.type,
-      procedure: newAppointment.procedure,
+      title: isPatientAppointment
+        ? `${newAppointment.patientName}${procedureLabel ? ` - ${procedureLabel}` : ''}`
+        : newAppointment.customType,
+      patient: appointmentLabel,
+      patientId: isPatientAppointment ? newAppointment.patientId : '',
+      patientName: isPatientAppointment ? newAppointment.patientName : '',
+      appointmentMode: newAppointment.appointmentMode,
+      type: appointmentType,
+      procedure: procedureLabel,
+      customType: isPatientAppointment ? '' : newAppointment.customType,
       doctor: newAppointment.doctor,
       start,
       end,
       notes: newAppointment.notes,
-      status: 'pendente',
-      color: newAppointment.type === 'Equino' ? 'bg-[#1E3A8A] border-[#1E3A8A] text-white' : 
-             newAppointment.type === 'Canino' ? 'bg-[#00BFA5] border-[#00BFA5] text-white' : 
-             'bg-[#60A5FA] border-[#60A5FA] text-white'
+      serviceLocation: isPatientAppointment ? newAppointment.serviceLocation : '',
+      status: existingAppointment?.status || 'pendente',
+      color: getAppointmentColor(appointmentType)
+    }
+
+    if (editingAppointmentId) {
+      const updated = mockDB.updateAppointment(editingAppointmentId, appointment)
+
+      if (!updated) {
+        alert('Não foi possível atualizar o agendamento.')
+        return
+      }
+
+      setAppointments(prev => prev.map(item => item.id === updated.id ? buildAppointmentDetails(updated) : item))
+      handleCloseModal()
+      return
     }
 
     const created = mockDB.createAppointment(appointment)
-    setAppointments([...appointments, buildAppointmentDetails(created)])
-    setIsModalOpen(false)
-    
-    // Reset form
-    setNewAppointment({
-      patientId: '',
-      patientName: '',
-      type: 'Canino',
-      doctor: 'Dr. Silva',
-      date: new Date().toISOString().split('T')[0],
-      startTime: '09:00',
-      endTime: '10:00',
-      procedure: '',
-      notes: ''
-    })
+    setAppointments(prev => [...prev, buildAppointmentDetails(created)])
+    handleCloseModal()
   }
 
   const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-  const hours = Array.from({ length: 11 }, (_, i) => i + 8) // 08:00 as 18:00
+  const hours = Array.from({ length: 18 }, (_, i) => i + 6) // 06:00 as 23:00
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -479,7 +698,7 @@ export default function Agenda() {
                                     <span className={cn("text-sm font-semibold p-1 rounded-full w-6 h-6 flex items-center justify-center", date.toDateString() === new Date().toDateString() ? "bg-blue-600 text-white" : "")}>{i}</span>
                                     <div className="mt-1 space-y-1">
                                         {daysAppts.slice(0, 3).map(apt => (
-                                            <div key={apt.id} onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }} className={cn("text-[10px] px-1 rounded truncate cursor-pointer", apt.color)}>
+                                            <div key={apt.id} onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }} className={cn("text-[10px] px-1 rounded truncate cursor-pointer", getAppointmentDisplayColor(apt))}>
                                                 {apt.patient}
                                             </div>
                                         ))}
@@ -530,7 +749,7 @@ export default function Agenda() {
                                 ...prev,
                                 date: dStr,
                                 startTime: `${String(hour).padStart(2, '0')}:00`,
-                                endTime: `${String(hour+1).padStart(2, '0')}:00`
+                                endTime: getSuggestedEndTime(`${String(hour).padStart(2, '0')}:00`)
                             }));
                             setIsModalOpen(true);
                         }}
@@ -552,7 +771,7 @@ export default function Agenda() {
                             onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }}
                             className={cn(
                               "absolute inset-x-1 p-2 rounded-lg text-xs cursor-pointer hover:opacity-90 transition-opacity overflow-hidden border-l-4 shadow-sm z-10 flex flex-col justify-between",
-                              apt.color || 'bg-blue-100 border-blue-500 text-blue-900'
+                              getAppointmentDisplayColor(apt)
                             )}
                             style={{ 
                               top: '2px', 
@@ -591,7 +810,8 @@ export default function Agenda() {
           <AppointmentDetails
             appointment={selectedAppointment}
             onConfirm={handleConfirmAppointment}
-            onReschedule={handleReschedule}
+            onEdit={handleReschedule}
+            onDelete={handleDeleteAppointment}
             onMessage={handleSendMessage}
             onOpenPatientRecord={() => {
               if (selectedAppointment?.patientData) {
@@ -611,26 +831,52 @@ export default function Agenda() {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Novo Agendamento"
+        onClose={handleCloseModal}
+        title={editingAppointmentId ? 'Editar Agendamento' : 'Novo Agendamento'}
         className="max-w-xl"
       >
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label>Tipo de agendamento</Label>
+            <Select
+              name="appointmentMode"
+              value={newAppointment.appointmentMode}
+              onChange={handleInputChange}
+            >
+              <option value="patient">Paciente cadastrado</option>
+              <option value="other">Outro tipo de agendamento</option>
+            </Select>
+          </div>
+
+          {newAppointment.appointmentMode === 'patient' ? (
+          <div className="space-y-2">
             <Label>Paciente (Busca)</Label>
             <Autocomplete 
-                options={patients.map(p => ({ id: p.id, label: `${p.name} (${p.species})` }))}
+              options={patients.map(p => ({ id: p.id, label: `${p.name} (${getSpeciesLabel(p.species)})` }))}
                 onSelect={handlePatientSelect}
                 placeholder="Buscar paciente cadastrado..."
                 value={newAppointment.patientName}
             />
           </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Qual é o agendamento?</Label>
+              <Input
+                name="customType"
+                value={newAppointment.customType}
+                onChange={handleInputChange}
+                placeholder="Ex: Reunião, visita técnica, retorno interno"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
+            {newAppointment.appointmentMode === 'patient' && (
              <div className="space-y-2">
               <Label>Espécie</Label>
               <Input value={newAppointment.type} readOnly className="bg-gray-50" />
             </div>
+            )}
              <div className="space-y-2">
               <Label>Veterinário</Label>
               <Select
@@ -644,15 +890,29 @@ export default function Agenda() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Procedimento</Label>
-            <Input
-              name="procedure"
-              value={newAppointment.procedure}
-              onChange={handleInputChange}
-              placeholder="Ex: Limpeza, Consulta"
-            />
-          </div>
+          {newAppointment.appointmentMode === 'patient' && (
+            <>
+              <div className="space-y-2">
+                <Label>Procedimento</Label>
+                <Input
+                  name="procedure"
+                  value={newAppointment.procedure}
+                  onChange={handleInputChange}
+                  placeholder="Ex: Limpeza, Consulta"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Local do atendimento</Label>
+                <Input
+                  name="serviceLocation"
+                  value={newAppointment.serviceLocation}
+                  onChange={handleInputChange}
+                  placeholder="Ex: Clínica, domicílio, propriedade"
+                />
+              </div>
+            </>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -686,8 +946,9 @@ export default function Agenda() {
 
           <div className="space-y-2">
             <Label>Observações</Label>
-            <Input
+            <textarea
               name="notes"
+              className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={newAppointment.notes}
               onChange={handleInputChange}
               placeholder="Detalhes adicionais..."
@@ -695,11 +956,11 @@ export default function Agenda() {
           </div>
 
           <div className="pt-4 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+            <Button variant="outline" onClick={handleCloseModal}>
               Cancelar
             </Button>
             <Button onClick={handleSaveAppointment} className="bg-[#0B2C4D] text-white">
-              Salvar Agendamento
+              {editingAppointmentId ? 'Salvar Alterações' : 'Salvar Agendamento'}
             </Button>
           </div>
         </div>
@@ -708,7 +969,7 @@ export default function Agenda() {
   )
 }
 
-function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, onOpenPatientRecord }) {
+function AppointmentDetails({ appointment, onConfirm, onEdit, onDelete, onMessage, onOpenPatientRecord }) {
     if (!appointment) return (
         <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
@@ -730,7 +991,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     icon={CheckCircle}
                     color="bg-emerald-50 text-emerald-600"
                     label="Status"
-                    value={appointment.status || 'pendente'}
+                    value={getStatusLabel(appointment.status, appointment)}
                   />
                 </div>
 
@@ -738,8 +999,8 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                   <InfoItem
                     icon={Stethoscope}
                     color="bg-indigo-50 text-indigo-600"
-                    label="Procedimento"
-                    value={appointment.procedure || 'Não informado'}
+                    label={appointment.appointmentMode === 'other' ? 'Agendamento' : 'Procedimento'}
+                    value={appointment.appointmentMode === 'other' ? (appointment.customType || appointment.patient || 'Não informado') : (appointment.procedure || 'Não informado')}
                   />
                   <InfoItem
                     icon={User}
@@ -747,6 +1008,14 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     label="Veterinário"
                     value={appointment.doctor || 'Não informado'}
                   />
+                  {appointment.serviceLocation && (
+                    <InfoItem
+                      icon={MapPin}
+                      color="bg-orange-50 text-orange-600"
+                      label="Local do Atendimento"
+                      value={appointment.serviceLocation}
+                    />
+                  )}
                 </div>
 
                 {appointment.notes && (
@@ -757,6 +1026,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                 )}
 
                 {/* Tutor */}
+                {appointment.appointmentMode !== 'other' && (
                 <div className="rounded-xl border border-gray-200 p-4 space-y-3">
                   <p className="text-sm font-bold text-gray-900">Tutor</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -772,8 +1042,10 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Paciente */}
+                {appointment.appointmentMode !== 'other' && (
                 <div className="rounded-xl border border-gray-200 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-sm font-bold text-gray-900">Paciente</p>
@@ -785,13 +1057,13 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Nome" value={appointment.patientData?.name || appointment.patient} />
-                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Espécie" value={appointment.patientData?.species || appointment.type || 'Não informado'} />
+                    <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Espécie" value={getSpeciesLabel(appointment.patientData?.species || appointment.type)} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Raça" value={appointment.patientData?.breed || 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Sexo" value={appointment.patientData?.gender === 'M' ? 'Macho' : appointment.patientData?.gender === 'F' ? 'Fêmea' : 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Idade" value={appointment.patientData?.age ? `${appointment.patientData.age} anos` : 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Peso" value={appointment.patientData?.weight ? `${appointment.patientData.weight} kg` : 'Não informado'} />
                     {appointment.patientData?.species !== 'Equine' && (
-                      <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Porte" value={appointment.patientData?.size || 'Não informado'} />
+                      <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Porte" value={getSizeLabel(appointment.patientData?.size)} />
                     )}
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="Pelagem" value={appointment.patientData?.coat || appointment.patientData?.color || 'Não informado'} />
                     <InfoItem icon={PawPrint} color="bg-teal-50 text-teal-600" label="RGA" value={appointment.patientData?.rg || 'Não informado'} />
@@ -804,8 +1076,9 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                     <InfoItem icon={FileText} color="bg-amber-50 text-amber-700" label="Doenças Crônicas" value={Array.isArray(appointment.patientData?.chronicDiseases) && appointment.patientData.chronicDiseases.length > 0 ? appointment.patientData.chronicDiseases.join(', ') : 'Não informado'} />
                   </div>
                 </div>
+                )}
 
-                {appointment.propertyData && (
+                {appointment.appointmentMode !== 'other' && appointment.propertyData && (
                   <div className="rounded-xl border border-gray-200 p-4 space-y-3">
                     <p className="text-sm font-bold text-gray-900">Propriedade</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -831,11 +1104,18 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onMessage, o
                   Confirmar e Enviar para Atendimento
                 </Button>
                 <Button 
-                    onClick={onReschedule}
-                    className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
+                    onClick={onEdit}
+                    className="w-full bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 rounded-full h-12 text-base"
                 >
                   <Clock className="mr-2 h-5 w-5" />
-                  Reagendar
+                  Editar agendamento
+                </Button>
+                <Button 
+                    onClick={onDelete}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full h-12 text-base"
+                >
+                  <Clock className="mr-2 h-5 w-5" />
+                  Excluir agendamento
                 </Button>
                 <Button 
                     onClick={onMessage}

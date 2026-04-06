@@ -271,6 +271,15 @@ class MockDatabaseService {
     }
     return null;
   }
+
+  deleteAppointment(id: string) {
+    const index = this.appointments.findIndex(a => a.id === id);
+    if (index === -1) return false;
+
+    this.appointments.splice(index, 1);
+    this.save('vet_appointments', this.appointments);
+    return true;
+  }
   // --- Procedures ---
   getProcedures() { return this.procedures; }
   
@@ -328,6 +337,10 @@ class MockDatabaseService {
     return newAttendance;
   }
 
+  getAttendances() {
+    return this.attendances;
+  }
+
   getAttendancesByPatientId(patientId: string) {
     return this.attendances.filter(a => a.patientId === patientId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
@@ -369,6 +382,8 @@ class MockDatabaseService {
     attendance.totalCost = materialsCost; // Note: Vaccine/Procedure cost not tracked separately here yet
     attendance.totalService = serviceFee + proceduresPrice; // Add procedure price to service? Or keep separate?
     attendance.totalTotal = total;
+    attendance.updatedAt = new Date().toISOString();
+    attendance.finishedAt = new Date().toISOString();
     this.attendances[attendanceIndex] = attendance;
     this.save('vet_attendances', this.attendances);
 
