@@ -43,6 +43,7 @@ export const PatientWizard: React.FC = () => {
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
   const [useBirthDate, setUseBirthDate] = useState(true);
   const [birthDateInput, setBirthDateInput] = useState('');
+  const [scheduleAfterRegistration, setScheduleAfterRegistration] = useState(false);
   
   // Specific inputs for Allergies/Chronic (comma separated strings in UI, array in DB)
   const [allergiesInput, setAllergiesInput] = useState('');
@@ -227,7 +228,7 @@ export const PatientWizard: React.FC = () => {
           ownerId: selectedOwner.id,
           propertyId: selectedProperty?.id,
           age: finalAgeYears,
-          // ageMonths: finalAgeMonths, // Not in interface? I added it in previous step.
+          ageMonths: finalAgeMonths,
           birthDate: birthDateInput,
           weight: Number(patientData.weight),
           allergies: allergiesInput.split(',').map(s => s.trim()).filter(Boolean),
@@ -240,6 +241,16 @@ export const PatientWizard: React.FC = () => {
         
         setIsLoading(false);
         alert('Paciente cadastrado com sucesso!');
+        if (scheduleAfterRegistration) {
+          navigate('/agenda', {
+            state: {
+              schedulePatientId: newPatient.id,
+              openNewAppointment: true
+            }
+          });
+          return;
+        }
+
         navigate('/clients');
       }, 800);
     } catch (error) {
@@ -849,6 +860,16 @@ export const PatientWizard: React.FC = () => {
                   </div>
                 )}
 
+                <label className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                  <input
+                    type="checkbox"
+                    checked={scheduleAfterRegistration}
+                    onChange={e => setScheduleAfterRegistration(e.target.checked)}
+                    className="h-4 w-4 rounded border-green-300 text-green-600 focus:ring-green-500"
+                  />
+                  <span>Ao finalizar o cadastro, ja quero abrir o agendamento deste paciente</span>
+                </label>
+
                 <div className="flex justify-between pt-8 border-t mt-8">
                   <Button variant="outline" onClick={() => setStep(1)} className="h-12 px-6">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
@@ -1041,6 +1062,16 @@ export const PatientWizard: React.FC = () => {
                     </Button>
                   </div>
                 )}
+
+                <label className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                  <input
+                    type="checkbox"
+                    checked={scheduleAfterRegistration}
+                    onChange={e => setScheduleAfterRegistration(e.target.checked)}
+                    className="h-4 w-4 rounded border-green-300 text-green-600 focus:ring-green-500"
+                  />
+                  <span>Ao finalizar o cadastro, ja quero abrir o agendamento deste paciente</span>
+                </label>
 
                 <div className="flex justify-between pt-8 border-t mt-8">
                   <Button variant="outline" onClick={() => setStep(2)} className="h-12 px-6">

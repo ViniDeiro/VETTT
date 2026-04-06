@@ -24,7 +24,8 @@ import {
   Printer,
   Plus,
   Edit2,
-  Home
+  Home,
+  Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -46,6 +47,67 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
   
   // Edit Form State
   const [editFormData, setEditFormData] = useState({})
+
+  const buildStructuredAddress = (data) => {
+    if (!data) return ''
+    if (data.street) {
+      return [data.street, data.number ? `nº ${data.number}` : '', data.neighborhood]
+        .filter(Boolean)
+        .join(', ')
+    }
+    return data.address || ''
+  }
+
+  const formatAddressDisplay = (data) => {
+    if (!data) return { line1: 'Não informado', line2: '' }
+
+    const line1 = data.street
+      ? `${data.street}${data.number ? `, ${data.number}` : ''}${data.neighborhood ? ` - ${data.neighborhood}` : ''}`
+      : (data.address || 'Não informado')
+
+    const cityState = data.city && data.state
+      ? `${data.city}/${data.state}`
+      : (data.city || data.state || '')
+
+    const line2 = [cityState, data.zipCode ? `CEP: ${data.zipCode}` : '']
+      .filter(Boolean)
+      .join(' - ')
+
+    return { line1, line2 }
+  }
+
+  const formatPatientAge = (patientData) => {
+    if (patientData?.birthDate) {
+      const birthDate = new Date(`${patientData.birthDate}T00:00:00`)
+      const today = new Date()
+
+      if (!Number.isNaN(birthDate.getTime())) {
+        let years = today.getFullYear() - birthDate.getFullYear()
+        let months = today.getMonth() - birthDate.getMonth()
+
+        if (today.getDate() < birthDate.getDate()) {
+          months -= 1
+        }
+
+        if (months < 0) {
+          years -= 1
+          months += 12
+        }
+
+        if (years > 0 && months > 0) return `${years} anos e ${months} meses`
+        if (years > 0) return `${years} anos`
+        return `${Math.max(months, 0)} meses`
+      }
+    }
+
+    const years = Number(patientData?.age || 0)
+    const months = Number(patientData?.ageMonths || 0)
+
+    if (years > 0 && months > 0) return `${years} anos e ${months} meses`
+    if (years > 0) return `${years} anos`
+    if (months > 0) return `${months} meses`
+    return '-'
+  }
 
   const handleCepSearch = async (cep, type) => {
     const cleanCep = (cep || '').replace(/\D/g, '')
@@ -122,6 +184,12 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
   const handleSaveEdit = () => {
     // Save Patient
     const { ownerData, propertyData, ...patientUpdates } = editFormData;
+    const normalizedOwnerData = ownerData
+      ? { ...ownerData, address: buildStructuredAddress(ownerData) || ownerData.address || '' }
+      : ownerData
+    const normalizedPropertyData = propertyData
+      ? { ...propertyData, address: buildStructuredAddress(propertyData) || propertyData.address || '' }
+      : propertyData
     
     // Convert allergies/chronicDiseases back to array if they are strings
     if (typeof patientUpdates.allergies === 'string') {
@@ -134,13 +202,13 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
     mockDB.updatePatient(patient.id, patientUpdates);
     
     // Save Owner
-    if (patient.ownerId && ownerData) {
-        mockDB.updateOwner(patient.ownerId, ownerData);
+    if (patient.ownerId && normalizedOwnerData) {
+        mockDB.updateOwner(patient.ownerId, normalizedOwnerData);
     }
 
     // Save Property
-    if (patient.propertyId && propertyData && patient.species === 'Equine') {
-        mockDB.updateProperty(patient.propertyId, propertyData);
+    if (patient.propertyId && normalizedPropertyData && patient.species === 'Equine') {
+        mockDB.updateProperty(patient.propertyId, normalizedPropertyData);
     }
 
     // Update local 'patient' prop reference for immediate UI feedback (React won't re-render parent automatically here without callback)
@@ -174,6 +242,24 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
           setIsChangingProperty(false);
           setNewProperty(null);
       }
+  }
+
+  const handleDeleteProperty = () => {
+      if (!patient.propertyId) return
+
+      const currentProperty = properties.find(p => p.id === patient.propertyId)
+      const confirmed = window.confirm(
+        `Deseja excluir a propriedade "${currentProperty?.name || ''}"? Essa ação também desvincula os pacientes associados a ela.`
+      )
+
+      if (!confirmed) return
+
+      mockDB.deleteProperty(patient.propertyId)
+      patient.propertyId = undefined
+      setProperties(mockDB.getAllProperties())
+      setEditFormData(prev => ({ ...prev, propertyId: undefined, propertyData: {} }))
+      onPatientUpdated?.({ ...patient, propertyId: undefined })
+      alert('Propriedade excluída com sucesso!')
   }
 
   const tabs = [
@@ -276,7 +362,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                 <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{patient.gender === 'M' ? 'Macho' : 'Fêmea'}</span>
-                    {patient.age && <span>, {patient.age} anos</span>}
+                    <span>, {formatPatientAge(patient)}</span>
                   </div>
                   {patient.rg && (
                     <>
@@ -729,11 +815,20 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                                           </div>
                                           <div className="md:col-span-2">
                                               <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
-                                              <p className="font-medium text-gray-700">
-                                                  {owner.address || owner.street} {owner.number && `, ${owner.number}`} {owner.neighborhood && `- ${owner.neighborhood}`}
-                                                  <br/>
-                                                  {owner.city && `${owner.city}/${owner.state}`} {owner.zipCode && `- CEP: ${owner.zipCode}`}
-                                              </p>
+                                              {(() => {
+                                                  const formattedAddress = formatAddressDisplay(owner)
+                                                  return (
+                                                    <p className="font-medium text-gray-700">
+                                                        {formattedAddress.line1}
+                                                        {formattedAddress.line2 && (
+                                                          <>
+                                                            <br/>
+                                                            {formattedAddress.line2}
+                                                          </>
+                                                        )}
+                                                    </p>
+                                                  )
+                                              })()}
                                           </div>
                                        </>
                                    ) : (
@@ -785,9 +880,16 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                                         Dados da Propriedade
                                     </h3>
                                     {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
-                                        <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
-                                            <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
-                                        </Button>
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
+                                                <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
+                                            </Button>
+                                            {patient.propertyId && (
+                                                <Button variant="outline" size="sm" onClick={handleDeleteProperty} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
+                                                    <Trash2 className="h-3 w-3 mr-1" /> Excluir Propriedade
+                                                </Button>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                                 {(() => {
@@ -818,11 +920,20 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                                           </div>
                                           <div className="md:col-span-2">
                                               <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
-                                              <p className="font-medium text-gray-700">
-                                                  {prop.address || prop.street} {prop.number && `, ${prop.number}`} {prop.neighborhood && `- ${prop.neighborhood}`}
-                                                  <br/>
-                                                  {prop.city && `${prop.city}/${prop.state}`} {prop.zipCode && `- CEP: ${prop.zipCode}`}
-                                              </p>
+                                              {(() => {
+                                                  const formattedAddress = formatAddressDisplay(prop)
+                                                  return (
+                                                    <p className="font-medium text-gray-700">
+                                                        {formattedAddress.line1}
+                                                        {formattedAddress.line2 && (
+                                                          <>
+                                                            <br/>
+                                                            {formattedAddress.line2}
+                                                          </>
+                                                        )}
+                                                    </p>
+                                                  )
+                                              })()}
                                           </div>
                                       </div>
                                   ) : (
@@ -1345,11 +1456,52 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                               />
                           </div>
                           <div className="md:col-span-2">
-                              <label className="text-sm font-medium">Endereço da Propriedade</label>
+                              <label className="text-sm font-medium">CEP</label>
                               <input 
                                 className="w-full border rounded p-2"
-                                value={editFormData.propertyData?.address || ''} 
-                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, address: e.target.value}})} 
+                                value={editFormData.propertyData?.zipCode || ''}
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, zipCode: formatCEP(e.target.value)}})}
+                              />
+                          </div>
+                          <div className="md:col-span-2">
+                              <label className="text-sm font-medium">Rua / Endereço</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.street || editFormData.propertyData?.address || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, street: e.target.value, address: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Número / Complemento</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.number || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, number: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Bairro</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.neighborhood || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, neighborhood: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Cidade</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                value={editFormData.propertyData?.city || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, city: e.target.value}})} 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-sm font-medium">Estado (UF)</label>
+                              <input 
+                                className="w-full border rounded p-2"
+                                maxLength={2}
+                                value={editFormData.propertyData?.state || ''} 
+                                onChange={e => setEditFormData({...editFormData, propertyData: {...editFormData.propertyData, state: e.target.value.toUpperCase()}})} 
                               />
                           </div>
                       </div>

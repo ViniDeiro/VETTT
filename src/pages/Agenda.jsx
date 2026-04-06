@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Label } from '../components/ui/Label'
 import { Autocomplete } from '../shared/Autocomplete'
+import { useLocation } from 'react-router-dom'
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,6 +25,7 @@ import { mockDB } from '../services/mockDatabase'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 
 export default function Agenda() {
+  const location = useLocation()
   const [view, setView] = useState('Semana') // Hoje, Semana, Mês
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [appointments, setAppointments] = useState([]) // Initialize empty, load from DB
@@ -51,6 +53,7 @@ export default function Agenda() {
     procedure: '',
     notes: ''
   })
+  const [hasAppliedInitialSchedule, setHasAppliedInitialSchedule] = useState(false)
 
   const buildAppointmentDetails = (appointment, sources = {}) => {
     const patientsList = sources.patients || patients
@@ -107,6 +110,27 @@ export default function Agenda() {
       )
     )
   }, [])
+
+  useEffect(() => {
+    if (hasAppliedInitialSchedule || !location.state?.openNewAppointment || !location.state?.schedulePatientId || patients.length === 0) {
+      return
+    }
+
+    const patient = patients.find(p => p.id === location.state.schedulePatientId)
+    if (!patient) return
+
+    const today = new Date()
+    setSelectedDate(today)
+    setNewAppointment(prev => ({
+      ...prev,
+      patientId: patient.id,
+      patientName: patient.name,
+      type: patient.species || 'Canino',
+      date: today.toISOString().split('T')[0]
+    }))
+    setIsModalOpen(true)
+    setHasAppliedInitialSchedule(true)
+  }, [hasAppliedInitialSchedule, location.state, patients])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target

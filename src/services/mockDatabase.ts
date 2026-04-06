@@ -219,6 +219,16 @@ class MockDatabaseService {
       return null;
   }
 
+  deleteProperty(id: string) {
+    this.properties = this.properties.filter(p => p.id !== id);
+    this.save('vet_properties', this.properties);
+
+    this.patients = this.patients.map(patient =>
+      patient.propertyId === id ? { ...patient, propertyId: undefined } : patient
+    );
+    this.save('vet_patients', this.patients);
+  }
+
   // --- Appointments ---
   getAppointments() {
     return this.appointments;
