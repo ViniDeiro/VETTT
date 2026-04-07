@@ -11,9 +11,10 @@ interface AutocompleteProps {
   placeholder?: string;
   label?: string;
   value?: string;
+  disabled?: boolean;
 }
 
-export const Autocomplete: React.FC<AutocompleteProps> = ({ options, onSelect, placeholder, label, value }) => {
+export const Autocomplete: React.FC<AutocompleteProps> = ({ options, onSelect, placeholder, label, value, disabled = false }) => {
   const [inputValue, setInputValue] = useState(value || '');
   const [filteredOptions, setFilteredOptions] = useState<Option[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -34,6 +35,8 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({ options, onSelect, p
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
+
     const val = e.target.value;
     setInputValue(val);
     if (val.length > 0) {
@@ -48,12 +51,19 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({ options, onSelect, p
   };
 
   const handleSelectOption = (option: Option) => {
+    if (disabled) return;
+
     setInputValue(option.label);
     onSelect(option);
     setIsOpen(false);
   };
 
   const handleInputFocus = () => {
+    if (disabled) {
+      setIsOpen(false);
+      return;
+    }
+
     if (inputValue.length > 0) {
         setIsOpen(true);
     } else {
@@ -70,11 +80,12 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({ options, onSelect, p
       {label && <label className="block text-gray-700 text-sm font-bold mb-2">{label}</label>}
       <input
         type="text"
-        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+        className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight ${disabled ? 'bg-gray-100 cursor-not-allowed opacity-70' : 'focus:outline-none focus:shadow-outline'}`}
         placeholder={placeholder}
         value={inputValue}
         onChange={handleInputChange}
         onFocus={handleInputFocus}
+        disabled={disabled}
       />
       {isOpen && filteredOptions.length > 0 && (
         <ul className="absolute z-10 bg-white border border-gray-300 w-full mt-1 max-h-60 overflow-y-auto rounded shadow-lg">

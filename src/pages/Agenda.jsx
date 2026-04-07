@@ -19,7 +19,8 @@ import {
   MessageCircle,
   Calendar as CalendarIcon,
   CheckCircle,
-  Trash2
+  Trash2,
+  Edit2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
@@ -164,11 +165,13 @@ export default function Agenda() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [newAppointment, setNewAppointment] = useState(createEmptyAppointment)
   const [editingAppointmentId, setEditingAppointmentId] = useState(null)
+  const [appointmentActionMode, setAppointmentActionMode] = useState(null)
   const [hasAppliedInitialSchedule, setHasAppliedInitialSchedule] = useState(false)
 
   const resetAppointmentForm = () => {
     setNewAppointment(createEmptyAppointment())
     setEditingAppointmentId(null)
+    setAppointmentActionMode(null)
   }
 
   const handleCloseModal = () => {
@@ -306,6 +309,24 @@ export default function Agenda() {
       }
   }
 
+  const fillAppointmentForm = (appointment) => {
+    setEditingAppointmentId(appointment.id)
+    setNewAppointment({
+      patientId: appointment.patientId,
+      patientName: appointment.patient,
+      appointmentMode: appointment.appointmentMode || (appointment.patientId ? 'patient' : 'other'),
+      type: appointment.type,
+      doctor: appointment.doctor,
+      date: formatDateForInput(appointment.start),
+      startTime: formatTimeForInput(appointment.start),
+      endTime: formatTimeForInput(appointment.end),
+      procedure: appointment.procedure?.split(' - ')[1] || appointment.procedure || '',
+      customType: appointment.customType || '',
+      notes: appointment.notes || '',
+      serviceLocation: appointment.serviceLocation || ''
+    })
+  }
+
   const handleConfirmAppointment = () => {
     if (!selectedAppointment) return;
     try {
@@ -328,25 +349,21 @@ export default function Agenda() {
 
   const handleReschedule = () => {
     if (!selectedAppointment) return;
-    
-    setEditingAppointmentId(selectedAppointment.id)
-    setNewAppointment({
-        patientId: selectedAppointment.patientId,
-        patientName: selectedAppointment.patient,
-        appointmentMode: selectedAppointment.appointmentMode || (selectedAppointment.patientId ? 'patient' : 'other'),
-        type: selectedAppointment.type,
-        doctor: selectedAppointment.doctor,
-        date: formatDateForInput(selectedAppointment.start),
-        startTime: formatTimeForInput(selectedAppointment.start),
-        endTime: formatTimeForInput(selectedAppointment.end),
-        procedure: selectedAppointment.procedure?.split(' - ')[1] || selectedAppointment.procedure || '',
-        customType: selectedAppointment.customType || '',
-        notes: selectedAppointment.notes || '',
-        serviceLocation: selectedAppointment.serviceLocation || ''
-    });
+
+    setAppointmentActionMode('reschedule')
+    fillAppointmentForm(selectedAppointment)
     setIsDetailsOpen(false)
     setIsModalOpen(true);
   };
+
+  const handleEditAppointment = () => {
+    if (!selectedAppointment) return;
+
+    setAppointmentActionMode('edit')
+    fillAppointmentForm(selectedAppointment)
+    setIsDetailsOpen(false)
+    setIsModalOpen(true)
+  }
 
   const handleSendMessage = () => {
     if (!selectedAppointment) return;
@@ -456,7 +473,7 @@ export default function Agenda() {
   }
 
   const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-  const hours = Array.from({ length: 18 }, (_, i) => i + 6) // 06:00 as 23:00
+  const hours = Array.from({ length: 24 }, (_, i) => i) // 00:00 as 23:00
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -811,7 +828,8 @@ export default function Agenda() {
           <AppointmentDetails
             appointment={selectedAppointment}
             onConfirm={handleConfirmAppointment}
-            onEdit={handleReschedule}
+            onReschedule={handleReschedule}
+            onEdit={handleEditAppointment}
             onDelete={handleDeleteAppointment}
             onMessage={handleSendMessage}
             onOpenPatientRecord={() => {
@@ -833,7 +851,15 @@ export default function Agenda() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingAppointmentId ? 'Editar Agendamento' : 'Novo Agendamento'}
+        title={
+          editingAppointmentId
+            ? appointmentActionMode === 'edit'
+              ? 'Editar Agendamento'
+              : appointmentActionMode === 'reschedule'
+                ? 'Reagendar Agendamento'
+                : 'Editar Agendamento'
+            : 'Novo Agendamento'
+        }
         className="max-w-xl"
       >
         <div className="space-y-4">
@@ -854,9 +880,9 @@ export default function Agenda() {
             <Label>Paciente (Busca)</Label>
             <Autocomplete 
               options={patients.map(p => ({ id: p.id, label: `${p.name} (${getSpeciesLabel(p.species)})` }))}
-                onSelect={handlePatientSelect}
-                placeholder="Buscar paciente cadastrado..."
-                value={newAppointment.patientName}
+              onSelect={handlePatientSelect}
+              placeholder="Buscar paciente cadastrado..."
+              value={newAppointment.patientName}
             />
           </div>
           ) : (
@@ -923,6 +949,7 @@ export default function Agenda() {
                 name="date"
                 value={newAppointment.date}
                 onChange={handleInputChange}
+                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
             <div className="space-y-2">
@@ -932,6 +959,7 @@ export default function Agenda() {
                 name="startTime"
                 value={newAppointment.startTime}
                 onChange={handleInputChange}
+                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
             <div className="space-y-2">
@@ -941,6 +969,7 @@ export default function Agenda() {
                 name="endTime"
                 value={newAppointment.endTime}
                 onChange={handleInputChange}
+                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
           </div>
@@ -961,7 +990,11 @@ export default function Agenda() {
               Cancelar
             </Button>
             <Button onClick={handleSaveAppointment} className="bg-[#0B2C4D] text-white">
-              {editingAppointmentId ? 'Salvar Alterações' : 'Salvar Agendamento'}
+              {editingAppointmentId
+                ? appointmentActionMode === 'edit'
+                  ? 'Salvar Edição'
+                  : 'Salvar Reagendamento'
+                : 'Salvar Agendamento'}
             </Button>
           </div>
         </div>
@@ -970,7 +1003,7 @@ export default function Agenda() {
   )
 }
 
-function AppointmentDetails({ appointment, onConfirm, onEdit, onDelete, onMessage, onOpenPatientRecord }) {
+function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDelete, onMessage, onOpenPatientRecord }) {
     if (!appointment) return (
         <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
@@ -1105,10 +1138,17 @@ function AppointmentDetails({ appointment, onConfirm, onEdit, onDelete, onMessag
                   Confirmar e Enviar para Atendimento
                 </Button>
                 <Button 
-                    onClick={onEdit}
+                    onClick={onReschedule}
                     className="w-full bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 rounded-full h-12 text-base"
                 >
                   <Clock className="mr-2 h-5 w-5" />
+                  Reagendar agendamento
+                </Button>
+                <Button 
+                    onClick={onEdit}
+                    className="w-full bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 rounded-full h-12 text-base"
+                >
+                  <Edit2 className="mr-2 h-5 w-5" />
                   Editar agendamento
                 </Button>
                 <Button 

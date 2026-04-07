@@ -220,13 +220,14 @@ class MockDatabaseService {
   }
 
   deleteProperty(id: string) {
+    const hasLinkedPatients = this.patients.some(patient => patient.propertyId === id);
+    if (hasLinkedPatients) {
+      return false;
+    }
+
     this.properties = this.properties.filter(p => p.id !== id);
     this.save('vet_properties', this.properties);
-
-    this.patients = this.patients.map(patient =>
-      patient.propertyId === id ? { ...patient, propertyId: undefined } : patient
-    );
-    this.save('vet_patients', this.patients);
+    return true;
   }
 
   // --- Appointments ---

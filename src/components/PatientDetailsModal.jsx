@@ -244,42 +244,6 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
       }
   }
 
-  const handleDeleteProperty = () => {
-      if (!patient.propertyId) return
-
-      const currentProperty = properties.find(p => p.id === patient.propertyId)
-      const linkedPatientsCount = mockDB.getPatients().filter(p => p.propertyId === patient.propertyId).length
-      const confirmed = window.confirm(
-        `Deseja excluir o cadastro da propriedade "${currentProperty?.name || ''}"? Ela está vinculada a ${linkedPatientsCount} paciente(s) e essa exclusão remove a propriedade para todos eles.`
-      )
-
-      if (!confirmed) return
-
-      mockDB.deleteProperty(patient.propertyId)
-      patient.propertyId = undefined
-      setProperties(mockDB.getAllProperties())
-      setEditFormData(prev => ({ ...prev, propertyId: undefined, propertyData: {} }))
-      onPatientUpdated?.({ ...patient, propertyId: undefined })
-      alert('Propriedade excluída com sucesso!')
-  }
-
-  const handleUnlinkProperty = () => {
-      if (!patient.propertyId) return
-
-      const currentProperty = properties.find(p => p.id === patient.propertyId)
-      const confirmed = window.confirm(
-        `Deseja apenas desvincular a propriedade "${currentProperty?.name || ''}" deste paciente?`
-      )
-
-      if (!confirmed) return
-
-      patient.propertyId = undefined
-      mockDB.updatePatient(patient.id, { propertyId: undefined })
-      setEditFormData(prev => ({ ...prev, propertyId: undefined, propertyData: {} }))
-      onPatientUpdated?.({ ...patient, propertyId: undefined })
-      alert('Propriedade removida da ficha do paciente com sucesso!')
-  }
-
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
     { id: 'contacts', label: 'Contatos & Local' },
@@ -308,16 +272,6 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
               <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
                 <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
               </Button>
-              {patient.propertyId && (
-                <Button variant="outline" size="sm" onClick={handleUnlinkProperty} className="text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
-                  <Home className="h-3 w-3 mr-1" /> Remover deste paciente
-                </Button>
-              )}
-              {patient.propertyId && (
-                <Button variant="outline" size="sm" onClick={handleDeleteProperty} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
-                  <Trash2 className="h-3 w-3 mr-1" /> Excluir cadastro
-                </Button>
-              )}
             </div>
           )}
         </div>
@@ -368,7 +322,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
             <Home className="h-10 w-10 mx-auto mb-3 text-gray-300" />
             <p className="font-medium text-gray-600">Nenhuma propriedade vinculada a este paciente.</p>
-            <p className="text-sm text-gray-500 mt-1">Ao remover, a propriedade some da ficha e das listagens relacionadas a este paciente.</p>
+            <p className="text-sm text-gray-500 mt-1">Vincule uma propriedade para exibir os dados completos nesta ficha.</p>
           </div>
         )}
       </div>

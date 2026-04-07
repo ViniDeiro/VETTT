@@ -200,13 +200,22 @@ export default function Clients() {
 
   const handleDeletePropertyFromList = (property) => {
     const linkedPatients = mockDB.getPatients().filter(patient => patient.propertyId === property.id)
+    if (linkedPatients.length > 0) {
+      alert(`A propriedade "${property.name}" não pode ser excluída porque existem ${linkedPatients.length} paciente(s) vinculados.`)
+      return
+    }
+
     const confirmed = confirm(
-      `Deseja excluir a propriedade "${property.name}"? Ela será removida do sistema e desaparecerá automaticamente de ${linkedPatients.length} paciente(s) vinculado(s).`
+      `Deseja excluir a propriedade "${property.name}" do sistema?`
     )
 
     if (!confirmed) return
 
-    mockDB.deleteProperty(property.id)
+    const deleted = mockDB.deleteProperty(property.id)
+    if (!deleted) {
+      alert(`A propriedade "${property.name}" não pode ser excluída porque possui pacientes vinculados.`)
+      return
+    }
 
     const updatedProperties = mockDB.getAllProperties()
     const updatedPatients = mockDB.getPatients()
@@ -670,6 +679,7 @@ export default function Clients() {
                   ) : (
                       filteredProperties.map((property) => {
                           const linkedPatientsCount = patients.filter(patient => patient.propertyId === property.id).length
+                          const canDeleteProperty = linkedPatientsCount === 0
                           return (
                             <tr
                               key={property.id}
@@ -685,11 +695,20 @@ export default function Clients() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => handleDeletePropertyFromList(property)}
-                                        className="text-red-600 p-1 h-auto hover:bg-red-50"
-                                        title="Excluir propriedade"
+                                        disabled={!canDeleteProperty}
+                                        className={cn(
+                                          "p-1 h-auto",
+                                          canDeleteProperty
+                                            ? "text-red-600 hover:bg-red-50"
+                                            : "text-gray-300 cursor-not-allowed hover:bg-transparent"
+                                        )}
+                                        title={canDeleteProperty ? "Excluir propriedade" : "Não é possível excluir propriedade com pacientes vinculados"}
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </Button>
+                                      {!canDeleteProperty && (
+                                        <span className="text-xs text-amber-700">Possui pacientes vinculados</span>
+                                      )}
                                   </div>
                               </td>
                             </tr>
