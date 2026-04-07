@@ -124,6 +124,12 @@ const isAppointmentLate = (appointment) => {
   return isSameDay && now.getTime() >= (start.getTime() + (10 * 60 * 1000))
 }
 
+const isAppointmentToday = (appointment) => {
+  if (!appointment?.start) return false
+
+  return new Date(appointment.start).toDateString() === new Date().toDateString()
+}
+
 const getAppointmentDisplayColor = (appointment) => {
   if (isAppointmentLate(appointment)) {
     return 'bg-red-500 border-red-600 text-white'
@@ -329,6 +335,17 @@ export default function Agenda() {
 
   const handleConfirmAppointment = () => {
     if (!selectedAppointment) return;
+
+    if (!isAppointmentToday(selectedAppointment)) {
+      alert('So e possivel confirmar e enviar para Atendimento agendamentos do dia atual.')
+      return
+    }
+
+    if (['confirmado', 'confirmed'].includes(normalizeAppointmentStatus(selectedAppointment.status))) {
+      alert('Esse agendamento ja foi enviado para Atendimento.')
+      return
+    }
+
     try {
       const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
       if (updated) {
@@ -1023,6 +1040,8 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
         </div>
     );
 
+    const canConfirmAppointment = isAppointmentToday(appointment) && !['confirmado', 'confirmed'].includes(normalizeAppointmentStatus(appointment.status))
+
     return (
         <>
               <div className="space-y-6 flex-1">
@@ -1142,13 +1161,15 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
 
               {/* Botões de Ação */}
               <div className="space-y-3 mt-6 pt-6 border-t border-gray-100">
-                <Button 
-                    onClick={onConfirm}
-                    className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
-                >
-                  <CheckCircle className="mr-2 h-5 w-5" />
-                  Confirmar e Enviar para Atendimento
-                </Button>
+                {canConfirmAppointment && (
+                  <Button 
+                      onClick={onConfirm}
+                      className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-full h-12 text-base"
+                  >
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    Confirmar e Enviar para Atendimento
+                  </Button>
+                )}
                 <Button 
                     onClick={onReschedule}
                     className="w-full bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 rounded-full h-12 text-base"
