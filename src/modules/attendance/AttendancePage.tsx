@@ -351,6 +351,21 @@ export const AttendancePage: React.FC = () => {
       }
   };
 
+  const handleDeleteConfirmedAppointment = (appointmentId: string, patientName: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o agendamento de ${patientName}?`)) {
+      return;
+    }
+
+    const deleted = mockDB.deleteAppointment(appointmentId);
+    if (!deleted) {
+      alert('Nao foi possivel excluir o agendamento.');
+      return;
+    }
+
+    setConfirmedAppointments(prev => prev.filter(appt => appt.id !== appointmentId));
+    alert('Agendamento excluido com sucesso. Ele tambem saiu da Agenda.');
+  };
+
   const handleFinish = () => {
     if (currentAttendance) {
       try {
@@ -563,13 +578,23 @@ export const AttendancePage: React.FC = () => {
                           </div>
                         </div>
 
-                        <Button
-                          onClick={() => appt.patient && setSelectedPatient(appt.patient)}
-                          className="bg-[#0B2C4D] text-white hover:bg-[#0B2C4D]/90"
-                          disabled={!appt.patient}
-                        >
-                          Abrir Atendimento
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => appt.patient && setSelectedPatient(appt.patient)}
+                            className="bg-[#0B2C4D] text-white hover:bg-[#0B2C4D]/90"
+                            disabled={!appt.patient}
+                          >
+                            Abrir Atendimento
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleDeleteConfirmedAppointment(appt.id, appt.patientName)}
+                            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

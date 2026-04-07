@@ -246,7 +246,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
 
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
-    { id: 'contacts', label: 'Contatos & Local' },
+    { id: 'contacts', label: 'Contato/Convenio' },
     ...(patient.species === 'Equine' ? [{ id: 'property', label: 'Propriedade' }] : []),
     { id: 'attendances', label: 'Histórico de Atendimentos' },
     { id: 'odontogram', label: 'Odontograma' },

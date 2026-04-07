@@ -373,6 +373,11 @@ export default function Agenda() {
   const handleDeleteAppointment = () => {
     if (!selectedAppointment) return
 
+    if (selectedAppointment.doctor) {
+      alert('Agendamentos com veterinario definido so podem ser excluidos em Atendimento, na aba "Confirmados de Hoje".')
+      return
+    }
+
     if (!confirm(`Tem certeza que deseja excluir o agendamento de ${selectedAppointment.patient}?`)) {
       return
     }
@@ -774,12 +779,16 @@ export default function Agenda() {
                       >
                         {/* Renderizar agendamentos aqui */}
                         {appointments.filter(apt => {
-                          const aptDate = new Date(apt.start)
-                          const aptHour = aptDate.getHours()
-                          
+                          const aptStart = new Date(apt.start)
+                          const aptEnd = new Date(apt.end)
+                          const slotStart = new Date(date)
+                          slotStart.setHours(hour, 0, 0, 0)
+                          const slotEnd = new Date(slotStart)
+                          slotEnd.setHours(hour + 1, 0, 0, 0)
+
                           // Filtros básicos
-                          if (aptDate.getDate() !== date.getDate() || aptDate.getMonth() !== date.getMonth()) return false;
-                          if (aptHour !== hour) return false;
+                          if (aptStart.getDate() !== date.getDate() || aptStart.getMonth() !== date.getMonth() || aptStart.getFullYear() !== date.getFullYear()) return false;
+                          if (!(aptStart < slotEnd && aptEnd > slotStart)) return false;
 
                           // Apply other filters (species, vet, status) similar to previous code
                           return true; 
@@ -1153,10 +1162,11 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 </Button>
                 <Button 
                     onClick={onDelete}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full h-12 text-base"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full h-12 text-base disabled:bg-gray-200 disabled:text-gray-500 disabled:hover:bg-gray-200"
+                    disabled={!!appointment.doctor}
                 >
                   <Trash2 className="mr-2 h-5 w-5" />
-                  Excluir agendamento
+                  {appointment.doctor ? 'Excluir somente em Atendimento' : 'Excluir agendamento'}
                 </Button>
                 <Button 
                     onClick={onMessage}
