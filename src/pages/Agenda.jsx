@@ -18,7 +18,8 @@ import {
   FileText,
   MessageCircle,
   Calendar as CalendarIcon,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
@@ -1114,7 +1115,7 @@ function AppointmentDetails({ appointment, onConfirm, onEdit, onDelete, onMessag
                     onClick={onDelete}
                     className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full h-12 text-base"
                 >
-                  <Clock className="mr-2 h-5 w-5" />
+                  <Trash2 className="mr-2 h-5 w-5" />
                   Excluir agendamento
                 </Button>
                 <Button 

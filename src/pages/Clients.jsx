@@ -172,6 +172,17 @@ export default function Clients() {
     return true
   })
 
+  const filteredProperties = properties.filter(property => {
+    const normalizedSearch = searchTerm.toLowerCase()
+    const matchesSearch =
+      property.name?.toLowerCase().includes(normalizedSearch) ||
+      property.city?.toLowerCase().includes(normalizedSearch) ||
+      property.state?.toLowerCase().includes(normalizedSearch) ||
+      property.address?.toLowerCase().includes(normalizedSearch)
+
+    return matchesSearch
+  })
+
   const handlePatientClick = (patient) => {
       // Find owner name for display
       const owner = owners.find(o => o.id === patient.ownerId)
@@ -187,6 +198,34 @@ export default function Clients() {
       setIsPatientDetailsOpen(true)
   }
 
+  const handleDeletePropertyFromList = (property) => {
+    const linkedPatients = mockDB.getPatients().filter(patient => patient.propertyId === property.id)
+    const confirmed = confirm(
+      `Deseja excluir a propriedade "${property.name}"? Ela será removida do sistema e desaparecerá automaticamente de ${linkedPatients.length} paciente(s) vinculado(s).`
+    )
+
+    if (!confirmed) return
+
+    mockDB.deleteProperty(property.id)
+
+    const updatedProperties = mockDB.getAllProperties()
+    const updatedPatients = mockDB.getPatients()
+
+    setProperties(updatedProperties)
+    setPatients(updatedPatients)
+
+    if (propertyFilter === property.id) {
+      setPropertyFilter('all')
+    }
+
+    if (selectedPatient?.propertyId === property.id) {
+      const refreshedSelectedPatient = updatedPatients.find(patient => patient.id === selectedPatient.id) || null
+      setSelectedPatient(refreshedSelectedPatient)
+    }
+
+    alert('Propriedade excluída com sucesso!')
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -194,7 +233,7 @@ export default function Clients() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-[#0B2C4D]">
-                {viewMode === 'owners' ? 'Clientes (Tutores)' : 'Pacientes'}
+                {viewMode === 'owners' ? 'Clientes (Tutores)' : viewMode === 'patients' ? 'Pacientes' : 'Propriedades'}
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -219,6 +258,16 @@ export default function Clients() {
                 >
                     <PawPrint className="h-4 w-4" />
                     Pacientes
+                </button>
+                <button
+                    onClick={() => setViewMode('properties')}
+                    className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                        viewMode === 'properties' ? "bg-white text-[#0B2C4D] shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    )}
+                >
+                    <Filter className="h-4 w-4" />
+                    Propriedades
                 </button>
              </div>
 
@@ -469,6 +518,7 @@ export default function Clients() {
             onPatientUpdated={(updatedPatient) => {
               setSelectedPatient(updatedPatient)
               setPatients(mockDB.getPatients())
+              setProperties(mockDB.getAllProperties())
               const updatedOwners = mockDB.getOwners()
               setOwners(updatedOwners)
               setClients(updatedOwners)
@@ -480,7 +530,13 @@ export default function Clients() {
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder={viewMode === 'owners' ? "Pesquisar tutor por nome ou CPF" : "Pesquisar paciente"}
+              placeholder={
+                viewMode === 'owners'
+                  ? "Pesquisar tutor por nome ou CPF"
+                  : viewMode === 'patients'
+                    ? "Pesquisar paciente"
+                    : "Pesquisar propriedade"
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 rounded-full border-gray-200"
@@ -527,13 +583,21 @@ export default function Clients() {
                             <th className="p-4">Cidade</th>
                             <th className="p-4">Ações</th>
                         </>
-                    ) : (
+                    ) : viewMode === 'patients' ? (
                         <>
                             <th className="p-4 pl-6">Nome do Paciente</th>
                             <th className="p-4">Espécie</th>
                             <th className="p-4">Raça</th>
                             <th className="p-4">Tutor</th>
                             <th className="p-4">Propriedade</th>
+                            <th className="p-4">Ações</th>
+                        </>
+                    ) : (
+                        <>
+                            <th className="p-4 pl-6">Nome da Propriedade</th>
+                            <th className="p-4">Cidade</th>
+                            <th className="p-4">Estado</th>
+                            <th className="p-4">Pacientes Vinculados</th>
                             <th className="p-4">Ações</th>
                         </>
                     )}
@@ -568,7 +632,7 @@ export default function Clients() {
                           </td>
                         </tr>
                       ))
-                  ) : (
+                  ) : viewMode === 'patients' ? (
                       filteredPatients.map((patient) => {
                           const owner = owners.find(o => o.id === patient.ownerId)
                           const property = properties.find(p => p.id === patient.propertyId)
@@ -598,6 +662,34 @@ export default function Clients() {
                                               setPatients(mockDB.getPatients());
                                           }
                                       }} className="text-red-600 p-1 h-auto hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
+                                  </div>
+                              </td>
+                            </tr>
+                          )
+                      })
+                  ) : (
+                      filteredProperties.map((property) => {
+                          const linkedPatientsCount = patients.filter(patient => patient.propertyId === property.id).length
+                          return (
+                            <tr
+                              key={property.id}
+                              className="hover:bg-gray-50 transition-colors text-sm text-gray-600"
+                            >
+                              <td className="p-4 pl-6 font-medium text-gray-900">{property.name}</td>
+                              <td className="p-4">{property.city || '-'}</td>
+                              <td className="p-4">{property.state || '-'}</td>
+                              <td className="p-4">{linkedPatientsCount}</td>
+                              <td className="p-4">
+                                  <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeletePropertyFromList(property)}
+                                        className="text-red-600 p-1 h-auto hover:bg-red-50"
+                                        title="Excluir propriedade"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
                                   </div>
                               </td>
                             </tr>

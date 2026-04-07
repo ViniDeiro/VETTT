@@ -248,8 +248,9 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
       if (!patient.propertyId) return
 
       const currentProperty = properties.find(p => p.id === patient.propertyId)
+      const linkedPatientsCount = mockDB.getPatients().filter(p => p.propertyId === patient.propertyId).length
       const confirmed = window.confirm(
-        `Deseja excluir a propriedade "${currentProperty?.name || ''}"? Essa ação também desvincula os pacientes associados a ela.`
+        `Deseja excluir o cadastro da propriedade "${currentProperty?.name || ''}"? Ela está vinculada a ${linkedPatientsCount} paciente(s) e essa exclusão remove a propriedade para todos eles.`
       )
 
       if (!confirmed) return
@@ -262,9 +263,27 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
       alert('Propriedade excluída com sucesso!')
   }
 
+  const handleUnlinkProperty = () => {
+      if (!patient.propertyId) return
+
+      const currentProperty = properties.find(p => p.id === patient.propertyId)
+      const confirmed = window.confirm(
+        `Deseja apenas desvincular a propriedade "${currentProperty?.name || ''}" deste paciente?`
+      )
+
+      if (!confirmed) return
+
+      patient.propertyId = undefined
+      mockDB.updatePatient(patient.id, { propertyId: undefined })
+      setEditFormData(prev => ({ ...prev, propertyId: undefined, propertyData: {} }))
+      onPatientUpdated?.({ ...patient, propertyId: undefined })
+      alert('Propriedade removida da ficha do paciente com sucesso!')
+  }
+
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
     { id: 'contacts', label: 'Contatos & Local' },
+    ...(patient.species === 'Equine' ? [{ id: 'property', label: 'Propriedade' }] : []),
     { id: 'attendances', label: 'Histórico de Atendimentos' },
     { id: 'odontogram', label: 'Odontograma' },
     { id: 'treatments', label: 'Tratamentos' },
@@ -273,6 +292,88 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
     { id: 'files', label: 'Arquivos' },
     { id: 'notes', label: 'Notas' },
   ]
+
+  const renderPropertySection = () => {
+    const property = properties.find(p => p.id === patient.propertyId)
+
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4 border-b pb-2">
+          <h3 className="font-bold text-gray-900 flex items-center gap-2">
+            <Home className="h-5 w-5 text-orange-600" />
+            Dados da Propriedade
+          </h3>
+          {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
+                <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
+              </Button>
+              {patient.propertyId && (
+                <Button variant="outline" size="sm" onClick={handleUnlinkProperty} className="text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
+                  <Home className="h-3 w-3 mr-1" /> Remover deste paciente
+                </Button>
+              )}
+              {patient.propertyId && (
+                <Button variant="outline" size="sm" onClick={handleDeleteProperty} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
+                  <Trash2 className="h-3 w-3 mr-1" /> Excluir cadastro
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {property ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-semibold">Nome da Propriedade</label>
+              <p className="font-medium text-lg">{property.name}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-semibold">Tipo da Propriedade</label>
+              <p className="font-medium text-gray-700">{property.type || 'Não informado'}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-semibold">CNPJ / Inscrição</label>
+              <p className="font-medium text-gray-700">{property.document || property.registrationNumber || '-'}</p>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-semibold">Telefone</label>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-lg">{property.phone || 'Não informado'}</p>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
+              <p className="font-medium text-gray-700">{property.email || 'Não informado'}</p>
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
+              {(() => {
+                const formattedAddress = formatAddressDisplay(property)
+                return (
+                  <p className="font-medium text-gray-700">
+                    {formattedAddress.line1}
+                    {formattedAddress.line2 && (
+                      <>
+                        <br />
+                        {formattedAddress.line2}
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+            <Home className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium text-gray-600">Nenhuma propriedade vinculada a este paciente.</p>
+            <p className="text-sm text-gray-500 mt-1">Ao remover, a propriedade some da ficha e das listagens relacionadas a este paciente.</p>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const handleAction = async (action) => {
     console.log('Action clicked:', action);
@@ -871,77 +972,11 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                            </div>
                        )}
 
-                      {/* Property Contacts (Equine) */}
-                      {patient.species === 'Equine' && (
-                           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                                <div className="flex justify-between items-center mb-4 border-b pb-2">
-                                    <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                                        <Home className="h-5 w-5 text-orange-600" />
-                                        Dados da Propriedade
-                                    </h3>
-                                    {patient.status !== 'Deceased' && patient.status !== 'Archived' && (
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => setIsChangingProperty(true)} className="text-xs">
-                                                <Edit2 className="h-3 w-3 mr-1" /> Alterar Propriedade
-                                            </Button>
-                                            {patient.propertyId && (
-                                                <Button variant="outline" size="sm" onClick={handleDeleteProperty} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
-                                                    <Trash2 className="h-3 w-3 mr-1" /> Excluir Propriedade
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                {(() => {
-                                  const prop = properties.find(p => p.id === patient.propertyId);
-                                  return prop ? (
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                          <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Nome da Propriedade</label>
-                                              <p className="font-medium text-lg">{prop.name}</p>
-                                          </div>
-                                          <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Tipo da Propriedade</label>
-                                              <p className="font-medium text-gray-700">{prop.type || 'Não informado'}</p>
-                                          </div>
-                                          <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">CNPJ / Inscrição</label>
-                                              <p className="font-medium text-gray-700">{prop.document || prop.registrationNumber || '-'}</p>
-                                          </div>
-                                          <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Telefone</label>
-                                              <div className="flex items-center gap-2">
-                                                  <p className="font-medium text-lg">{prop.phone || 'Não informado'}</p>
-                                              </div>
-                                          </div>
-                                          <div>
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Email</label>
-                                              <p className="font-medium text-gray-700">{prop.email || 'Não informado'}</p>
-                                          </div>
-                                          <div className="md:col-span-2">
-                                              <label className="text-xs text-gray-500 uppercase font-semibold">Endereço Completo</label>
-                                              {(() => {
-                                                  const formattedAddress = formatAddressDisplay(prop)
-                                                  return (
-                                                    <p className="font-medium text-gray-700">
-                                                        {formattedAddress.line1}
-                                                        {formattedAddress.line2 && (
-                                                          <>
-                                                            <br/>
-                                                            {formattedAddress.line2}
-                                                          </>
-                                                        )}
-                                                    </p>
-                                                  )
-                                              })()}
-                                          </div>
-                                      </div>
-                                  ) : (
-                                    <p className="text-gray-500">Nenhuma propriedade vinculada.</p>
-                                  )
-                                })()}
-                           </div>
-                      )}
+                  </div>
+              )}
+              {activeTab === 'property' && patient.species === 'Equine' && (
+                  <div className="space-y-6">
+                    {renderPropertySection()}
                   </div>
               )}
               {activeTab === 'attendances' && (
@@ -1226,6 +1261,21 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                             onChange={e => setEditFormData({...editFormData, coat: e.target.value, color: e.target.value})} 
                           />
                       </div>
+                      {(editFormData.species === 'Canine' || editFormData.species === 'Feline') && (
+                        <div>
+                            <label className="text-sm font-medium">Porte</label>
+                            <select
+                              className="w-full border rounded p-2"
+                              value={editFormData.size || ''}
+                              onChange={e => setEditFormData({...editFormData, size: e.target.value})}
+                            >
+                                <option value="">Selecione...</option>
+                                <option value="Small">Pequeno</option>
+                                <option value="Medium">Médio</option>
+                                <option value="Large">Grande</option>
+                            </select>
+                        </div>
+                      )}
                        <div className="flex items-center pt-6 gap-4">
                            <label className="flex items-center gap-2 cursor-pointer">
                                <input 
