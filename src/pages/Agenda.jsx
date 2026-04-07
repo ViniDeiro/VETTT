@@ -373,8 +373,11 @@ export default function Agenda() {
   const handleDeleteAppointment = () => {
     if (!selectedAppointment) return
 
-    if (selectedAppointment.doctor) {
-      alert('Agendamentos com veterinario definido so podem ser excluidos em Atendimento, na aba "Confirmados de Hoje".')
+    const appointmentStatus = String(selectedAppointment.status || '').toLowerCase()
+    const isSentToAttendance = appointmentStatus === 'confirmado' || appointmentStatus === 'confirmed'
+
+    if (isSentToAttendance) {
+      alert('Depois de confirmar e enviar para Atendimento, a exclusao so pode ser feita pelo veterinario em "Confirmados de Hoje".')
       return
     }
 
@@ -1163,10 +1166,12 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 <Button 
                     onClick={onDelete}
                     className="w-full bg-red-600 hover:bg-red-700 text-white rounded-full h-12 text-base disabled:bg-gray-200 disabled:text-gray-500 disabled:hover:bg-gray-200"
-                    disabled={!!appointment.doctor}
+                    disabled={String(appointment.status || '').toLowerCase() === 'confirmado' || String(appointment.status || '').toLowerCase() === 'confirmed'}
                 >
                   <Trash2 className="mr-2 h-5 w-5" />
-                  {appointment.doctor ? 'Excluir somente em Atendimento' : 'Excluir agendamento'}
+                  {(String(appointment.status || '').toLowerCase() === 'confirmado' || String(appointment.status || '').toLowerCase() === 'confirmed')
+                    ? 'Excluir somente em Atendimento'
+                    : 'Excluir agendamento'}
                 </Button>
                 <Button 
                     onClick={onMessage}

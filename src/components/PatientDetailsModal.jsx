@@ -403,7 +403,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                   {(() => {
                       const nextAppt = mockDB.appointments.find(a => a.patientId === patient.id && new Date(a.start) > new Date());
                       if (nextAppt) {
-                          return <span>Próxima Consulta: {new Date(nextAppt.start).toLocaleString('pt-BR')}</span>;
+                          return <span>Próxima Consulta: {new Date(nextAppt.start).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
                       }
                       return <span className="italic">Sem consultas futuras</span>;
                   })()}
