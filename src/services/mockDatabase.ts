@@ -224,6 +224,24 @@ const INITIAL_PROFILES: AccessProfile[] = [
   }
 ];
 
+const mergeProfileWithDefaults = (profile: AccessProfile): AccessProfile => {
+  const defaultProfile = INITIAL_PROFILES.find(item => item.id === profile.id);
+  const baseProfile = defaultProfile || profile;
+
+  return {
+    ...baseProfile,
+    ...profile,
+    permissions: createPermissionSet({
+      ...(defaultProfile?.permissions || {}),
+      ...(profile.permissions || {})
+    }),
+    restrictions: {
+      ...(defaultProfile?.restrictions || {}),
+      ...(profile.restrictions || {})
+    }
+  };
+};
+
 const INITIAL_TEAM: TeamMember[] = [
   {
     id: 'team-admin',
@@ -742,6 +760,14 @@ class MockDatabaseService {
     if (this.profiles.length === 0) {
       this.profiles = INITIAL_PROFILES;
       this.save('vet_profiles', this.profiles);
+    } else {
+      const mergedProfiles = this.profiles.map(profile => mergeProfileWithDefaults(profile));
+      const missingStandardProfiles = INITIAL_PROFILES.filter(
+        standardProfile => !mergedProfiles.some(profile => profile.id === standardProfile.id)
+      );
+
+      this.profiles = [...mergedProfiles, ...missingStandardProfiles];
+      this.save('vet_profiles', this.profiles);
     }
 
     if (this.teamMembers.length === 0) {
@@ -1109,7 +1135,15 @@ class MockDatabaseService {
     const profile = typeof userOrProfile === 'string'
       ? this.getProfileById(userOrProfile)
       : this.getProfileById(userOrProfile?.accessProfileId);
-    return profile?.permissions?.[moduleKey] || null;
+    const defaultProfile = profile?.id
+      ? INITIAL_PROFILES.find(item => item.id === profile.id)
+      : null;
+
+    return {
+      ...createPermissionSet()[moduleKey],
+      ...(defaultProfile?.permissions?.[moduleKey] || {}),
+      ...(profile?.permissions?.[moduleKey] || {})
+    };
   }
 
   canUserAccess(user: User | null | undefined, moduleKey: AppModuleKey, action: keyof ModulePermission = 'view') {
