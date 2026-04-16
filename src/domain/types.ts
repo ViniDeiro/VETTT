@@ -1,10 +1,267 @@
 export type Role = 'vet' | 'secretary' | 'admin';
 
+export type UserStatus = 'active' | 'inactive';
+export type ProfileType = 'standard' | 'custom';
+export type PermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'exportPdf'
+  | 'accessFinancial'
+  | 'accessStock';
+
+export type AppModuleKey =
+  | 'settings'
+  | 'users'
+  | 'branding'
+  | 'finance'
+  | 'inventory'
+  | 'attendance'
+  | 'medicalRecords'
+  | 'agenda'
+  | 'reports'
+  | 'documents'
+  | 'invoices'
+  | 'whatsapp'
+  | 'audit'
+  | 'patients'
+  | 'team';
+
+export interface ModulePermission {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+  exportPdf: boolean;
+  accessFinancial: boolean;
+  accessStock: boolean;
+}
+
+export interface ProfileRestrictions {
+  editAgenda: boolean;
+  cancelAttendance: boolean;
+  viewValues: boolean;
+  sensitiveSettings: boolean;
+}
+
+export interface AccessProfile {
+  id: string;
+  name: string;
+  description?: string;
+  type: ProfileType;
+  baseRole?: Role;
+  permissions: Record<AppModuleKey, ModulePermission>;
+  restrictions: ProfileRestrictions;
+}
+
 export interface User {
   id: string;
   name: string;
   role: Role;
   email: string;
+  fullName?: string;
+  phone?: string;
+  functionTitle?: string;
+  accessProfileId?: string;
+  status?: UserStatus;
+  createdAt?: string;
+  lastAccessAt?: string;
+  teamMemberId?: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  functionTitle: string;
+  specialty?: string;
+  crmv?: string;
+  cpf?: string;
+  phone: string;
+  email?: string;
+  signature?: string;
+  photo?: string;
+  status: UserStatus;
+  createdAt: string;
+  userId?: string;
+}
+
+export interface ClinicInfo {
+  fantasyName: string;
+  legalName: string;
+  cnpj: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phone: string;
+  email: string;
+  website: string;
+  socialMedia: string;
+  logo?: string | null;
+  documentLogo?: string | null;
+}
+
+export interface ClinicAppearance {
+  primaryColor: string;
+  buttonColor: string;
+  sidebarColor: string;
+  theme: 'light' | 'dark';
+  appIcon?: string | null;
+}
+
+export interface DocumentLayoutSettings {
+  selectedModel: 'classic' | 'minimal' | 'premium';
+  header: string;
+  footer: string;
+  logoPosition: 'left' | 'center' | 'right';
+  fontFamily: string;
+  fontSize: number;
+  showSignature: boolean;
+  autoCrmv: boolean;
+  autoCnpj: boolean;
+  showAddress: boolean;
+  showQrCode: boolean;
+  legalNotes: string;
+}
+
+export interface ConsultationTemplate {
+  id: string;
+  name: string;
+  speciesFocus: string;
+  defaultValue: number;
+  duration: string;
+  anamnesisText: string;
+  checklist: string[];
+  requiredFields: string[];
+}
+
+export interface DocumentTemplateDefinition {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+}
+
+export interface RegionalSettings {
+  language: 'pt-BR' | 'en-US' | 'es-ES';
+  dateFormat: string;
+  timeFormat: string;
+  currency: string;
+  decimalSeparator: ',' | '.';
+}
+
+export interface AutomatedMessageTemplate {
+  id: string;
+  type: string;
+  channel: 'whatsapp' | 'email' | 'sms';
+  enabled: boolean;
+  template: string;
+  variables: string[];
+}
+
+export interface WhatsAppSettings {
+  connected: boolean;
+  provider: string;
+  apiUrl: string;
+  instanceName: string;
+  token: string;
+  autoSendMessages: boolean;
+  sendPdf: boolean;
+  sendReminders: boolean;
+  confirmAppointments: boolean;
+  chargeNotifications: boolean;
+  paymentLink: boolean;
+}
+
+export interface FiscalSettings {
+  includeCnpjOnAllDocuments: boolean;
+  municipalApiUrl: string;
+  municipalProvider: string;
+  cityCode: string;
+  environment: 'homologation' | 'production';
+  issueInvoices: boolean;
+  issueReceipts: boolean;
+  issuePaymentProofs: boolean;
+  defaultServiceCode: string;
+  defaultTaxRate: number;
+  nextInvoiceNumber: number;
+}
+
+export interface AuditSettings {
+  enabled: boolean;
+  retainDays: number;
+  logSensitiveActions: boolean;
+}
+
+export interface BackupSecuritySettings {
+  dailyAutoBackup: boolean;
+  manualBackupEnabled: boolean;
+  restoreEnabled: boolean;
+  twoFactorEnabled: boolean;
+  passwordResetEnabled: boolean;
+  sessionTimeoutMinutes: number;
+  backupRetentionDays: number;
+  lastBackupAt?: string;
+}
+
+export interface DashboardSettings {
+  enabledIndicators: string[];
+}
+
+export interface ClinicUnit {
+  id: string;
+  name: string;
+  type: 'matriz' | 'filial' | 'atendimento_movel' | 'hospital_parceiro';
+  city: string;
+  state: string;
+  address: string;
+  active: boolean;
+}
+
+export interface ClinicalReminderTemplate {
+  id: string;
+  name: string;
+  daysAfter: number;
+  message: string;
+  active: boolean;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorUserId?: string | null;
+  actorName: string;
+  entity: string;
+  action: 'create' | 'update' | 'delete' | 'restore' | 'backup' | 'login' | 'logout';
+  changedField?: string;
+  previousValue?: unknown;
+  newValue?: unknown;
+  createdAt: string;
+}
+
+export interface BackupSnapshot {
+  id: string;
+  label: string;
+  createdAt: string;
+  createdBy: string;
+  data: Record<string, unknown>;
+}
+
+export interface GeneralSettings {
+  clinic: ClinicInfo;
+  appearance: ClinicAppearance;
+  documents: DocumentLayoutSettings;
+  regional: RegionalSettings;
+  consultationTemplates: ConsultationTemplate[];
+  documentTemplates: DocumentTemplateDefinition[];
+  automatedMessages: AutomatedMessageTemplate[];
+  whatsapp: WhatsAppSettings;
+  fiscal: FiscalSettings;
+  audit: AuditSettings;
+  security: BackupSecuritySettings;
+  dashboard: DashboardSettings;
+  units: ClinicUnit[];
+  clinicalReminders: ClinicalReminderTemplate[];
 }
 
 export interface Owner {
@@ -50,6 +307,7 @@ export interface Patient {
   age?: number; // Calculated or manual (Years)
   ageMonths?: number; // Manual (Months)
   ownerId: string;
+  ownerName?: string;
   propertyId?: string; // Required if Equine
   gender: 'M' | 'F';
   neutered?: boolean;
@@ -82,21 +340,34 @@ export interface Patient {
   healthPlan?: string; // Convênio
   healthPlanNumber?: string; // Carteirinha
   healthPlanExpiry?: string; // Validade da carteirinha
-  rg?: string; // RG Animal
-  microchip?: string; // Microchip
 }
 
-export type UnitType = 'ml' | 'un' | 'frasco' | 'g' | 'kg';
+export type UnitType =
+  | 'un'
+  | 'unidade'
+  | 'ml'
+  | 'mg'
+  | 'g'
+  | 'kg'
+  | 'comprimido'
+  | 'frasco'
+  | 'pacote_fracionavel';
+
+export type InventoryCategory = 'Medication' | 'Material' | 'Vaccine' | 'Feed' | 'Other';
 
 export interface InventoryItem {
   id: string;
   name: string;
-  category: 'Medication' | 'Material' | 'Vaccine' | 'Feed' | 'Other';
-  quantity: number;
-  unit: UnitType;
+  category: InventoryCategory;
+  quantity: number; // Current available amount in the consumption unit
+  unit: UnitType; // Consumption unit
   minStock: number;
-  costPrice: number;
-  salePrice: number;
+  costPrice: number; // Total purchase cost
+  salePrice: number; // Sale price per consumption unit
+  unitCost?: number; // Calculated purchase cost per consumption unit
+  packageQuantity?: number; // Original package content
+  packageUnit?: UnitType; // Package content unit
+  allowsFraction?: boolean;
   batchNumber?: string;
   expiryDate?: string;
   description?: string;
@@ -111,8 +382,8 @@ export interface ConsumptionItem {
   itemName: string;
   quantityUsed: number;
   unit: UnitType;
-  costAtMoment: number;
-  priceAtMoment: number;
+  costAtMoment: number; // Unit cost at the moment of use
+  priceAtMoment: number; // Unit sale price at the moment of use
 }
 
 export type AttendanceStatus = 'scheduled' | 'in_progress' | 'finished' | 'canceled';
@@ -137,6 +408,8 @@ export interface Attendance {
   patientId: string;
   patientName: string;
   vetId: string;
+  ownerId?: string;
+  ownerName?: string;
   date: string; // ISO Date for start
   reason: string;
   anamnesis?: string;
@@ -147,27 +420,25 @@ export interface Attendance {
   procedures: AppliedProcedure[]; // Clinical procedures
   returnVisit?: ReturnVisit; // Scheduled return
   consultationType?: string; // e.g. 'Clínica', 'Odontológica'
-  returnVisit?: boolean; // Is this a return visit?
   returnDate?: string; // If scheduling a return
   notes?: string; // Unified notes if needed
   status: AttendanceStatus;
   consumedItems: ConsumptionItem[];
-  vaccines?: {
-      inventoryItemId: string;
-      name: string;
-      batch?: string;
-      manufacturer?: string;
-      expiryDate?: string;
-      applicationDate: string;
-      price: number;
-      notes?: string;
-  }[];
-  totalCost: number; // Cost of materials
-  totalService: number; // Vet service fee
-  totalTotal: number; // Final price
+  totalCost: number; // Total operational cost
+  totalService: number; // Revenue from professional fees and procedures
+  totalTotal: number; // Final charged amount
+  totalProductsRevenue?: number;
+  totalProcedureCost?: number;
+  totalProcedureRevenue?: number;
+  totalVaccineCost?: number;
+  totalVaccineRevenue?: number;
+  grossProfit?: number;
+  marginPercent?: number;
+  financialRecordId?: string;
   vitals?: Vitals;
   updatedAt?: string;
   updatedBy?: string;
+  finishedAt?: string;
 }
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue';
@@ -183,9 +454,15 @@ export interface PaymentDetails {
 export interface Receivable {
   id: string;
   attendanceId: string;
+  patientId?: string;
+  ownerId?: string;
   patientName: string;
   ownerName: string;
   amount: number;
+  totalCost?: number;
+  grossProfit?: number;
+  marginPercent?: number;
+  professionalName?: string;
   dueDate: string;
   status: PaymentStatus;
   paymentDate?: string;
@@ -200,8 +477,27 @@ export interface CashFlowEntry {
   type: 'income' | 'expense';
   category: string;
   amount: number;
+  grossAmount?: number;
+  totalCost?: number;
+  grossProfit?: number;
+  marginPercent?: number;
+  paymentStatus?: PaymentStatus;
+  attendanceId?: string;
+  patientId?: string;
+  patientName?: string;
+  ownerId?: string;
+  ownerName?: string;
+  professionalName?: string;
   description: string;
   referenceId?: string; // e.g., receivableId or purchaseId
+}
+
+export interface ProcedureTemplateItem {
+  inventoryItemId: string;
+  quantity: number;
+  unit?: UnitType;
+  itemName?: string;
+  costUnit?: number;
 }
 
 export interface ExamItem {
@@ -240,12 +536,17 @@ export interface VaccineApplication {
 }
 
 export interface AppliedProcedure {
-    id: string;
-    attendanceId: string;
-    name: string;
-    price: number;
-    notes?: string;
-    timestamp: string;
+  id: string;
+  attendanceId: string;
+  procedureTemplateId?: string;
+  name: string;
+  category?: string;
+  price: number;
+  cost?: number;
+  marginPercent?: number;
+  consumedItems?: ConsumptionItem[];
+  notes?: string;
+  timestamp: string;
 }
 
 export interface ReturnVisit {
@@ -284,10 +585,32 @@ export interface Prescription {
 export interface ProcedureTemplate {
   id: string;
   name: string;
-  baseCost: number; // Suggested service fee
+  category?: string;
+  description?: string;
+  baseCost: number; // Legacy field used by current UI
+  chargePrice?: number; // Suggested charged amount
+  marginPercent?: number;
   duration?: string;
-  items: {
-    inventoryItemId: string;
-    quantity: number;
-  }[];
+  averageTime?: string;
+  notes?: string;
+  operationalCost?: number;
+  items: ProcedureTemplateItem[];
+}
+
+export interface FinancialRecord {
+  id: string;
+  attendanceId: string;
+  patientId: string;
+  patientName: string;
+  ownerId?: string;
+  ownerName: string;
+  professionalName: string;
+  date: string;
+  grossAmount: number;
+  totalCost: number;
+  grossProfit: number;
+  marginPercent: number;
+  paymentStatus: PaymentStatus;
+  procedureCount: number;
+  description: string;
 }

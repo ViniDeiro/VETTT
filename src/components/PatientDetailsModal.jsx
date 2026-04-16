@@ -25,7 +25,8 @@ import {
   Plus,
   Edit2,
   Home,
-  Trash2
+  Trash2,
+  Wallet
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -107,6 +108,20 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
     if (years > 0) return `${years} anos`
     if (months > 0) return `${months} meses`
     return '-'
+  }
+
+  const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(Number(value || 0))
+  
+  const parseTimelineDate = (value) => {
+    if (!value) return new Date(0)
+    if (value.includes('/')) {
+      const [day, month, year] = value.split('/')
+      return new Date(`${year}-${month}-${day}T00:00:00`)
+    }
+    return new Date(value)
   }
 
   const handleCepSearch = async (cep, type) => {
@@ -247,6 +262,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
   const tabs = [
     { id: 'overview', label: 'Visão Geral' },
     { id: 'contacts', label: 'Contato/Convenio' },
+    { id: 'financial', label: 'Financeiro' },
     ...(patient.species === 'Equine' ? [{ id: 'property', label: 'Propriedade' }] : []),
     { id: 'attendances', label: 'Histórico de Atendimentos' },
     { id: 'odontogram', label: 'Odontograma' },
@@ -328,6 +344,28 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
       </div>
     )
   }
+
+  const patientFinancialRecords = mockDB
+    .getFinancialRecordsByPatientId(patient.id)
+    .slice()
+    .sort((a, b) => parseTimelineDate(b.date).getTime() - parseTimelineDate(a.date).getTime())
+
+  const patientReceivables = mockDB
+    .getReceivables()
+    .filter(receivable => receivable.patientId === patient.id)
+    .slice()
+    .sort((a, b) => parseTimelineDate(b.dueDate).getTime() - parseTimelineDate(a.dueDate).getTime())
+
+  const totalGrossRevenue = patientFinancialRecords.reduce((total, record) => total + (record.grossAmount || 0), 0)
+  const totalOperationalCost = patientFinancialRecords.reduce((total, record) => total + (record.totalCost || 0), 0)
+  const totalGrossProfit = patientFinancialRecords.reduce((total, record) => total + (record.grossProfit || 0), 0)
+  const totalPaid = patientReceivables
+    .filter(receivable => receivable.status === 'paid')
+    .reduce((total, receivable) => total + (receivable.amount || 0), 0)
+  const totalPending = patientReceivables
+    .filter(receivable => receivable.status !== 'paid')
+    .reduce((total, receivable) => total + (receivable.amount || 0), 0)
+  const averageTicket = patientFinancialRecords.length > 0 ? totalGrossRevenue / patientFinancialRecords.length : 0
 
   const handleAction = async (action) => {
     console.log('Action clicked:', action);
@@ -928,6 +966,118 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
 
                   </div>
               )}
+              {activeTab === 'financial' && (
+                  <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                              <p className="text-xs text-gray-500 uppercase font-semibold">Receita Total</p>
+                              <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalGrossRevenue)}</p>
+                              <p className="text-xs text-gray-500 mt-2">{patientFinancialRecords.length} atendimento(s) com lançamento</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                              <p className="text-xs text-gray-500 uppercase font-semibold">Custo Operacional</p>
+                              <p className="text-2xl font-bold text-amber-600 mt-2">{formatCurrency(totalOperationalCost)}</p>
+                              <p className="text-xs text-gray-500 mt-2">Soma dos insumos e custos vinculados</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                              <p className="text-xs text-gray-500 uppercase font-semibold">Lucro Bruto</p>
+                              <p className="text-2xl font-bold text-emerald-600 mt-2">{formatCurrency(totalGrossProfit)}</p>
+                              <p className="text-xs text-gray-500 mt-2">Margem consolidada do paciente</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                              <p className="text-xs text-gray-500 uppercase font-semibold">Recebido</p>
+                              <p className="text-2xl font-bold text-teal-600 mt-2">{formatCurrency(totalPaid)}</p>
+                              <p className="text-xs text-gray-500 mt-2">Baixado em contas a receber</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                              <p className="text-xs text-gray-500 uppercase font-semibold">Pendente</p>
+                              <p className="text-2xl font-bold text-rose-600 mt-2">{formatCurrency(totalPending)}</p>
+                              <p className="text-xs text-gray-500 mt-2">Ticket médio: {formatCurrency(averageTicket)}</p>
+                          </div>
+                      </div>
+
+                      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                          <div className="flex items-center gap-2 mb-4 border-b pb-2">
+                              <Wallet className="h-5 w-5 text-emerald-600" />
+                              <h3 className="font-bold text-gray-900">Histórico Financeiro do Paciente</h3>
+                          </div>
+
+                          {patientFinancialRecords.length === 0 ? (
+                              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center">
+                                  <Wallet className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+                                  <p className="font-medium text-gray-600">Nenhum lançamento financeiro encontrado para este paciente.</p>
+                                  <p className="text-sm text-gray-500 mt-1">Os registros aparecem aqui quando um atendimento é finalizado e gera cobrança automática.</p>
+                              </div>
+                          ) : (
+                              <div className="space-y-4">
+                                  {patientFinancialRecords.map(record => {
+                                      const linkedReceivable = patientReceivables.find(receivable => receivable.attendanceId === record.attendanceId)
+                                      const status = linkedReceivable?.status || record.paymentStatus
+                                      const statusLabel = status === 'paid'
+                                        ? 'Recebido'
+                                        : status === 'overdue'
+                                          ? 'Em atraso'
+                                          : 'Pendente'
+
+                                      return (
+                                          <div key={record.id} className="rounded-xl border border-gray-100 p-4 hover:border-emerald-200 transition-colors">
+                                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                  <div className="space-y-2">
+                                                      <div className="flex flex-wrap items-center gap-2">
+                                                          <p className="font-semibold text-gray-900">{record.description}</p>
+                                                          <span className={cn(
+                                                              'px-2.5 py-1 rounded-full text-xs font-bold',
+                                                              status === 'paid'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : status === 'overdue'
+                                                                  ? 'bg-rose-100 text-rose-700'
+                                                                  : 'bg-amber-100 text-amber-700'
+                                                          )}>
+                                                              {statusLabel}
+                                                          </span>
+                                                      </div>
+                                                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                                                          <span>Data: {parseTimelineDate(record.date).toLocaleDateString('pt-BR')}</span>
+                                                          <span>Profissional: {record.professionalName || 'Não informado'}</span>
+                                                          <span>Procedimentos: {record.procedureCount || 0}</span>
+                                                          <span>Margem: {(record.marginPercent || 0).toFixed(1)}%</span>
+                                                      </div>
+                                                      {linkedReceivable && (
+                                                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                                                              <span>Vencimento: {parseTimelineDate(linkedReceivable.dueDate).toLocaleDateString('pt-BR')}</span>
+                                                              <span>Pagamento: {linkedReceivable.paymentDate ? parseTimelineDate(linkedReceivable.paymentDate).toLocaleDateString('pt-BR') : 'Aguardando'}</span>
+                                                              <span>Forma: {linkedReceivable.paymentMethod || 'Não definida'}</span>
+                                                          </div>
+                                                      )}
+                                                  </div>
+
+                                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-full lg:min-w-[430px]">
+                                                      <div className="bg-gray-50 rounded-lg p-3">
+                                                          <p className="text-[11px] uppercase font-semibold text-gray-500">Valor Bruto</p>
+                                                          <p className="font-bold text-gray-900 mt-1">{formatCurrency(record.grossAmount)}</p>
+                                                      </div>
+                                                      <div className="bg-amber-50 rounded-lg p-3">
+                                                          <p className="text-[11px] uppercase font-semibold text-amber-700">Custo</p>
+                                                          <p className="font-bold text-amber-700 mt-1">{formatCurrency(record.totalCost)}</p>
+                                                      </div>
+                                                      <div className="bg-emerald-50 rounded-lg p-3">
+                                                          <p className="text-[11px] uppercase font-semibold text-emerald-700">Lucro</p>
+                                                          <p className="font-bold text-emerald-700 mt-1">{formatCurrency(record.grossProfit)}</p>
+                                                      </div>
+                                                      <div className="bg-teal-50 rounded-lg p-3">
+                                                          <p className="text-[11px] uppercase font-semibold text-teal-700">Receber</p>
+                                                          <p className="font-bold text-teal-700 mt-1">{formatCurrency(linkedReceivable?.amount || record.grossAmount)}</p>
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      )
+                                  })}
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              )}
               {activeTab === 'property' && patient.species === 'Equine' && (
                   <div className="space-y-6">
                     {renderPropertySection()}
@@ -995,7 +1145,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       )}
                   </div>
               )}
-              {activeTab !== 'overview' && activeTab !== 'contacts' && activeTab !== 'attendances' && (
+              {activeTab !== 'overview' && activeTab !== 'contacts' && activeTab !== 'financial' && activeTab !== 'attendances' && (
                 <div className="flex items-center justify-center h-64 text-gray-500">
                   Conteúdo da aba {tabs.find(t => t.id === activeTab)?.label} em desenvolvimento.
                 </div>

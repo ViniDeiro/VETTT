@@ -28,9 +28,12 @@ import { ReceivablesList } from './modules/finance/ReceivablesList'
 // Re-export useAuth for legacy components that might still reference App
 export { useAuth }
 
-function PrivateRoute({ children }) {
-  const { user } = useAuth()
-  return user ? children : <Navigate to="/login" />
+function PrivateRoute({ children, moduleKey, action = 'view' }) {
+  const { user, canAccess } = useAuth()
+
+  if (!user) return <Navigate to="/login" />
+  if (moduleKey && !canAccess(moduleKey, action)) return <Navigate to="/dashboard" replace />
+  return children
 }
 
 function LoginWrapper() {
@@ -49,26 +52,26 @@ function App() {
             <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             
             {/* New Routes */}
-            <Route path="/register" element={<PrivateRoute><PatientWizard /></PrivateRoute>} />
-            <Route path="/attendance-new" element={<PrivateRoute><AttendancePage /></PrivateRoute>} />
-            <Route path="/inventory-new" element={<PrivateRoute><InventoryList /></PrivateRoute>} />
-            <Route path="/finance-receivables" element={<PrivateRoute><ReceivablesList /></PrivateRoute>} />
+            <Route path="/register" element={<PrivateRoute moduleKey="patients" action="create"><PatientWizard /></PrivateRoute>} />
+            <Route path="/attendance-new" element={<PrivateRoute moduleKey="attendance"><AttendancePage /></PrivateRoute>} />
+            <Route path="/inventory-new" element={<PrivateRoute moduleKey="inventory"><InventoryList /></PrivateRoute>} />
+            <Route path="/finance-receivables" element={<PrivateRoute moduleKey="finance"><ReceivablesList /></PrivateRoute>} />
 
             {/* Legacy Routes */}
-            <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
-            <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
-            <Route path="/horses" element={<PrivateRoute><Horses /></PrivateRoute>} />
-            <Route path="/veterinarians" element={<PrivateRoute><Veterinarians /></PrivateRoute>} />
-            <Route path="/create-graphic" element={<PrivateRoute><CreateGraphic /></PrivateRoute>} />
-            <Route path="/archived-graphics" element={<PrivateRoute><ArchivedGraphics /></PrivateRoute>} />
-            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-            <Route path="/owners/new" element={<PrivateRoute><OwnerCreate /></PrivateRoute>} />
-            <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
-            <Route path="/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
-            <Route path="/finance" element={<PrivateRoute><Finance /></PrivateRoute>} />
-            <Route path="/finance/revenue" element={<PrivateRoute><FinanceRevenue /></PrivateRoute>} />
-            <Route path="/finance/expenses" element={<PrivateRoute><FinanceExpenses /></PrivateRoute>} />
-            <Route path="/finance/reports" element={<PrivateRoute><FinanceReports /></PrivateRoute>} />
+            <Route path="/attendance" element={<PrivateRoute moduleKey="attendance"><Attendance /></PrivateRoute>} />
+            <Route path="/clients" element={<PrivateRoute moduleKey="patients"><Clients /></PrivateRoute>} />
+            <Route path="/horses" element={<PrivateRoute moduleKey="patients"><Horses /></PrivateRoute>} />
+            <Route path="/veterinarians" element={<PrivateRoute moduleKey="team"><Veterinarians /></PrivateRoute>} />
+            <Route path="/create-graphic" element={<PrivateRoute moduleKey="documents"><CreateGraphic /></PrivateRoute>} />
+            <Route path="/archived-graphics" element={<PrivateRoute moduleKey="documents"><ArchivedGraphics /></PrivateRoute>} />
+            <Route path="/settings" element={<PrivateRoute moduleKey="settings"><Settings /></PrivateRoute>} />
+            <Route path="/owners/new" element={<PrivateRoute moduleKey="patients" action="create"><OwnerCreate /></PrivateRoute>} />
+            <Route path="/agenda" element={<PrivateRoute moduleKey="agenda"><Agenda /></PrivateRoute>} />
+            <Route path="/inventory" element={<PrivateRoute moduleKey="inventory"><Inventory /></PrivateRoute>} />
+            <Route path="/finance" element={<PrivateRoute moduleKey="finance"><Finance /></PrivateRoute>} />
+            <Route path="/finance/revenue" element={<PrivateRoute moduleKey="finance"><FinanceRevenue /></PrivateRoute>} />
+            <Route path="/finance/expenses" element={<PrivateRoute moduleKey="finance"><FinanceExpenses /></PrivateRoute>} />
+            <Route path="/finance/reports" element={<PrivateRoute moduleKey="reports"><FinanceReports /></PrivateRoute>} />
             
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

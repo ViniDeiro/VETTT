@@ -1,258 +1,433 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import {
-  TrendingUp,
-  TrendingDown,
   Search,
   FileText,
-  ChevronDown,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  CircleDollarSign,
+  Clock3,
+  Activity,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { mockDB } from '../services/mockDatabase'
+
+const parseFlexibleDate = (value) => {
+  if (!value) return new Date('')
+  if (value.includes('/')) {
+    const [day, month, year] = value.split('/')
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
+  return new Date(value)
+}
+
+const isSameDay = (left, right) =>
+  left.getDate() === right.getDate() &&
+  left.getMonth() === right.getMonth() &&
+  left.getFullYear() === right.getFullYear()
+
+const getMonthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
 export default function Finance() {
   const [animate, setAnimate] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [records, setRecords] = useState([])
+  const [receivables, setReceivables] = useState([])
+  const [cashFlow, setCashFlow] = useState([])
 
   useEffect(() => {
+    setRecords(mockDB.getFinancialRecords())
+    setReceivables(mockDB.getReceivables())
+    setCashFlow(mockDB.getCashFlow())
     setAnimate(true)
   }, [])
 
-  const cards = [
-    {
-      title: 'Receita',
-      value: 'R$ 125.450,00',
-      change: '+5.2%',
-      isPositive: true,
-      period: 'este mês'
-    },
-    {
-      title: 'Despesas',
-      value: 'R$ 42.100,00',
-      change: '-2.1%',
-      isPositive: false, // Inverted for expenses? The image shows red arrow down for expenses.
-      // Usually expenses down is good, but visually red arrow down often implies decrease.
-      // Let's match the image: Red arrow down.
-      trend: 'down', 
-      color: 'text-red-500',
-      period: 'este mês'
-    },
-    {
-      title: 'Lucro',
-      value: 'R$ 83.350,00',
-      change: '+8.4%',
-      isPositive: true,
-      period: 'este mês'
-    },
-    {
-      title: 'Ticket médio',
-      value: 'R$ 450,00',
-      change: '+1.5%',
-      isPositive: true,
-      period: '' // Image doesn't show period for ticket medio, just +1.5%
-    }
-  ]
+  const dashboard = useMemo(() => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfWeek = new Date(startOfToday)
+    startOfWeek.setDate(startOfToday.getDate() - 6)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-  const transactions = [
-    {
-      id: 1,
-      date: '15 Jun 2024',
-      desc: 'Consulta e Limpeza - Rex',
-      category: 'Serviços Clínicos',
-      method: 'Cartão de Crédito',
-      value: 'R$ 350,00',
-      status: 'Concluído',
-      statusColor: 'bg-teal-100 text-teal-700'
-    },
-    {
-      id: 2,
-      date: '14 Jun 2024',
-      desc: 'Compra de Anestésicos',
-      category: 'Suprimentos',
-      method: 'Transferência Bancária',
-      value: 'R$ 1.200,00',
-      status: 'Pendente',
-      statusColor: 'bg-red-100 text-red-700'
-    },
-    {
-      id: 3,
-      date: '14 Jun 2024',
-      desc: 'Exame de Imagem - Luna',
-      category: 'Diagnóstico',
-      method: 'Pix',
-      value: 'R$ 580,00',
-      status: 'Concluído',
-      statusColor: 'bg-teal-100 text-teal-700'
+    const incomeEntries = cashFlow.filter((entry) => entry.type === 'income')
+    const incomeToday = incomeEntries.filter((entry) => isSameDay(parseFlexibleDate(entry.date), now))
+    const incomeWeek = incomeEntries.filter((entry) => {
+      const date = parseFlexibleDate(entry.date)
+      return date >= startOfWeek && date <= now
+    })
+    const incomeMonth = incomeEntries.filter((entry) => {
+      const date = parseFlexibleDate(entry.date)
+      return date >= startOfMonth && date <= now
+    })
+    const monthRecords = records.filter((record) => {
+      const date = parseFlexibleDate(record.date)
+      return date >= startOfMonth && date <= now
+    })
+
+    const pendingReceivables = receivables.filter((item) => item.status !== 'paid')
+    const paidReceivables = receivables.filter((item) => item.status === 'paid')
+
+    const totalMonthRevenue = monthRecords.reduce((sum, item) => sum + item.grossAmount, 0)
+    const totalMonthCost = monthRecords.reduce((sum, item) => sum + item.totalCost, 0)
+    const totalMonthProfit = monthRecords.reduce((sum, item) => sum + item.grossProfit, 0)
+    const averageMargin = monthRecords.length
+      ? monthRecords.reduce((sum, item) => sum + item.marginPercent, 0) / monthRecords.length
+      : 0
+
+    const cards = [
+      {
+        title: 'Total do dia',
+        value: formatCurrency(incomeToday.reduce((sum, item) => sum + item.amount, 0)),
+        detail: `${incomeToday.length} recebimentos`,
+        icon: Wallet,
+        tone: 'text-teal-600 bg-teal-50',
+      },
+      {
+        title: 'Total da semana',
+        value: formatCurrency(incomeWeek.reduce((sum, item) => sum + item.amount, 0)),
+        detail: 'ultimos 7 dias',
+        icon: TrendingUp,
+        tone: 'text-blue-600 bg-blue-50',
+      },
+      {
+        title: 'Total do mes',
+        value: formatCurrency(incomeMonth.reduce((sum, item) => sum + item.amount, 0)),
+        detail: `${incomeMonth.length} entradas`,
+        icon: CircleDollarSign,
+        tone: 'text-emerald-600 bg-emerald-50',
+      },
+      {
+        title: 'Ticket medio',
+        value: formatCurrency(monthRecords.length ? totalMonthRevenue / monthRecords.length : 0),
+        detail: `${monthRecords.length} atendimentos`,
+        icon: Activity,
+        tone: 'text-indigo-600 bg-indigo-50',
+      },
+      {
+        title: 'Lucro liquido',
+        value: formatCurrency(totalMonthProfit),
+        detail: `${averageMargin.toFixed(1)}% de margem media`,
+        icon: TrendingUp,
+        tone: 'text-green-600 bg-green-50',
+      },
+      {
+        title: 'Custo operacional',
+        value: formatCurrency(totalMonthCost),
+        detail: formatCurrency(totalMonthRevenue),
+        icon: TrendingDown,
+        tone: 'text-amber-600 bg-amber-50',
+      },
+      {
+        title: 'Contas recebidas',
+        value: formatCurrency(paidReceivables.reduce((sum, item) => sum + item.amount, 0)),
+        detail: `${paidReceivables.length} contas pagas`,
+        icon: Wallet,
+        tone: 'text-cyan-600 bg-cyan-50',
+      },
+      {
+        title: 'Contas pendentes',
+        value: formatCurrency(pendingReceivables.reduce((sum, item) => sum + item.amount, 0)),
+        detail: `${pendingReceivables.length} em aberto`,
+        icon: Clock3,
+        tone: 'text-orange-600 bg-orange-50',
+      },
+    ]
+
+    const lastSixMonths = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+      return {
+        label: date.toLocaleDateString('pt-BR', { month: 'short' }),
+        key: getMonthKey(date),
+        amount: 0,
+      }
+    })
+
+    const monthlyMap = new Map(lastSixMonths.map((item) => [item.key, item]))
+    records.forEach((record) => {
+      const key = getMonthKey(parseFlexibleDate(record.date))
+      if (monthlyMap.has(key)) {
+        monthlyMap.get(key).amount += record.grossAmount
+      }
+    })
+
+    const chartSeries = Array.from(monthlyMap.values())
+    const maxAmount = Math.max(...chartSeries.map((item) => item.amount), 1)
+    const chartPoints = chartSeries
+      .map((item, index) => {
+        const x = 50 + index * 100
+        const y = 190 - (item.amount / maxAmount) * 150
+        return `${x},${y}`
+      })
+      .join(' ')
+    const chartArea = `${chartPoints} 550,190 50,190`
+
+    const filteredRecords = [...records]
+      .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
+      .filter((record) => {
+        const query = searchTerm.trim().toLowerCase()
+        if (!query) return true
+        return [
+          record.patientName,
+          record.ownerName,
+          record.professionalName,
+          record.description,
+        ].some((field) => (field || '').toLowerCase().includes(query))
+      })
+
+    const patientHistory = Object.values(
+      records.reduce((acc, record) => {
+        const key = record.patientId
+        if (!acc[key]) {
+          acc[key] = {
+            id: key,
+            patientName: record.patientName,
+            ownerName: record.ownerName,
+            totalGross: 0,
+            totalCost: 0,
+            totalProfit: 0,
+            pendingTotal: 0,
+            paidTotal: 0,
+            procedures: 0,
+          }
+        }
+        acc[key].totalGross += record.grossAmount
+        acc[key].totalCost += record.totalCost
+        acc[key].totalProfit += record.grossProfit
+        acc[key].procedures += record.procedureCount
+        if (record.paymentStatus === 'paid') acc[key].paidTotal += record.grossAmount
+        else acc[key].pendingTotal += record.grossAmount
+        return acc
+      }, {})
+    )
+      .sort((a, b) => b.totalGross - a.totalGross)
+      .slice(0, 6)
+
+    return {
+      cards,
+      chartSeries,
+      chartPoints,
+      chartArea,
+      filteredRecords,
+      patientHistory,
+      paymentSummary: {
+        pending: receivables.filter((item) => item.status === 'pending').length,
+        overdue: receivables.filter((item) => item.status === 'overdue').length,
+        paid: receivables.filter((item) => item.status === 'paid').length,
+      },
     }
-  ]
+  }, [cashFlow, records, receivables, searchTerm])
+
+  const handleExport = async () => {
+    const { default: jsPDF } = await import('jspdf')
+    const doc = new jsPDF()
+    doc.setFontSize(18)
+    doc.text('Resumo Financeiro', 14, 20)
+    doc.setFontSize(10)
+    doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, 14, 28)
+
+    let y = 40
+    dashboard.cards.forEach((card) => {
+      doc.text(`${card.title}: ${card.value} (${card.detail})`, 14, y)
+      y += 8
+    })
+
+    y += 6
+    doc.setFontSize(12)
+    doc.text('Historico por paciente', 14, y)
+    y += 8
+    doc.setFontSize(10)
+
+    dashboard.patientHistory.forEach((patient) => {
+      if (y > 280) {
+        doc.addPage()
+        y = 20
+      }
+      doc.text(
+        `${patient.patientName} / ${patient.ownerName} - Total ${formatCurrency(patient.totalGross)} - Pendente ${formatCurrency(patient.pendingTotal)}`,
+        14,
+        y
+      )
+      y += 8
+    })
+
+    doc.save('resumo_financeiro.pdf')
+  }
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Top Bar with Search (Visual only to match image) */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-            <div className="relative w-full max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input 
-                    type="text" 
-                    placeholder="Search" 
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                />
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
+            <p className="text-sm text-gray-500">
+              Indicadores de caixa, lucratividade e historico por paciente.
+            </p>
+          </div>
+          <div className="flex w-full sm:w-auto gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar paciente, tutor ou profissional"
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
             </div>
-            {/* User profile is handled by Layout usually, but adding icons here to match image if needed */}
+            <Button onClick={handleExport} className="bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white">
+              <FileText className="mr-2 h-4 w-4" />
+              Exportar PDF
+            </Button>
+          </div>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {cards.map((card, index) => (
-            <Card 
-              key={index} 
-              className={cn(
-                "border-none shadow-sm transition-all duration-700 transform",
-                animate ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-              )}
-              style={{ transitionDelay: `${index * 100}ms` }}
-            >
-              <CardContent className="p-6">
-                <p className="text-gray-500 font-medium mb-2">{card.title}</p>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{card.value}</h3>
-                <div className="flex items-center text-sm">
-                  {card.trend === 'down' ? (
-                     <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                  ) : (
-                     <TrendingUp className="h-4 w-4 text-teal-500 mr-1" />
-                  )}
-                  <span className={card.trend === 'down' ? 'text-red-500 font-medium' : 'text-teal-500 font-medium'}>
-                    {card.change}
-                  </span>
-                  {card.period && <span className="text-gray-400 ml-1">{card.period}</span>}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {dashboard.cards.map((card, index) => {
+            const Icon = card.icon
+            return (
+              <Card
+                key={card.title}
+                className={cn(
+                  'border-none shadow-sm transition-all duration-700 transform',
+                  animate ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
+                )}
+                style={{ transitionDelay: `${index * 60}ms` }}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500 font-medium mb-2">{card.title}</p>
+                      <h3 className="text-2xl font-bold text-gray-900">{card.value}</h3>
+                      <p className="text-sm text-gray-500 mt-2">{card.detail}</p>
+                    </div>
+                    <div className={cn('rounded-xl p-3', card.tone)}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Chart Section */}
-          <div className={cn(
-            "lg:col-span-2 space-y-6 transition-all duration-1000 delay-300 transform",
-            animate ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-          )}>
-            
-            {/* Fluxo de Caixa Chart */}
+          <div
+            className={cn(
+              'lg:col-span-2 space-y-6 transition-all duration-1000 delay-200 transform',
+              animate ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
+            )}
+          >
             <Card className="border-none shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-gray-900">Fluxo de caixa</h3>
-                  <button className="flex items-center text-sm text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1">
-                    Últimos 6 meses <ChevronDown className="h-4 w-4 ml-2" />
-                  </button>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Faturamento dos ultimos 6 meses</h3>
+                    <p className="text-sm text-gray-500">Baseado nos atendimentos finalizados.</p>
+                  </div>
                 </div>
 
-                <div className="relative h-64 w-full">
-                  {/* Custom SVG Line Chart */}
-                  <svg className="w-full h-full" viewBox="0 0 600 200" preserveAspectRatio="none">
-                     {/* Gradients */}
-                     <defs>
-                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                           <stop offset="0%" stopColor="#2DD4BF" stopOpacity="0.2" />
-                           <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0" />
-                        </linearGradient>
-                     </defs>
-
-                     {/* Grid Lines */}
-                     {[0, 40, 80, 120, 160, 200].map(y => (
-                        <line key={y} x1="0" y1={y} x2="600" y2={y} stroke="#f3f4f6" strokeWidth="1" />
-                     ))}
-
-                     {/* Y Axis Labels (Mock) */}
-                     <text x="0" y="200" className="text-[10px] fill-gray-400">0k</text>
-                     <text x="0" y="160" className="text-[10px] fill-gray-400">20k</text>
-                     <text x="0" y="120" className="text-[10px] fill-gray-400">40k</text>
-                     <text x="0" y="80" className="text-[10px] fill-gray-400">60k</text>
-                     <text x="0" y="40" className="text-[10px] fill-gray-400">80k</text>
-                     <text x="0" y="0" className="text-[10px] fill-gray-400">100k</text>
-
-                     {/* The Chart Line 
-                         Data Points (approx): 
-                         Jan: 20k -> y=160
-                         Fev: 40k -> y=120
-                         Mar: 35k -> y=130
-                         Abr: 65k -> y=70
-                         Mai: 55k -> y=90
-                         Jun: 90k -> y=20
-                     */}
-                     <path 
-                        d="M50,160 L150,120 L250,130 L350,70 L450,90 L550,20" 
-                        fill="none" 
-                        stroke="#2DD4BF" 
-                        strokeWidth="3" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                        className="animate-draw-line"
-                        style={{ strokeDasharray: 1000, strokeDashoffset: animate ? 0 : 1000, transition: 'stroke-dashoffset 2s ease-out' }}
-                     />
-                     
-                     {/* Area under the line */}
-                     <path 
-                        d="M50,160 L150,120 L250,130 L350,70 L450,90 L550,20 V200 H50 Z" 
-                        fill="url(#chartGradient)" 
-                        className={cn("transition-opacity duration-1000", animate ? "opacity-100" : "opacity-0")}
-                     />
-
-                     {/* Dots */}
-                     <circle cx="550" cy="20" r="4" fill="#2DD4BF" className="animate-ping opacity-75" />
-                     <circle cx="550" cy="20" r="4" fill="#2DD4BF" />
-
-                     {/* X Axis Labels */}
-                     <text x="50" y="220" textAnchor="middle" className="text-xs fill-gray-500">Jan</text>
-                     <text x="150" y="220" textAnchor="middle" className="text-xs fill-gray-500">Fev</text>
-                     <text x="250" y="220" textAnchor="middle" className="text-xs fill-gray-500">Mar</text>
-                     <text x="350" y="220" textAnchor="middle" className="text-xs fill-gray-500">Abr</text>
-                     <text x="450" y="220" textAnchor="middle" className="text-xs fill-gray-500">Mai</text>
-                     <text x="550" y="220" textAnchor="middle" className="text-xs fill-gray-500">Jun</text>
+                <div className="relative h-72 w-full">
+                  <svg className="w-full h-full" viewBox="0 0 600 220" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="financeArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.22" />
+                        <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+                    {[40, 70, 100, 130, 160, 190].map((y) => (
+                      <line key={y} x1="40" y1={y} x2="560" y2={y} stroke="#f1f5f9" strokeWidth="1" />
+                    ))}
+                    <polyline
+                      fill="none"
+                      stroke="#14b8a6"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={dashboard.chartPoints}
+                    />
+                    <polygon fill="url(#financeArea)" points={dashboard.chartArea} />
+                    {dashboard.chartSeries.map((item, index) => {
+                      const x = 50 + index * 100
+                      const maxAmount = Math.max(...dashboard.chartSeries.map((series) => series.amount), 1)
+                      const y = 190 - (item.amount / maxAmount) * 150
+                      return <circle key={item.key} cx={x} cy={y} r="4" fill="#14b8a6" />
+                    })}
+                    {dashboard.chartSeries.map((item, index) => (
+                      <text
+                        key={`${item.key}-label`}
+                        x={50 + index * 100}
+                        y="210"
+                        textAnchor="middle"
+                        className="text-xs fill-gray-500"
+                      >
+                        {item.label}
+                      </text>
+                    ))}
                   </svg>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Transactions Table */}
             <Card className="border-none shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-gray-900">Transações recentes</h3>
-                  <button className="flex items-center text-sm text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1">
-                    Este mês <ChevronDown className="h-4 w-4 ml-2" />
-                  </button>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Lancamentos recentes</h3>
+                    <p className="text-sm text-gray-500">
+                      Bruto, custo, lucro e status por atendimento.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100">
-                            <th className="pb-3 pl-2">Data</th>
-                            <th className="pb-3">Descrição</th>
-                            <th className="pb-3">Categoria</th>
-                            <th className="pb-3">Método</th>
-                            <th className="pb-3">Valor</th>
-                            <th className="pb-3 text-center">Status</th>
-                        </tr>
+                      <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100">
+                        <th className="pb-3 pl-2">Data</th>
+                        <th className="pb-3">Paciente / Tutor</th>
+                        <th className="pb-3">Profissional</th>
+                        <th className="pb-3">Bruto</th>
+                        <th className="pb-3">Custo</th>
+                        <th className="pb-3">Lucro</th>
+                        <th className="pb-3 text-center">Status</th>
+                      </tr>
                     </thead>
                     <tbody className="text-sm">
-                        {transactions.map((tx) => (
-                            <tr key={tx.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                                <td className="py-4 pl-2 text-gray-500 font-medium">{tx.date}</td>
-                                <td className="py-4 text-gray-900 font-medium">{tx.desc}</td>
-                                <td className="py-4 text-gray-500">{tx.category}</td>
-                                <td className="py-4 text-gray-500">{tx.method}</td>
-                                <td className="py-4 text-gray-900 font-bold">{tx.value}</td>
-                                <td className="py-4 text-center">
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${tx.statusColor}`}>
-                                        {tx.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
+                      {dashboard.filteredRecords.slice(0, 8).map((record) => (
+                        <tr key={record.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
+                          <td className="py-4 pl-2 text-gray-500 font-medium">{formatDate(parseFlexibleDate(record.date))}</td>
+                          <td className="py-4">
+                            <div className="font-medium text-gray-900">{record.patientName}</div>
+                            <div className="text-xs text-gray-500">{record.ownerName}</div>
+                          </td>
+                          <td className="py-4 text-gray-500">{record.professionalName}</td>
+                          <td className="py-4 text-gray-900 font-bold">{formatCurrency(record.grossAmount)}</td>
+                          <td className="py-4 text-gray-500">{formatCurrency(record.totalCost)}</td>
+                          <td className="py-4 text-green-600 font-semibold">{formatCurrency(record.grossProfit)}</td>
+                          <td className="py-4 text-center">
+                            <span
+                              className={cn(
+                                'px-3 py-1 rounded-full text-xs font-bold',
+                                record.paymentStatus === 'paid'
+                                  ? 'bg-teal-100 text-teal-700'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              )}
+                            >
+                              {record.paymentStatus === 'paid' ? 'Recebido' : 'Pendente'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {dashboard.filteredRecords.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-gray-400">
+                            Nenhum lancamento encontrado.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -260,52 +435,72 @@ export default function Finance() {
             </Card>
           </div>
 
-          {/* Right Column - Donut Chart & Action */}
-          <div className={cn(
-            "space-y-6 transition-all duration-1000 delay-500 transform",
-            animate ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-          )}>
-            <Card className="border-none shadow-sm h-full">
-                <CardContent className="p-6 flex flex-col h-full">
-                    <h3 className="text-lg font-bold text-gray-900 mb-6">Resumo do mês</h3>
-                    
-                    {/* Donut Chart Simulation with SVG */}
-                    <div className="relative w-48 h-48 mx-auto mb-8">
-                        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                            {/* Segments - approx percentages from image */}
-                            {/* Equipamentos 35% (Dark Blue) */}
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1E3A8A" strokeWidth="20" strokeDasharray="35 65" strokeDashoffset="0" />
-                            {/* Materiais 25% (Medium Blue) */}
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#3B82F6" strokeWidth="20" strokeDasharray="25 75" strokeDashoffset="-35" />
-                            {/* Salários 20% (Teal) */}
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#00897B" strokeWidth="20" strokeDasharray="20 80" strokeDashoffset="-60" />
-                            {/* Marketing 10% (Light Blue) */}
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#93C5FD" strokeWidth="20" strokeDasharray="10 90" strokeDashoffset="-80" />
-                            {/* Outros 10% (Light Teal) */}
-                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#B2DFDB" strokeWidth="20" strokeDasharray="10 90" strokeDashoffset="-90" />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center flex-col">
-                            <span className="text-xs text-gray-500">Total</span>
-                            <span className="text-sm font-bold text-gray-900">Categorias</span>
+          <div
+            className={cn(
+              'space-y-6 transition-all duration-1000 delay-300 transform',
+              animate ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
+            )}
+          >
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Status das contas</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-xl bg-teal-50 px-4 py-3">
+                    <span className="text-sm font-medium text-teal-900">Recebidas</span>
+                    <span className="text-lg font-bold text-teal-700">{dashboard.paymentSummary.paid}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-yellow-50 px-4 py-3">
+                    <span className="text-sm font-medium text-yellow-900">Pendentes</span>
+                    <span className="text-lg font-bold text-yellow-700">{dashboard.paymentSummary.pending}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-red-50 px-4 py-3">
+                    <span className="text-sm font-medium text-red-900">Atrasadas</span>
+                    <span className="text-lg font-bold text-red-700">{dashboard.paymentSummary.overdue}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Historico por paciente</h3>
+                <div className="space-y-4">
+                  {dashboard.patientHistory.map((patient) => (
+                    <div key={patient.id} className="rounded-xl border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">{patient.patientName}</p>
+                          <p className="text-xs text-gray-500">{patient.ownerName}</p>
                         </div>
+                        <span className="text-xs font-bold text-[#0B2C4D] bg-slate-100 px-2 py-1 rounded-full">
+                          {patient.procedures} procedimentos
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-500">Total acumulado</p>
+                          <p className="font-bold text-gray-900">{formatCurrency(patient.totalGross)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Lucro</p>
+                          <p className="font-bold text-green-600">{formatCurrency(patient.totalProfit)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Recebido</p>
+                          <p className="font-medium text-teal-700">{formatCurrency(patient.paidTotal)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Pendente</p>
+                          <p className="font-medium text-orange-600">{formatCurrency(patient.pendingTotal)}</p>
+                        </div>
+                      </div>
                     </div>
-
-                    {/* Legend */}
-                    <div className="grid grid-cols-2 gap-3 text-xs text-gray-600 mb-8">
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#1E3A8A] rounded-sm"></div> Equipamentos (35%)</div>
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#3B82F6] rounded-sm"></div> Materiais (25%)</div>
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#00897B] rounded-sm"></div> Salários (20%)</div>
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#93C5FD] rounded-sm"></div> Marketing (10%)</div>
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#B2DFDB] rounded-sm"></div> Outros (10%)</div>
-                    </div>
-
-                    <div className="mt-auto">
-                        <Button className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white rounded-lg h-12">
-                            <FileText className="mr-2 h-4 w-4" />
-                            Gerar relatório PDF
-                        </Button>
-                    </div>
-                </CardContent>
+                  ))}
+                  {dashboard.patientHistory.length === 0 && (
+                    <p className="text-sm text-gray-400">Nenhum historico financeiro disponivel ainda.</p>
+                  )}
+                </div>
+              </CardContent>
             </Card>
           </div>
         </div>

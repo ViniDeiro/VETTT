@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -13,10 +13,50 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mockDB } from '../../services/mockDatabase'
 import { InventoryItem } from '../../domain/types'
+
+const CATEGORY_OPTIONS = [
+  { value: 'Medication', label: 'Medicamentos' },
+  { value: 'Material', label: 'Materiais' },
+  { value: 'Vaccine', label: 'Vacinas' },
+  { value: 'Feed', label: 'Alimentacao' },
+  { value: 'Other', label: 'Outros' }
+]
+
+const UNIT_OPTIONS = [
+  { value: 'un', label: 'Unidade' },
+  { value: 'unidade', label: 'Unidade detalhada' },
+  { value: 'ml', label: 'ml' },
+  { value: 'mg', label: 'mg' },
+  { value: 'g', label: 'g' },
+  { value: 'kg', label: 'kg' },
+  { value: 'comprimido', label: 'Comprimido' },
+  { value: 'frasco', label: 'Frasco' },
+  { value: 'pacote_fracionavel', label: 'Pacote fracionavel' }
+]
+
+const EMPTY_FORM: Partial<InventoryItem> = {
+  name: '',
+  category: 'Medication',
+  quantity: 0,
+  unit: 'un',
+  minStock: 0,
+  costPrice: 0,
+  salePrice: 0,
+  packageQuantity: 1,
+  packageUnit: 'un',
+  allowsFraction: false,
+  batchNumber: '',
+  validity: '',
+  expiryDate: '',
+  supplier: '',
+  description: '',
+  image: ''
+}
 
 export const InventoryList: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -29,12 +69,18 @@ export const InventoryList: React.FC = () => {
   const [formData, setFormData] = useState<Partial<InventoryItem>>({})
   const [movementAmount, setMovementAmount] = useState('')
 
-  useEffect(() => {
-    const loaded = mockDB.getInventory()
+  const loadInventory = () => {
+    const loaded = [...mockDB.getInventory()]
     setItems(loaded)
-    if (loaded.length > 0 && !selectedItem) {
-      setSelectedItem(loaded[0])
-    }
+    setSelectedItem(currentSelected => {
+      if (!loaded.length) return null
+      if (!currentSelected) return loaded[0]
+      return loaded.find(item => item.id === currentSelected.id) || loaded[0]
+    })
+  }
+
+  useEffect(() => {
+    loadInventory()
   }, [])
 
   const filteredItems = items.filter(item =>
@@ -42,14 +88,21 @@ export const InventoryList: React.FC = () => {
     item.category.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const currentUnitCost = useMemo(() => {
+    const costPrice = Number(formData.costPrice) || 0
+    const packageQuantity = Number(formData.packageQuantity) || 0
+    if (packageQuantity > 0) {
+      return Number((costPrice / packageQuantity).toFixed(4))
+    }
+    return costPrice
+  }, [formData.costPrice, formData.packageQuantity])
+
+  const formatCurrency = (value?: number) => `R$ ${Number(value || 0).toFixed(2)}`
+
   const handleOpenModal = (type: 'entry' | 'exit' | 'create' | 'edit', item: InventoryItem | null = null) => {
     setModalType(type)
     if (type === 'create') {
-      setFormData({
-        name: '', category: 'Medication', quantity: 0, unit: 'un',
-        minStock: 10, validity: '', supplier: '', costPrice: 0, salePrice: 0, status: 'ok',
-        image: '' // Default to empty to trigger fallback
-      })
+      setFormData({ ...EMPTY_FORM })
     } else if (item) {
       setFormData({ ...item })
     } else if (selectedItem) {
@@ -60,53 +113,68 @@ export const InventoryList: React.FC = () => {
   }
 
   const handleSave = () => {
-    // Note: In a real app we would call mockDB methods here. 
-    // Since mockDB methods for create/update are not fully generic or return the list, 
-    // we might need to manually update local state or refresh from mockDB.
-    // For now, I'll update local state and mockDB.
-
     if (modalType === 'create') {
-        // We need to implement createItem in mockDB or just push to the array if exposed
-        // mockDB currently has getInventory and updateStock. 
-        // We might need to add createInventoryItem to mockDB if we want persistence.
-        // For this refactor, I'll assume we can push to mockDB's private array via a new method or just simulate it here.
-        // Let's assume we update the mockDB logic later or just update state for now to satisfy UI.
-        const newItem = {
-            ...formData,
-            id: Math.random().toString(36).substr(2, 9),
-            quantity: Number(formData.quantity) || 0,
-            minStock: Number(formData.minStock) || 0,
-            costPrice: Number(formData.costPrice) || 0,
-            salePrice: Number(formData.salePrice) || 0
-        } as InventoryItem
-        
-        // Hack to update mockDB (since I didn't add createInventoryItem yet, I should probably add it or just push to local)
-        // Ideally I should update mockDB service first.
-        // But for "Design" request, I will focus on UI.
-        const updated = [...items, newItem]
-        setItems(updated)
-        setSelectedItem(newItem)
+        if (!formData.name || !formData.category || !formData.unit || Number(formData.costPrice) <= 0) {
+          alert('Preencha nome, categoria, unidade e valor de compra para cadastrar o item.')
+          return
+        }
+
+        const createdItem = mockDB.createInventoryItem({
+          name: formData.name,
+          category: formData.category,
+          quantity: Number(formData.quantity) || 0,
+          unit: formData.unit,
+          minStock: Number(formData.minStock) || 0,
+          costPrice: Number(formData.costPrice) || 0,
+          salePrice: Number(formData.salePrice) || currentUnitCost,
+          packageQuantity: Number(formData.packageQuantity) || Number(formData.quantity) || 1,
+          packageUnit: formData.packageUnit || formData.unit,
+          allowsFraction: Boolean(formData.allowsFraction),
+          batchNumber: formData.batchNumber,
+          expiryDate: formData.expiryDate || formData.validity,
+          validity: formData.validity || formData.expiryDate,
+          description: formData.description,
+          image: formData.image,
+          supplier: formData.supplier
+        })
+
+        loadInventory()
+        setSelectedItem(createdItem)
     } else if (modalType === 'edit') {
-        const updated = items.map(i => i.id === formData.id ? { ...formData } as InventoryItem : i)
-        setItems(updated)
-        setSelectedItem(formData as InventoryItem)
+        if (!formData.id) return
+
+        const updatedItem = mockDB.updateInventoryItem(formData.id, {
+          name: formData.name,
+          category: formData.category,
+          quantity: Number(formData.quantity) || 0,
+          unit: formData.unit,
+          minStock: Number(formData.minStock) || 0,
+          costPrice: Number(formData.costPrice) || 0,
+          salePrice: Number(formData.salePrice) || currentUnitCost,
+          packageQuantity: Number(formData.packageQuantity) || Number(formData.quantity) || 1,
+          packageUnit: formData.packageUnit || formData.unit,
+          allowsFraction: Boolean(formData.allowsFraction),
+          batchNumber: formData.batchNumber,
+          expiryDate: formData.expiryDate || formData.validity,
+          validity: formData.validity || formData.expiryDate,
+          description: formData.description,
+          image: formData.image,
+          supplier: formData.supplier
+        })
+
+        loadInventory()
+        if (updatedItem) setSelectedItem(updatedItem)
     } else if (modalType === 'entry') {
-        const amount = parseInt(movementAmount) || 0
+        const amount = Number(movementAmount) || 0
         if (formData.id) {
             mockDB.updateStock(formData.id, amount)
-            // Refresh
-            const updated = items.map(i => i.id === formData.id ? { ...i, quantity: i.quantity + amount } : i)
-            setItems(updated)
-            setSelectedItem(updated.find(i => i.id === formData.id) || null)
+            loadInventory()
         }
     } else if (modalType === 'exit') {
-        const amount = parseInt(movementAmount) || 0
+        const amount = Number(movementAmount) || 0
         if (formData.id) {
             mockDB.updateStock(formData.id, -amount)
-             // Refresh
-             const updated = items.map(i => i.id === formData.id ? { ...i, quantity: Math.max(0, i.quantity - amount) } : i)
-             setItems(updated)
-             setSelectedItem(updated.find(i => i.id === formData.id) || null)
+            loadInventory()
         }
     }
     setIsModalOpen(false)
@@ -120,8 +188,23 @@ export const InventoryList: React.FC = () => {
 
   const handleQuickEditSave = () => {
     if (selectedItem) {
-        setItems(items.map(i => i.id === selectedItem.id ? selectedItem : i))
+        const updatedItem = mockDB.updateInventoryItem(selectedItem.id, {
+          quantity: Number(selectedItem.quantity) || 0,
+          minStock: Number(selectedItem.minStock) || 0,
+          validity: selectedItem.validity || '',
+          expiryDate: selectedItem.expiryDate || selectedItem.validity || '',
+          batchNumber: selectedItem.batchNumber || '',
+          supplier: selectedItem.supplier || ''
+        })
+        loadInventory()
+        if (updatedItem) setSelectedItem(updatedItem)
     }
+  }
+
+  const handleDeleteItem = () => {
+    if (!selectedItem) return
+    mockDB.deleteInventoryItem(selectedItem.id)
+    loadInventory()
   }
 
   const getStatusBadge = (status?: string) => {
@@ -228,7 +311,7 @@ export const InventoryList: React.FC = () => {
                     <td className="p-4">{item.minStock} {item.unit}</td>
                     <td className="p-4">{item.validity || '-'}</td>
                     <td className="p-4">{item.supplier || '-'}</td>
-                    <td className="p-4 font-medium text-gray-900">R$ {item.costPrice.toFixed(2)}</td>
+                    <td className="p-4 font-medium text-gray-900">{formatCurrency(item.costPrice)}</td>
                     <td className="p-4 text-center">
                       {getStatusBadge(item.status || 'ok')}
                     </td>
@@ -269,20 +352,45 @@ export const InventoryList: React.FC = () => {
                 </div>
               </div>
 
-              {/* Gráfico Mockado */}
-              <div className="mb-6">
-                <div className="flex justify-between items-end mb-2">
-                  <span className="text-sm font-semibold text-gray-900">Histórico de Estoque</span>
-                  <span className="text-xs text-gray-500">30 dias</span>
+              <div className="mb-6 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-gray-500">Quantidade total</p>
+                  <p className="font-semibold text-gray-900">{selectedItem.quantity} {selectedItem.unit}</p>
                 </div>
-                <div className="h-24 bg-teal-50 rounded-lg relative overflow-hidden flex items-end">
-                   {/* Simulação de gráfico de área */}
-                   <svg viewBox="0 0 100 40" className="w-full h-full text-[#00BFA5] fill-current opacity-20">
-                     <path d="M0 40 L0 10 Q20 5 40 20 T80 25 T100 30 L100 40 Z" />
-                   </svg>
-                   <svg viewBox="0 0 100 40" className="w-full h-full text-[#00BFA5] stroke-current stroke-2 fill-none absolute inset-0">
-                     <path d="M0 10 Q20 5 40 20 T80 25 T100 30" vectorEffect="non-scaling-stroke" />
-                   </svg>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-gray-500">Minimo</p>
+                  <p className="font-semibold text-gray-900">{selectedItem.minStock} {selectedItem.unit}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-gray-500">Compra do lote</p>
+                  <p className="font-semibold text-gray-900">{formatCurrency(selectedItem.costPrice)}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-gray-500">Custo por unidade</p>
+                  <p className="font-semibold text-gray-900">{formatCurrency(selectedItem.unitCost)}</p>
+                </div>
+              </div>
+
+              <div className="mb-6 rounded-lg border p-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Categoria</span>
+                  <span className="font-medium text-gray-900">{selectedItem.category}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Lote</span>
+                  <span className="font-medium text-gray-900">{selectedItem.batchNumber || '-'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Validade</span>
+                  <span className="font-medium text-gray-900">{selectedItem.validity || selectedItem.expiryDate || '-'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Fornecedor</span>
+                  <span className="font-medium text-gray-900">{selectedItem.supplier || '-'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Conteudo da embalagem</span>
+                  <span className="font-medium text-gray-900">{selectedItem.packageQuantity || 0} {selectedItem.packageUnit || selectedItem.unit}</span>
                 </div>
               </div>
 
@@ -303,7 +411,7 @@ export const InventoryList: React.FC = () => {
                   <Label className="text-xs text-gray-500">Quantidade Atual</Label>
                   <Input 
                     value={selectedItem.quantity} 
-                    onChange={(e) => handleQuickEditChange('quantity', parseInt(e.target.value) || 0)}
+                    onChange={(e) => handleQuickEditChange('quantity', Number(e.target.value) || 0)}
                     className="h-8 mt-1" 
                   />
                 </div>
@@ -312,7 +420,7 @@ export const InventoryList: React.FC = () => {
                   <Label className="text-xs text-gray-500">Mínimo</Label>
                   <Input 
                     value={selectedItem.minStock} 
-                    onChange={(e) => handleQuickEditChange('minStock', parseInt(e.target.value) || 0)}
+                    onChange={(e) => handleQuickEditChange('minStock', Number(e.target.value) || 0)}
                     className="h-8 mt-1" 
                   />
                 </div>
@@ -323,6 +431,15 @@ export const InventoryList: React.FC = () => {
                     value={selectedItem.validity || ''} 
                     onChange={(e) => handleQuickEditChange('validity', e.target.value)}
                     className="h-8 mt-1" 
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs text-gray-500">Lote</Label>
+                  <Input
+                    value={selectedItem.batchNumber || ''}
+                    onChange={(e) => handleQuickEditChange('batchNumber', e.target.value)}
+                    className="h-8 mt-1"
                   />
                 </div>
 
@@ -338,6 +455,15 @@ export const InventoryList: React.FC = () => {
                   className="w-full bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white"
                 >
                   Editar Detalhes
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={handleDeleteItem}
+                  className="w-full text-red-600 hover:text-red-700 border-red-200"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir Item
                 </Button>
               </div>
             </>
@@ -379,43 +505,43 @@ export const InventoryList: React.FC = () => {
                     value={formData.category || 'Medication'}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
                   >
-                    <option value="Medication">Medicamentos</option>
-                    <option value="Material">Descartáveis</option>
-                    <option value="Vaccine">Vacinas</option>
-                    <option value="Feed">Nutrição</option>
-                    <option value="Other">Outros</option>
+                    {CATEGORY_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Unidade</Label>
+                  <Label>Unidade de consumo</Label>
                   <Select
                     value={formData.unit || 'un'}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value as any })}
                   >
-                    <option value="un">Unidades</option>
-                    <option value="ml">ml</option>
-                    <option value="frasco">Frascos</option>
-                    <option value="g">Gramas</option>
-                    <option value="kg">Kg</option>
+                    {UNIT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Estoque Inicial</Label>
+                  <Label>Quantidade total</Label>
                   <Input
                     type="number"
+                    min="0"
+                    step="0.001"
                     value={formData.quantity || 0}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                    onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) || 0 })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Estoque Mínimo</Label>
                   <Input
                     type="number"
+                    min="0"
+                    step="0.001"
                     value={formData.minStock || 0}
-                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) || 0 })}
+                    onChange={(e) => setFormData({ ...formData, minStock: Number(e.target.value) || 0 })}
                   />
                 </div>
               </div>
@@ -429,22 +555,88 @@ export const InventoryList: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Custo Unitário</Label>
+                  <Label>Valor de compra do lote (R$)</Label>
                   <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
                     value={formData.costPrice || ''}
                     onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
-                    placeholder="R$ 0,00"
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Conteudo da embalagem</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={formData.packageQuantity || ''}
+                    onChange={(e) => setFormData({ ...formData, packageQuantity: Number(e.target.value) || 0 })}
+                    placeholder="Ex: 20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unidade da embalagem</Label>
+                  <Select
+                    value={formData.packageUnit || formData.unit || 'un'}
+                    onChange={(e) => setFormData({ ...formData, packageUnit: e.target.value as any })}
+                  >
+                    {UNIT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Lote</Label>
+                  <Input
+                    value={formData.batchNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Validade</Label>
+                  <Input
+                    type="date"
+                    value={formData.expiryDate || formData.validity || ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      expiryDate: e.target.value,
+                      validity: e.target.value
+                    })}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Validade</Label>
-                <Input
-                  value={formData.validity || ''}
-                  onChange={(e) => setFormData({ ...formData, validity: e.target.value })}
-                  placeholder="DD/MM/AAAA"
+                <Label>Descricao</Label>
+                <textarea
+                  className="w-full border rounded-md p-3 min-h-[90px] bg-white"
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Observacoes do item, apresentacao ou uso"
                 />
+              </div>
+
+              <div className="rounded-lg bg-teal-50 border border-teal-100 p-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-teal-800">Custo unitario automatico</span>
+                  <span className="font-bold text-teal-900">{formatCurrency(currentUnitCost)}</span>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-teal-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.allowsFraction)}
+                    onChange={(e) => setFormData({ ...formData, allowsFraction: e.target.checked })}
+                  />
+                  Permitir consumo fracionado deste item
+                </label>
               </div>
             </>
           )}
@@ -475,6 +667,8 @@ export const InventoryList: React.FC = () => {
                 <Label>Quantidade de {modalType === 'entry' ? 'Entrada' : 'Saída'}</Label>
                 <Input
                   type="number"
+                  min="0"
+                  step="0.001"
                   value={movementAmount}
                   onChange={(e) => setMovementAmount(e.target.value)}
                   placeholder="0"

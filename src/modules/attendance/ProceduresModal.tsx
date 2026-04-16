@@ -33,20 +33,8 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
     const template = proceduresList.find(p => p.id === selectedProcedureId);
     if (!template) return;
 
-    const price = customPrice ? Number(customPrice) : template.baseCost;
+    const price = customPrice ? Number(customPrice) : (template.chargePrice ?? template.baseCost);
 
-    const newProcedure: AppliedProcedure = {
-      id: Math.random().toString(36).substr(2, 9),
-      attendanceId: attendance.id,
-      name: template.name,
-      price: price,
-      notes: notes,
-      timestamp: new Date().toISOString()
-    };
-
-    const currentProcedures = attendance.procedures || [];
-    
-    // Auto-consume materials from template
     const newItems = template.items.map(pItem => {
         const invItem = mockDB.getInventory().find(i => i.id === pItem.inventoryItemId);
         if (invItem) {
@@ -54,13 +42,34 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
                 inventoryItemId: invItem.id,
                 itemName: invItem.name,
                 quantityUsed: pItem.quantity,
-                unit: invItem.unit,
-                costAtMoment: invItem.costPrice,
+                unit: pItem.unit || invItem.unit,
+                costAtMoment: invItem.unitCost ?? invItem.costPrice,
                 priceAtMoment: invItem.salePrice
             };
         }
         return null;
     }).filter(Boolean) as any[];
+
+    const procedureCost = Number(
+      (template.operationalCost ?? newItems.reduce((acc, item) => acc + (item.costAtMoment * item.quantityUsed), 0)).toFixed(2)
+    );
+    const procedureMargin = price > 0 ? Number((((price - procedureCost) / price) * 100).toFixed(2)) : 0;
+
+    const newProcedure: AppliedProcedure = {
+      id: Math.random().toString(36).substr(2, 9),
+      attendanceId: attendance.id,
+      procedureTemplateId: template.id,
+      name: template.name,
+      category: template.category,
+      price: price,
+      cost: procedureCost,
+      marginPercent: procedureMargin,
+      consumedItems: newItems,
+      notes: notes,
+      timestamp: new Date().toISOString()
+    };
+
+    const currentProcedures = attendance.procedures || [];
 
     const currentConsumedItems = attendance.consumedItems || [];
     
@@ -86,11 +95,34 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
 
   const handleRemoveProcedure = (id: string) => {
     const currentProcedures = attendance.procedures || [];
+    const removedProcedure = currentProcedures.find(p => p.id === id);
+    const updatedConsumedItems = [...(attendance.consumedItems || [])];
+
+    if (removedProcedure?.consumedItems?.length) {
+      removedProcedure.consumedItems.forEach(removedItem => {
+        const itemIndex = updatedConsumedItems.findIndex(item =>
+          item.inventoryItemId === removedItem.inventoryItemId &&
+          item.quantityUsed === removedItem.quantityUsed &&
+          item.unit === removedItem.unit &&
+          item.costAtMoment === removedItem.costAtMoment &&
+          item.priceAtMoment === removedItem.priceAtMoment
+        );
+
+        if (itemIndex !== -1) {
+          updatedConsumedItems.splice(itemIndex, 1);
+        }
+      });
+    }
+
     const updatedAttendance = {
       ...attendance,
-      procedures: currentProcedures.filter(p => p.id !== id)
+      procedures: currentProcedures.filter(p => p.id !== id),
+      consumedItems: updatedConsumedItems
     };
-    mockDB.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
+    mockDB.updateAttendance(attendance.id, {
+      procedures: updatedAttendance.procedures,
+      consumedItems: updatedAttendance.consumedItems
+    });
     onSave(updatedAttendance);
   };
 
@@ -130,7 +162,7 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
                         onChange={e => {
                             setSelectedProcedureId(e.target.value);
                             const p = proceduresList.find(proc => proc.id === e.target.value);
-                            if(p) setCustomPrice(p.baseCost.toString());
+                            if(p) setCustomPrice(String(p.chargePrice ?? p.baseCost));
                         }}
                     >
                         <option value="">Selecione...</option>

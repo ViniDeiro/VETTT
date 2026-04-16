@@ -1,18 +1,43 @@
 import jsPDF from 'jspdf';
 import { Patient, Attendance, Receivable, Owner, Prescription, ExamRequest } from '../domain/types';
+import { mockDB } from './mockDatabase';
 
 class PdfService {
+  private hexToRgb(hex: string) {
+    const sanitized = hex.replace('#', '');
+    const value = sanitized.length === 3
+      ? sanitized.split('').map(char => char + char).join('')
+      : sanitized;
+
+    const parsed = Number.parseInt(value, 16);
+    return {
+      r: (parsed >> 16) & 255,
+      g: (parsed >> 8) & 255,
+      b: parsed & 255
+    };
+  }
+
+  private getDocumentContext() {
+    const settings = mockDB.getSettings();
+    const currentUser = mockDB.getCurrentUser();
+    const teamMember = mockDB.getLinkedTeamMember(currentUser);
+    const primary = this.hexToRgb(settings.appearance.primaryColor || '#0B2C4D');
+
+    return { settings, currentUser, teamMember, primary };
+  }
+
   private addHeader(doc: jsPDF, title: string) {
-    // Clinic Logo/Header
-    doc.setFillColor(11, 44, 77); // #0B2C4D
+    const { settings, primary } = this.getDocumentContext();
+
+    doc.setFillColor(primary.r, primary.g, primary.b);
     doc.rect(0, 0, 210, 40, 'F');
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
-    doc.text('Vet Tooth', 20, 25);
+    doc.text(settings.clinic.fantasyName || 'Vet Tooth', 20, 25);
     
     doc.setFontSize(12);
-    doc.text('Odontologia Veterinária Especializada', 20, 32);
+    doc.text(settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada', 20, 32);
     
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(18);
@@ -20,20 +45,35 @@ class PdfService {
   }
 
   private addFooter(doc: jsPDF, signature: boolean = false) {
+    const { settings, teamMember } = this.getDocumentContext();
     const pageHeight = doc.internal.pageSize.height;
     
     if (signature) {
       doc.line(70, pageHeight - 40, 140, pageHeight - 40);
       doc.setFontSize(10);
       doc.setTextColor(50);
-      doc.text('Assinatura Digital do Veterinário', 105, pageHeight - 35, { align: 'center' });
+      const signatureLabel = settings.documents.showSignature
+        ? (teamMember?.signature || 'Assinatura digital do veterinario')
+        : 'Documento emitido sem assinatura digital';
+      doc.text(signatureLabel, 105, pageHeight - 35, { align: 'center' });
       doc.setFontSize(8);
-      doc.text('Token: 8f7d9a8s7d98a7s9d87a9s8d7a9s8d7', 105, pageHeight - 30, { align: 'center' });
+      const credentialLine = [
+        teamMember?.name,
+        settings.documents.autoCrmv ? teamMember?.crmv : null,
+        settings.documents.autoCnpj ? settings.clinic.cnpj : null
+      ].filter(Boolean).join(' | ');
+      doc.text(credentialLine || 'Responsavel tecnico', 105, pageHeight - 30, { align: 'center' });
     }
 
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text('Gerado por Vet Tooth System', 105, pageHeight - 10, { align: 'center' });
+    const footerParts = [
+      settings.documents.footer,
+      settings.documents.showAddress ? settings.clinic.address : null,
+      settings.clinic.phone || null,
+      settings.fiscal.includeCnpjOnAllDocuments || settings.documents.autoCnpj ? `CNPJ: ${settings.clinic.cnpj}` : null
+    ].filter(Boolean);
+    doc.text(footerParts.join(' | ') || 'Gerado por Vet Tooth System', 105, pageHeight - 10, { align: 'center' });
   }
 
   generatePrescriptionPdf(patient: Patient, prescription: Prescription, ownerName: string) {
@@ -208,6 +248,7 @@ class PdfService {
 
   generateCertificatePdf(patient: Patient, ownerName: string, type: 'health' | 'surgery' | 'euthanasia' | 'travel', text?: string) {
     const doc = new jsPDF();
+    const { teamMember } = this.getDocumentContext();
     
     let title = 'Atestado de Saúde';
     if (type === 'surgery') title = 'Termo de Consentimento Cirúrgico';
@@ -245,7 +286,7 @@ class PdfService {
 
     y += 40;
     doc.line(20, y, 90, y);
-    doc.text('Médico Veterinário (CRMV)', 20, y + 5);
+    doc.text(`${teamMember?.name || 'Medico Veterinario'}${teamMember?.crmv ? ` (${teamMember.crmv})` : ''}`, 20, y + 5);
     
     doc.line(110, y, 180, y);
     doc.text(`Tutor: ${ownerName}`, 110, y + 5);
@@ -356,6 +397,7 @@ class PdfService {
 
   generateReceipt(receivable: Receivable) {
     const doc = new jsPDF();
+    const { settings } = this.getDocumentContext();
     
     this.addHeader(doc, 'Recibo de Pagamento');
 
@@ -377,7 +419,7 @@ class PdfService {
     doc.text(`Paciente: ${receivable.patientName}`, 20, y);
     y += 20;
 
-    doc.text(`Data do Pagamento: ${new Date().toLocaleDateString('pt-BR')}`, 20, y);
+    doc.text(`Data do Pagamento: ${new Date().toLocaleDateString(settings.regional.language || 'pt-BR')}`, 20, y);
     
     y += 40;
     doc.line(20, y, 100, y);
@@ -386,6 +428,95 @@ class PdfService {
 
     this.addFooter(doc);
     doc.save(`recibo_${receivable.id}.pdf`);
+  }
+
+  generateFiscalInvoice(data: {
+    ownerName: string;
+    patientName?: string;
+    description: string;
+    amount: number;
+    city?: string;
+    serviceCode?: string;
+  }) {
+    const doc = new jsPDF();
+    const { settings } = this.getDocumentContext();
+    const issueDate = new Date().toLocaleDateString(settings.regional.language || 'pt-BR');
+    const invoiceNumber = String(settings.fiscal.nextInvoiceNumber || 1).padStart(6, '0');
+
+    this.addHeader(doc, 'Nota Fiscal de Servico');
+
+    let y = 70;
+    doc.setFontSize(12);
+    doc.text(`NFSe Nº: ${invoiceNumber}`, 20, y);
+    doc.text(`Emissao: ${issueDate}`, 140, y);
+    y += 12;
+    doc.text(`Prestador: ${settings.clinic.legalName}`, 20, y);
+    y += 8;
+    doc.text(`CNPJ: ${settings.clinic.cnpj}`, 20, y);
+    y += 8;
+    doc.text(`Tomador: ${data.ownerName}`, 20, y);
+    y += 8;
+    if (data.patientName) {
+      doc.text(`Paciente: ${data.patientName}`, 20, y);
+      y += 8;
+    }
+    doc.text(`Servico: ${data.description}`, 20, y);
+    y += 8;
+    doc.text(`Codigo do servico: ${data.serviceCode || settings.fiscal.defaultServiceCode}`, 20, y);
+    y += 8;
+    doc.text(`Cidade integracao: ${data.city || settings.clinic.city}`, 20, y);
+    y += 8;
+    doc.text(`Ambiente API: ${settings.fiscal.environment}`, 20, y);
+    y += 16;
+
+    doc.setFontSize(16);
+    doc.text(`Valor total: R$ ${Number(data.amount || 0).toFixed(2)}`, 20, y);
+    y += 12;
+    doc.setFontSize(10);
+    doc.setTextColor(90);
+    const fiscalNote = settings.fiscal.municipalApiUrl
+      ? `Integracao configurada: ${settings.fiscal.municipalApiUrl}`
+      : 'Integracao municipal pendente de credenciais. Documento emitido em modo interno.';
+    doc.text(doc.splitTextToSize(fiscalNote, 170), 20, y);
+
+    this.addFooter(doc, true);
+    doc.save(`nfse_${invoiceNumber}.pdf`);
+  }
+
+  generatePaymentProof(data: {
+    ownerName: string;
+    patientName?: string;
+    description: string;
+    amount: number;
+    method?: string;
+    transactionId?: string;
+  }) {
+    const doc = new jsPDF();
+    const { settings } = this.getDocumentContext();
+
+    this.addHeader(doc, 'Comprovante de Pagamento');
+
+    let y = 70;
+    doc.setFontSize(12);
+    doc.text(`Data: ${new Date().toLocaleDateString(settings.regional.language || 'pt-BR')}`, 20, y);
+    y += 12;
+    doc.text(`Recebido de: ${data.ownerName}`, 20, y);
+    y += 8;
+    if (data.patientName) {
+      doc.text(`Paciente: ${data.patientName}`, 20, y);
+      y += 8;
+    }
+    doc.text(`Descricao: ${data.description}`, 20, y);
+    y += 8;
+    doc.text(`Forma de pagamento: ${data.method || 'Nao informada'}`, 20, y);
+    y += 8;
+    doc.text(`Transacao: ${data.transactionId || 'Nao informada'}`, 20, y);
+    y += 14;
+    doc.setFontSize(16);
+    doc.text(`Valor pago: R$ ${Number(data.amount || 0).toFixed(2)}`, 20, y);
+
+    this.addFooter(doc, true);
+    doc.save(`comprovante_pagamento_${Date.now()}.pdf`);
   }
 }
 

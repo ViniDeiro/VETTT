@@ -12,12 +12,14 @@ import {
   Box,
   AlertCircle,
 } from 'lucide-react'
+import { mockDB } from '../services/mockDatabase'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { dashboard } = mockDB.getSettings()
 
-  const stats = [
-    {
+  const statsMap = {
+    numero_atendimentos: {
       title: 'Atendimentos hoje',
       value: '12',
       change: '+2% vs ontem',
@@ -26,16 +28,16 @@ export default function Dashboard() {
       bg: 'bg-blue-50',
       changeColor: 'text-green-500'
     },
-    {
+    retorno: {
       title: 'Procedimentos',
       value: '28',
       change: '+5% vs ontem',
-      icon: Activity, // Using Activity as tooth icon replacement
+      icon: Activity,
       color: 'text-indigo-600',
       bg: 'bg-indigo-50',
       changeColor: 'text-green-500'
     },
-    {
+    faturamento: {
       title: 'Receita',
       value: 'R$ 8.500',
       change: '+10% vs ontem',
@@ -44,16 +46,38 @@ export default function Dashboard() {
       bg: 'bg-emerald-50',
       changeColor: 'text-green-500'
     },
-    {
-      title: 'Custos',
-      value: 'R$ 2.100',
-      change: '+1% vs ontem',
+    lucro: {
+      title: 'Lucro',
+      value: 'R$ 6.400',
+      change: '+8% vs ontem',
       icon: Calculator,
-      color: 'text-red-600',
-      bg: 'bg-red-50',
+      color: 'text-teal-600',
+      bg: 'bg-teal-50',
+      changeColor: 'text-green-500'
+    },
+    ticket_medio: {
+      title: 'Ticket médio',
+      value: 'R$ 708',
+      change: '+4% vs ontem',
+      icon: DollarSign,
+      color: 'text-violet-600',
+      bg: 'bg-violet-50',
+      changeColor: 'text-green-500'
+    },
+    estoque_critico: {
+      title: 'Estoque crítico',
+      value: '3 itens',
+      change: 'Exige reposição',
+      icon: Box,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50',
       changeColor: 'text-red-500'
     }
-  ]
+  }
+
+  const stats = (dashboard?.enabledIndicators || ['faturamento', 'numero_atendimentos', 'lucro', 'estoque_critico'])
+    .map(key => statsMap[key])
+    .filter(Boolean)
 
   const nextAppointments = [
     { name: 'Luna', type: 'Cão, Limpeza', time: '09:00' },
@@ -80,8 +104,8 @@ export default function Dashboard() {
               onClick={() => {
                 if (stat.title.includes('Atendimentos')) navigate('/agenda');
                 else if (stat.title.includes('Procedimentos')) navigate('/attendance-new');
-                else if (stat.title.includes('Receita')) navigate('/finance/revenue');
-                else if (stat.title.includes('Custos')) navigate('/finance/expenses');
+                else if (stat.title.includes('Receita') || stat.title.includes('Ticket') || stat.title.includes('Lucro')) navigate('/finance/revenue');
+                else if (stat.title.includes('Estoque')) navigate('/inventory-new');
               }}
             >
               <CardContent className="p-6">

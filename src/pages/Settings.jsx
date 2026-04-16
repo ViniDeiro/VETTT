@@ -1,510 +1,1784 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
-import { 
-  Building, 
-  FileText, 
-  Database,
-  Save,
-  Upload,
+import {
+  Building,
   Download,
-  Settings as SettingsIcon
+  FileText,
+  MessageSquare,
+  Palette,
+  Plus,
+  Save,
+  Settings as SettingsIcon,
+  Shield,
+  Trash2,
+  Users,
+  Workflow
 } from 'lucide-react'
+import { mockDB } from '../services/mockDatabase'
+import { pdfService } from '../services/pdfService'
+
+const MODULES = [
+  ['settings', 'Configurações'],
+  ['users', 'Usuários'],
+  ['branding', 'Branding'],
+  ['finance', 'Financeiro'],
+  ['inventory', 'Estoque'],
+  ['attendance', 'Atendimento'],
+  ['medicalRecords', 'Prontuários'],
+  ['agenda', 'Agenda'],
+  ['reports', 'Relatórios'],
+  ['documents', 'Documentos'],
+  ['invoices', 'Notas fiscais'],
+  ['whatsapp', 'WhatsApp'],
+  ['audit', 'Auditoria'],
+  ['patients', 'Pacientes'],
+  ['team', 'Equipe']
+]
+
+const ACTIONS = [
+  ['view', 'Visualizar'],
+  ['create', 'Criar'],
+  ['edit', 'Editar'],
+  ['delete', 'Excluir'],
+  ['exportPdf', 'PDF'],
+  ['accessFinancial', 'Financeiro'],
+  ['accessStock', 'Estoque']
+]
+
+const DASHBOARD_INDICATORS = [
+  ['faturamento', 'Faturamento'],
+  ['ticket_medio', 'Ticket médio'],
+  ['lucro', 'Lucro'],
+  ['numero_atendimentos', 'Número de atendimentos'],
+  ['retorno', 'Retorno'],
+  ['estoque_critico', 'Estoque crítico']
+]
+
+const EMPTY_PROCEDURE_FORM = {
+  name: '',
+  category: '',
+  description: '',
+  chargePrice: '',
+  marginPercent: '',
+  duration: '',
+  notes: '',
+  items: []
+}
+
+const EMPTY_USER_FORM = {
+  name: '',
+  email: '',
+  phone: '',
+  functionTitle: '',
+  role: 'secretary',
+  accessProfileId: '',
+  status: 'active'
+}
+
+const EMPTY_TEAM_FORM = {
+  name: '',
+  functionTitle: '',
+  specialty: '',
+  crmv: '',
+  cpf: '',
+  phone: '',
+  email: '',
+  signature: '',
+  photo: '',
+  status: 'active'
+}
+
+const EMPTY_CONSULTATION_FORM = {
+  name: '',
+  speciesFocus: '',
+  defaultValue: '',
+  duration: '',
+  anamnesisText: '',
+  checklist: '',
+  requiredFields: ''
+}
+
+const EMPTY_DOCUMENT_TEMPLATE = {
+  type: '',
+  title: '',
+  content: ''
+}
+
+const EMPTY_MESSAGE_TEMPLATE = {
+  type: '',
+  channel: 'whatsapp',
+  template: '',
+  variables: '',
+  enabled: true
+}
+
+const EMPTY_PROFILE_FORM = {
+  name: '',
+  description: '',
+  baseRole: 'secretary'
+}
+
+const EMPTY_UNIT_FORM = {
+  name: '',
+  type: 'filial',
+  city: '',
+  state: '',
+  address: '',
+  active: true
+}
+
+const EMPTY_REMINDER_FORM = {
+  name: '',
+  daysAfter: '7',
+  message: '',
+  active: true
+}
+
+const EMPTY_SEDATION_FORM = {
+  name: '',
+  dosage: '',
+  notes: ''
+}
+
+const formatCurrency = value => `R$ ${Number(value || 0).toFixed(2)}`
+const formatDateTime = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca'
+
+const createBlankPermissions = () => (
+  MODULES.reduce((acc, [moduleKey]) => {
+    acc[moduleKey] = {
+      view: false,
+      create: false,
+      edit: false,
+      delete: false,
+      exportPdf: false,
+      accessFinancial: false,
+      accessStock: false
+    }
+    return acc
+  }, {})
+)
 
 export default function Settings() {
-  const [clinicData, setClinicData] = useState({
-    name: 'Clínica Veterinária VetTooth',
-    address: 'Rua das Flores, 123',
-    city: 'São Paulo',
-    state: 'SP',
-    zipCode: '01234-567',
-    phone: '(11) 99999-9999',
-    email: 'contato@vettooth.com.br',
-    website: 'www.vettooth.com.br',
-    crmv: 'CRMV-SP 12345',
-    logo: null
-  })
-
-  const [systemSettings, setSystemSettings] = useState({
-    theme: 'light',
-    dateFormat: 'dd/mm/yyyy',
-    currency: 'BRL',
-    language: 'pt-BR',
-    notifications: {
-      newAppointment: true,
-      pendingPayment: true,
-      autoBackup: false
-    }
-  })
-
-  const [procedures, setProcedures] = useState([
-    { id: 1, name: 'Limpeza Dental', cost: 150.00, duration: '30 min' },
-    { id: 2, name: 'Extração Simples', cost: 200.00, duration: '45 min' },
-    { id: 3, name: 'Extração Complexa', cost: 350.00, duration: '90 min' },
-    { id: 4, name: 'Tratamento de Canal', cost: 500.00, duration: '120 min' },
-    { id: 5, name: 'Radiografia Dental', cost: 80.00, duration: '15 min' },
-    { id: 6, name: 'Restauração', cost: 250.00, duration: '60 min' }
-  ])
-
+  const [settings, setSettings] = useState(() => mockDB.getSettings())
+  const [profiles, setProfiles] = useState(() => mockDB.getProfiles())
+  const [users, setUsers] = useState(() => mockDB.getUsers())
+  const [teamMembers, setTeamMembers] = useState(() => mockDB.getTeamMembers())
+  const [auditLogs, setAuditLogs] = useState(() => mockDB.getAuditLogs())
+  const [backups, setBackups] = useState(() => mockDB.getBackups())
+  const [procedures, setProcedures] = useState([])
+  const [inventoryItems, setInventoryItems] = useState([])
+  const [selectedInventoryItemId, setSelectedInventoryItemId] = useState('')
+  const [selectedInventoryQuantity, setSelectedInventoryQuantity] = useState('1')
+  const [newProcedure, setNewProcedure] = useState(EMPTY_PROCEDURE_FORM)
+  const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
+  const [teamForm, setTeamForm] = useState(EMPTY_TEAM_FORM)
+  const [consultationForm, setConsultationForm] = useState(EMPTY_CONSULTATION_FORM)
+  const [documentTemplateForm, setDocumentTemplateForm] = useState(EMPTY_DOCUMENT_TEMPLATE)
+  const [messageTemplateForm, setMessageTemplateForm] = useState(EMPTY_MESSAGE_TEMPLATE)
+  const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM)
+  const [unitForm, setUnitForm] = useState(EMPTY_UNIT_FORM)
+  const [reminderForm, setReminderForm] = useState(EMPTY_REMINDER_FORM)
+  const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
   const [sedationTypes, setSedationTypes] = useState([
     { id: 1, name: 'Xilazina', dosage: '1.1 mg/kg IV', notes: 'Sedação leve a moderada' },
     { id: 2, name: 'Detomidina', dosage: '0.01-0.02 mg/kg IV', notes: 'Sedação profunda' },
-    { id: 3, name: 'Acepromazina', dosage: '0.03-0.1 mg/kg IM', notes: 'Tranquilização' },
-    { id: 4, name: 'Butorfanol', dosage: '0.1-0.2 mg/kg IV', notes: 'Analgesia e sedação' }
+    { id: 3, name: 'Acepromazina', dosage: '0.03-0.1 mg/kg IM', notes: 'Tranquilização' }
   ])
+  const [newSedation, setNewSedation] = useState(EMPTY_SEDATION_FORM)
 
-  const [newProcedure, setNewProcedure] = useState({ name: '', cost: '', duration: '' })
-  const [newSedation, setNewSedation] = useState({ name: '', dosage: '', notes: '' })
-  const [isSaving, setIsSaving] = useState(false)
+  useEffect(() => {
+    mockDB.ensureMockProcedures()
+    setProcedures([...mockDB.getProcedures()])
+    setInventoryItems([...mockDB.getInventory()])
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setBackups([...mockDB.getBackups()])
+  }, [])
 
-  const handleClinicDataChange = (field, value) => {
-    setClinicData(prev => ({
+  useEffect(() => {
+    if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [profiles, selectedProfileId])
+
+  useEffect(() => {
+    if (!userForm.accessProfileId && profiles.length > 0) {
+      const defaultProfile = profiles.find(profile => profile.baseRole === 'secretary') || profiles[0]
+      setUserForm(prev => ({ ...prev, accessProfileId: defaultProfile.id }))
+    }
+  }, [profiles, userForm.accessProfileId])
+
+  const selectedProfile = useMemo(
+    () => profiles.find(profile => profile.id === selectedProfileId) || null,
+    [profiles, selectedProfileId]
+  )
+
+  const procedureOperationalCost = useMemo(() => (
+    Number(newProcedure.items.reduce((total, item) => total + ((item.costUnit || 0) * item.quantity), 0).toFixed(2))
+  ), [newProcedure.items])
+
+  const procedureChargePrice = useMemo(() => {
+    const directPrice = Number(newProcedure.chargePrice)
+    const marginBasedPrice = Number(newProcedure.marginPercent)
+
+    if (directPrice > 0) return Number(directPrice.toFixed(2))
+    if (procedureOperationalCost > 0 && Number.isFinite(marginBasedPrice) && marginBasedPrice >= 0 && marginBasedPrice < 100) {
+      return Number((procedureOperationalCost / (1 - (marginBasedPrice / 100))).toFixed(2))
+    }
+
+    return 0
+  }, [newProcedure.chargePrice, newProcedure.marginPercent, procedureOperationalCost])
+
+  const procedureMargin = useMemo(() => {
+    if (procedureChargePrice <= 0) return 0
+    return Number((((procedureChargePrice - procedureOperationalCost) / procedureChargePrice) * 100).toFixed(2))
+  }, [procedureChargePrice, procedureOperationalCost])
+
+  const updateSettingsGroup = (group, field, value) => {
+    setSettings(prev => ({
       ...prev,
-      [field]: value
+      [group]: {
+        ...prev[group],
+        [field]: value
+      }
     }))
   }
 
-  useEffect(() => {
-    const saved = localStorage.getItem('vet_settings')
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (parsed.clinic) setClinicData(parsed.clinic)
-      if (parsed.system) setSystemSettings(parsed.system)
-    }
-    // Apply theme on load
-    const savedTheme = localStorage.getItem('vet_theme') || 'light'
-    if (savedTheme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }, [])
+  const updateProfileState = updatedProfile => {
+    setProfiles(prev => prev.map(profile => profile.id === updatedProfile.id ? updatedProfile : profile))
+    mockDB.updateProfile(updatedProfile.id, updatedProfile)
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
 
   const handleSaveSettings = async () => {
     setIsSaving(true)
-    // Simulate saving
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // Save to LocalStorage
+    await new Promise(resolve => setTimeout(resolve, 400))
+    mockDB.saveSettings(settings)
+    setSettings(mockDB.getSettings())
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setBackups([...mockDB.getBackups()])
     localStorage.setItem('vet_settings', JSON.stringify({
-      clinic: clinicData,
-      system: systemSettings
+      clinic: {
+        name: settings.clinic.fantasyName
+      }
     }))
-    
-    // Apply Theme Immediately
-    if (systemSettings.theme === 'dark') {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('vet_theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('vet_theme', 'light')
-    }
-
+    window.dispatchEvent(new Event('vet-settings-updated'))
     setIsSaving(false)
-    alert('Configurações salvas e aplicadas com sucesso!')
-  }
-
-  const addProcedure = () => {
-    if (newProcedure.name && newProcedure.cost) {
-      setProcedures(prev => [...prev, {
-        id: Math.max(...prev.map(p => p.id)) + 1,
-        ...newProcedure,
-        cost: parseFloat(newProcedure.cost)
-      }])
-      setNewProcedure({ name: '', cost: '', duration: '' })
-    }
-  }
-
-  const removeProcedure = (id) => {
-    setProcedures(prev => prev.filter(p => p.id !== id))
-  }
-
-  const addSedation = () => {
-    if (newSedation.name && newSedation.dosage) {
-      setSedationTypes(prev => [...prev, {
-        id: Math.max(...prev.map(s => s.id)) + 1,
-        ...newSedation
-      }])
-      setNewSedation({ name: '', dosage: '', notes: '' })
-    }
-  }
-
-  const removeSedation = (id) => {
-    setSedationTypes(prev => prev.filter(s => s.id !== id))
+    alert('Configurações salvas com sucesso.')
   }
 
   const exportData = () => {
     const data = {
-      clinic: clinicData,
+      settings,
+      profiles,
+      users,
+      teamMembers,
       procedures,
       sedationTypes,
       exportDate: new Date().toISOString()
     }
-    
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'vettooth-settings.json'
-    a.click()
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'vettooth-configuracoes.json'
+    anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleProcedureFieldChange = (field, value) => {
+    setNewProcedure(prev => ({ ...prev, [field]: value }))
+  }
+
+  const addProcedureItem = () => {
+    const inventoryItem = inventoryItems.find(item => item.id === selectedInventoryItemId)
+    const quantity = Number(selectedInventoryQuantity)
+
+    if (!inventoryItem || quantity <= 0) {
+      alert('Selecione um insumo e informe uma quantidade valida.')
+      return
+    }
+
+    setNewProcedure(prev => {
+      const existingItem = prev.items.find(item => item.inventoryItemId === inventoryItem.id)
+
+      if (existingItem) {
+        return {
+          ...prev,
+          items: prev.items.map(item => item.inventoryItemId === inventoryItem.id
+            ? { ...item, quantity: Number((item.quantity + quantity).toFixed(3)) }
+            : item
+          )
+        }
+      }
+
+      return {
+        ...prev,
+        items: [...prev.items, {
+          inventoryItemId: inventoryItem.id,
+          quantity,
+          unit: inventoryItem.unit,
+          itemName: inventoryItem.name,
+          costUnit: inventoryItem.unitCost ?? inventoryItem.costPrice
+        }]
+      }
+    })
+
+    setSelectedInventoryItemId('')
+    setSelectedInventoryQuantity('1')
+  }
+
+  const removeProcedureItem = inventoryItemId => {
+    setNewProcedure(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.inventoryItemId !== inventoryItemId)
+    }))
+  }
+
+  const addProcedure = () => {
+    const hasRequiredFields = (
+      newProcedure.name &&
+      newProcedure.category &&
+      newProcedure.description &&
+      newProcedure.duration &&
+      newProcedure.notes &&
+      newProcedure.items.length > 0
+    )
+
+    if (!hasRequiredFields) {
+      alert('Preencha nome, categoria, descricao, tempo medio, observacoes e vincule ao menos um insumo.')
+      return
+    }
+
+    if (procedureChargePrice <= 0) {
+      alert('Informe um valor de cobranca ou uma margem valida.')
+      return
+    }
+
+    const savedProcedure = mockDB.createProcedure({
+      id: '',
+      name: newProcedure.name,
+      category: newProcedure.category,
+      description: newProcedure.description,
+      baseCost: procedureChargePrice,
+      chargePrice: procedureChargePrice,
+      marginPercent: procedureMargin,
+      duration: newProcedure.duration,
+      averageTime: newProcedure.duration,
+      notes: newProcedure.notes,
+      operationalCost: procedureOperationalCost,
+      items: newProcedure.items
+    })
+
+    setProcedures(prev => [...prev, savedProcedure])
+    setNewProcedure(EMPTY_PROCEDURE_FORM)
+    setSelectedInventoryItemId('')
+    setSelectedInventoryQuantity('1')
+  }
+
+  const removeProcedure = id => {
+    mockDB.deleteProcedure(id)
+    setProcedures(prev => prev.filter(item => item.id !== id))
+  }
+
+  const addUser = () => {
+    if (!userForm.name || !userForm.email || !userForm.phone || !userForm.functionTitle || !userForm.accessProfileId) {
+      alert('Preencha nome, email, telefone, funcao e perfil.')
+      return
+    }
+
+    const newUser = mockDB.createUser({
+      ...userForm,
+      name: userForm.name,
+      fullName: userForm.name
+    })
+
+    setUsers(prev => [...prev, newUser])
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setUserForm({
+      ...EMPTY_USER_FORM,
+      accessProfileId: userForm.accessProfileId
+    })
+  }
+
+  const updateUserField = (userId, field, value) => {
+    const updated = mockDB.updateUser(userId, { [field]: value })
+    if (!updated) return
+    setUsers(prev => prev.map(user => user.id === userId ? updated : user))
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
+
+  const removeUser = userId => {
+    mockDB.deleteUser(userId)
+    setUsers(prev => prev.filter(user => user.id !== userId))
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
+
+  const addTeamMember = () => {
+    if (!teamForm.name || !teamForm.functionTitle || !teamForm.phone) {
+      alert('Preencha nome, funcao e telefone.')
+      return
+    }
+
+    const newMember = mockDB.createTeamMember(teamForm)
+    setTeamMembers(prev => [...prev, newMember])
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setTeamForm(EMPTY_TEAM_FORM)
+  }
+
+  const updateTeamMemberField = (memberId, field, value) => {
+    const updated = mockDB.updateTeamMember(memberId, { [field]: value })
+    if (!updated) return
+    setTeamMembers(prev => prev.map(member => member.id === memberId ? updated : member))
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
+
+  const removeTeamMember = memberId => {
+    const removed = mockDB.deleteTeamMember(memberId)
+    if (!removed) {
+      alert('Nao e possivel excluir um membro vinculado a usuario do sistema.')
+      return
+    }
+    setTeamMembers(prev => prev.filter(member => member.id !== memberId))
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
+
+  const addConsultationTemplate = () => {
+    if (!consultationForm.name || !consultationForm.duration || !consultationForm.anamnesisText) {
+      alert('Preencha nome, duracao e anamnese padrao.')
+      return
+    }
+
+    const nextTemplate = {
+      id: `consult-${Date.now()}`,
+      name: consultationForm.name,
+      speciesFocus: consultationForm.speciesFocus || 'Geral',
+      defaultValue: Number(consultationForm.defaultValue || 0),
+      duration: consultationForm.duration,
+      anamnesisText: consultationForm.anamnesisText,
+      checklist: consultationForm.checklist.split(',').map(item => item.trim()).filter(Boolean),
+      requiredFields: consultationForm.requiredFields.split(',').map(item => item.trim()).filter(Boolean)
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      consultationTemplates: [...prev.consultationTemplates, nextTemplate]
+    }))
+    setConsultationForm(EMPTY_CONSULTATION_FORM)
+  }
+
+  const removeConsultationTemplate = templateId => {
+    setSettings(prev => ({
+      ...prev,
+      consultationTemplates: prev.consultationTemplates.filter(template => template.id !== templateId)
+    }))
+  }
+
+  const addDocumentTemplate = () => {
+    if (!documentTemplateForm.type || !documentTemplateForm.title || !documentTemplateForm.content) {
+      alert('Preencha tipo, titulo e conteudo do modelo.')
+      return
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      documentTemplates: [...prev.documentTemplates, {
+        id: `doc-${Date.now()}`,
+        ...documentTemplateForm
+      }]
+    }))
+    setDocumentTemplateForm(EMPTY_DOCUMENT_TEMPLATE)
+  }
+
+  const removeDocumentTemplate = templateId => {
+    setSettings(prev => ({
+      ...prev,
+      documentTemplates: prev.documentTemplates.filter(template => template.id !== templateId)
+    }))
+  }
+
+  const addMessageTemplate = () => {
+    if (!messageTemplateForm.type || !messageTemplateForm.template) {
+      alert('Preencha o tipo e o texto da mensagem.')
+      return
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      automatedMessages: [...prev.automatedMessages, {
+        id: `msg-${Date.now()}`,
+        type: messageTemplateForm.type,
+        channel: messageTemplateForm.channel,
+        enabled: messageTemplateForm.enabled,
+        template: messageTemplateForm.template,
+        variables: messageTemplateForm.variables.split(',').map(item => item.trim()).filter(Boolean)
+      }]
+    }))
+    setMessageTemplateForm(EMPTY_MESSAGE_TEMPLATE)
+  }
+
+  const removeMessageTemplate = messageId => {
+    setSettings(prev => ({
+      ...prev,
+      automatedMessages: prev.automatedMessages.filter(message => message.id !== messageId)
+    }))
+  }
+
+  const addProfile = () => {
+    if (!profileForm.name) {
+      alert('Informe o nome do perfil personalizado.')
+      return
+    }
+
+    const newProfile = mockDB.createProfile({
+      name: profileForm.name,
+      description: profileForm.description,
+      type: 'custom',
+      baseRole: profileForm.baseRole,
+      permissions: createBlankPermissions(),
+      restrictions: {
+        editAgenda: false,
+        cancelAttendance: false,
+        viewValues: false,
+        sensitiveSettings: false
+      }
+    })
+
+    setProfiles(prev => [...prev, newProfile])
+    setSelectedProfileId(newProfile.id)
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setProfileForm(EMPTY_PROFILE_FORM)
+  }
+
+  const toggleProfilePermission = (moduleKey, action) => {
+    if (!selectedProfile) return
+
+    updateProfileState({
+      ...selectedProfile,
+      permissions: {
+        ...selectedProfile.permissions,
+        [moduleKey]: {
+          ...selectedProfile.permissions[moduleKey],
+          [action]: !selectedProfile.permissions[moduleKey][action]
+        }
+      }
+    })
+  }
+
+  const toggleProfileRestriction = restrictionKey => {
+    if (!selectedProfile) return
+
+    updateProfileState({
+      ...selectedProfile,
+      restrictions: {
+        ...selectedProfile.restrictions,
+        [restrictionKey]: !selectedProfile.restrictions[restrictionKey]
+      }
+    })
+  }
+
+  const removeProfile = profileId => {
+    const removed = mockDB.deleteProfile(profileId)
+    if (!removed) {
+      alert('Perfis padrao ou vinculados a usuarios nao podem ser removidos.')
+      return
+    }
+    const nextProfiles = profiles.filter(profile => profile.id !== profileId)
+    setProfiles(nextProfiles)
+    setSelectedProfileId(nextProfiles[0]?.id || '')
+    setAuditLogs([...mockDB.getAuditLogs()])
+  }
+
+  const toggleDashboardIndicator = indicator => {
+    setSettings(prev => {
+      const current = prev.dashboard.enabledIndicators || []
+      const enabledIndicators = current.includes(indicator)
+        ? current.filter(item => item !== indicator)
+        : [...current, indicator]
+
+      return {
+        ...prev,
+        dashboard: {
+          ...prev.dashboard,
+          enabledIndicators
+        }
+      }
+    })
+  }
+
+  const addClinicUnit = () => {
+    if (!unitForm.name || !unitForm.city || !unitForm.state) {
+      alert('Preencha nome, cidade e estado da unidade.')
+      return
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      units: [...prev.units, { id: `unit-${Date.now()}`, ...unitForm }]
+    }))
+    setUnitForm(EMPTY_UNIT_FORM)
+  }
+
+  const removeClinicUnit = unitId => {
+    setSettings(prev => ({
+      ...prev,
+      units: prev.units.filter(unit => unit.id !== unitId)
+    }))
+  }
+
+  const addClinicalReminder = () => {
+    if (!reminderForm.name || !reminderForm.message) {
+      alert('Preencha nome e mensagem do lembrete.')
+      return
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      clinicalReminders: [...prev.clinicalReminders, {
+        id: `reminder-${Date.now()}`,
+        name: reminderForm.name,
+        daysAfter: Number(reminderForm.daysAfter || 0),
+        message: reminderForm.message,
+        active: reminderForm.active
+      }]
+    }))
+    setReminderForm(EMPTY_REMINDER_FORM)
+  }
+
+  const removeClinicalReminder = reminderId => {
+    setSettings(prev => ({
+      ...prev,
+      clinicalReminders: prev.clinicalReminders.filter(reminder => reminder.id !== reminderId)
+    }))
+  }
+
+  const createManualBackup = () => {
+    mockDB.createBackup('Backup manual criado em Configuracoes')
+    setBackups([...mockDB.getBackups()])
+    setSettings(mockDB.getSettings())
+    setAuditLogs([...mockDB.getAuditLogs()])
+    alert('Backup manual criado com sucesso.')
+  }
+
+  const restoreBackup = backupId => {
+    const restored = mockDB.restoreBackup(backupId)
+    if (!restored) {
+      alert('Nao foi possivel restaurar o backup.')
+      return
+    }
+
+    setSettings(mockDB.getSettings())
+    setProfiles(mockDB.getProfiles())
+    setUsers(mockDB.getUsers())
+    setTeamMembers(mockDB.getTeamMembers())
+    setProcedures([...mockDB.getProcedures()])
+    setAuditLogs([...mockDB.getAuditLogs()])
+    setBackups([...mockDB.getBackups()])
+    alert('Backup restaurado com sucesso.')
+  }
+
+  const importBackupFile = event => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || '{}'))
+        if (parsed?.settings) {
+          mockDB.saveSettings(parsed.settings)
+        }
+        alert('Arquivo importado. Se quiser restaurar tudo, utilize os backups internos do sistema.')
+      } catch (error) {
+        alert('Arquivo inválido para restauração.')
+      }
+      event.target.value = ''
+    }
+    reader.readAsText(file)
+  }
+
+  const emitFiscalInvoice = () => {
+    pdfService.generateFiscalInvoice({
+      ownerName: 'Cliente Demonstracao',
+      patientName: 'Paciente Demonstracao',
+      description: 'Atendimento odontologico veterinario',
+      amount: 250,
+      city: settings.clinic.city
+    })
+  }
+
+  const emitReceipt = () => {
+    pdfService.generateReceipt({
+      id: `rcb-${Date.now()}`,
+      patientId: 'demo',
+      patientName: 'Paciente Demonstracao',
+      ownerName: 'Cliente Demonstracao',
+      description: 'Consulta odontologica',
+      amount: 250,
+      dueDate: new Date().toISOString(),
+      paid: true
+    })
+  }
+
+  const emitPaymentProof = () => {
+    pdfService.generatePaymentProof({
+      ownerName: 'Cliente Demonstracao',
+      patientName: 'Paciente Demonstracao',
+      description: 'Pagamento de consulta odontologica',
+      amount: 250,
+      method: 'Pix',
+      transactionId: `TX-${Date.now()}`
+    })
+  }
+
+  const addSedation = () => {
+    if (!newSedation.name || !newSedation.dosage) return
+    setSedationTypes(prev => [...prev, { id: Date.now(), ...newSedation }])
+    setNewSedation(EMPTY_SEDATION_FORM)
+  }
+
+  const removeSedation = sedationId => {
+    setSedationTypes(prev => prev.filter(item => item.id !== sedationId))
   }
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
-            <p className="text-gray-600">Gerencie as configurações da clínica e dados predefinidos</p>
+            <h1 className="text-2xl font-bold text-gray-900">Configurações Gerais</h1>
+            <p className="text-sm text-gray-500">
+              Parametrize clínica, permissões, documentos, equipe, mensagens automáticas e integrações.
+            </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportData} className="flex items-center gap-2">
+            <Button variant="outline" onClick={exportData} className="gap-2">
               <Download className="h-4 w-4" />
               Exportar Dados
             </Button>
-            <Button 
-              onClick={handleSaveSettings}
-              disabled={isSaving}
-              className="flex items-center gap-2"
-            >
-              {isSaving ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              Salvar Configurações
+            <Button onClick={handleSaveSettings} disabled={isSaving} className="gap-2">
+              <Save className="h-4 w-4" />
+              {isSaving ? 'Salvando...' : 'Salvar Configurações'}
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Clinic Information */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building className="h-5 w-5" />
-                Informações da Clínica
+                Personalização da Clínica
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Nome fantasia</Label>
+                  <Input value={settings.clinic.fantasyName} onChange={event => updateSettingsGroup('clinic', 'fantasyName', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Razão social</Label>
+                  <Input value={settings.clinic.legalName} onChange={event => updateSettingsGroup('clinic', 'legalName', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>CNPJ</Label>
+                  <Input value={settings.clinic.cnpj} onChange={event => updateSettingsGroup('clinic', 'cnpj', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Telefone</Label>
+                  <Input value={settings.clinic.phone} onChange={event => updateSettingsGroup('clinic', 'phone', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>E-mail</Label>
+                  <Input value={settings.clinic.email} onChange={event => updateSettingsGroup('clinic', 'email', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Website</Label>
+                  <Input value={settings.clinic.website} onChange={event => updateSettingsGroup('clinic', 'website', event.target.value)} />
+                </div>
+              </div>
               <div>
-                <Label htmlFor="clinicName">Nome da Clínica</Label>
-                <Input
-                  id="clinicName"
-                  value={clinicData.name}
-                  onChange={(e) => handleClinicDataChange('name', e.target.value)}
-                />
+                <Label>Endereço completo</Label>
+                <Input value={settings.clinic.address} onChange={event => updateSettingsGroup('clinic', 'address', event.target.value)} />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    value={clinicData.phone}
-                    onChange={(e) => handleClinicDataChange('phone', e.target.value)}
-                  />
+                  <Label>Cidade</Label>
+                  <Input value={settings.clinic.city} onChange={event => updateSettingsGroup('clinic', 'city', event.target.value)} />
                 </div>
                 <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={clinicData.email}
-                    onChange={(e) => handleClinicDataChange('email', e.target.value)}
-                  />
+                  <Label>Estado</Label>
+                  <Input value={settings.clinic.state} onChange={event => updateSettingsGroup('clinic', 'state', event.target.value)} />
+                </div>
+                <div>
+                  <Label>CEP</Label>
+                  <Input value={settings.clinic.zipCode} onChange={event => updateSettingsGroup('clinic', 'zipCode', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Redes sociais</Label>
+                  <Input value={settings.clinic.socialMedia} onChange={event => updateSettingsGroup('clinic', 'socialMedia', event.target.value)} />
                 </div>
               </div>
-
-              <div>
-                <Label htmlFor="address">Endereço</Label>
-                <Input
-                  id="address"
-                  value={clinicData.address}
-                  onChange={(e) => handleClinicDataChange('address', e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="city">Cidade</Label>
-                  <Input
-                    id="city"
-                    value={clinicData.city}
-                    onChange={(e) => handleClinicDataChange('city', e.target.value)}
-                  />
+                  <Label>Logo da clínica (URL)</Label>
+                  <Input value={settings.clinic.logo || ''} onChange={event => updateSettingsGroup('clinic', 'logo', event.target.value)} placeholder="https://..." />
                 </div>
                 <div>
-                  <Label htmlFor="state">Estado</Label>
-                  <Input
-                    id="state"
-                    value={clinicData.state}
-                    onChange={(e) => handleClinicDataChange('state', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="zipCode">CEP</Label>
-                  <Input
-                    id="zipCode"
-                    value={clinicData.zipCode}
-                    onChange={(e) => handleClinicDataChange('zipCode', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    id="website"
-                    value={clinicData.website}
-                    onChange={(e) => handleClinicDataChange('website', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="crmv">CRMV</Label>
-                  <Input
-                    id="crmv"
-                    value={clinicData.crmv}
-                    onChange={(e) => handleClinicDataChange('crmv', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="logo">Logo da Clínica</Label>
-                <div className="mt-1 flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                    {clinicData.logo ? (
-                      <img src={clinicData.logo} alt="Logo" className="w-full h-full object-cover rounded-lg" />
-                    ) : (
-                      <Building className="h-8 w-8 text-gray-400" />
-                    )}
-                  </div>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <Upload className="h-4 w-4" />
-                    Fazer Upload
-                  </Button>
+                  <Label>Logo dos documentos (URL)</Label>
+                  <Input value={settings.clinic.documentLogo || ''} onChange={event => updateSettingsGroup('clinic', 'documentLogo', event.target.value)} placeholder="https://..." />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* System Preferences */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <SettingsIcon className="h-5 w-5" />
-                Preferências do Sistema
+                <Palette className="h-5 w-5" />
+                Visual e Formatação Regional
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label>Tema da Interface</Label>
-                <div className="mt-2 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                        type="radio" 
-                        name="theme" 
-                        value="light" 
-                        checked={systemSettings.theme === 'light'}
-                        onChange={(e) => setSystemSettings(prev => ({ ...prev, theme: e.target.value }))}
-                    />
-                    <span className="text-sm">Claro</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                        type="radio" 
-                        name="theme" 
-                        value="dark" 
-                        checked={systemSettings.theme === 'dark'}
-                        onChange={(e) => setSystemSettings(prev => ({ ...prev, theme: e.target.value }))}
-                    />
-                    <span className="text-sm">Escuro</span>
-                  </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Cor principal</Label>
+                  <Input type="color" value={settings.appearance.primaryColor} onChange={event => updateSettingsGroup('appearance', 'primaryColor', event.target.value)} className="h-11" />
+                </div>
+                <div>
+                  <Label>Cor dos botões</Label>
+                  <Input type="color" value={settings.appearance.buttonColor} onChange={event => updateSettingsGroup('appearance', 'buttonColor', event.target.value)} className="h-11" />
+                </div>
+                <div>
+                  <Label>Cor do menu lateral</Label>
+                  <Input type="color" value={settings.appearance.sidebarColor} onChange={event => updateSettingsGroup('appearance', 'sidebarColor', event.target.value)} className="h-11" />
                 </div>
               </div>
-
-              <div>
-                <Label>Formato de Data</Label>
-                <select 
-                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
-                    value={systemSettings.dateFormat}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, dateFormat: e.target.value }))}
-                >
-                  <option value="dd/mm/yyyy">DD/MM/AAAA</option>
-                  <option value="mm/dd/yyyy">MM/DD/AAAA</option>
-                  <option value="yyyy-mm-dd">AAAA-MM-DD</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Tema</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.appearance.theme} onChange={event => updateSettingsGroup('appearance', 'theme', event.target.value)}>
+                    <option value="light">Claro</option>
+                    <option value="dark">Escuro</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Ícone do app (URL)</Label>
+                  <Input value={settings.appearance.appIcon || ''} onChange={event => updateSettingsGroup('appearance', 'appIcon', event.target.value)} placeholder="https://..." />
+                </div>
               </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Idioma</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.regional.language} onChange={event => updateSettingsGroup('regional', 'language', event.target.value)}>
+                    <option value="pt-BR">Português</option>
+                    <option value="en-US">English</option>
+                    <option value="es-ES">Español</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Formato de data</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.regional.dateFormat} onChange={event => updateSettingsGroup('regional', 'dateFormat', event.target.value)}>
+                    <option value="DD/MM/AAAA">DD/MM/AAAA</option>
+                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Formato de hora</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.regional.timeFormat} onChange={event => updateSettingsGroup('regional', 'timeFormat', event.target.value)}>
+                    <option value="24h">24 horas</option>
+                    <option value="12h">12 horas</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Separador decimal</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.regional.decimalSeparator} onChange={event => updateSettingsGroup('regional', 'decimalSeparator', event.target.value)}>
+                    <option value=",">Vírgula</option>
+                    <option value=".">Ponto</option>
+                  </select>
+                </div>
+              </div>
               <div>
                 <Label>Moeda</Label>
-                <select 
-                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
-                    value={systemSettings.currency}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, currency: e.target.value }))}
-                >
-                  <option value="BRL">Real Brasileiro (R$)</option>
-                  <option value="USD">Dólar Americano ($)</option>
-                  <option value="EUR">Euro (€)</option>
+                <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.regional.currency} onChange={event => updateSettingsGroup('regional', 'currency', event.target.value)}>
+                  <option value="BRL">BRL</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
                 </select>
               </div>
-
-              <div>
-                <Label>Idioma</Label>
-                <select 
-                    className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground"
-                    value={systemSettings.language}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, language: e.target.value }))}
-                >
-                  <option value="pt-BR">Português (Brasil)</option>
-                  <option value="en-US">English (US)</option>
-                  <option value="es-ES">Español</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notificações</Label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={systemSettings.notifications.newAppointment}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, newAppointment: e.target.checked } }))}
-                  />
-                  <span className="text-sm">Notificar sobre novos agendamentos</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={systemSettings.notifications.pendingPayment}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, pendingPayment: e.target.checked } }))}
-                  />
-                  <span className="text-sm">Lembrar de pagamentos pendentes</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={systemSettings.notifications.autoBackup}
-                    onChange={(e) => setSystemSettings(prev => ({ ...prev, notifications: { ...prev.notifications, autoBackup: e.target.checked } }))}
-                  />
-                  <span className="text-sm">Backup automático diário</span>
-                </label>
+              <div className="rounded-lg border p-4" style={{ backgroundColor: `${settings.appearance.sidebarColor}15` }}>
+                <p className="text-sm font-semibold text-gray-900">Pré-visualização da marca</p>
+                <div className="mt-3 flex items-center justify-between rounded-lg p-4 text-white" style={{ backgroundColor: settings.appearance.sidebarColor }}>
+                  <span className="font-bold">{settings.clinic.fantasyName}</span>
+                  <button type="button" className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: settings.appearance.buttonColor }}>
+                    Botão
+                  </button>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Procedures Management */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Procedimentos Predefinidos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Add New Procedure */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                <Input
-                  placeholder="Nome do procedimento"
-                  value={newProcedure.name}
-                  onChange={(e) => setNewProcedure(prev => ({ ...prev, name: e.target.value }))}
-                />
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Custo (R$)"
-                  value={newProcedure.cost}
-                  onChange={(e) => setNewProcedure(prev => ({ ...prev, cost: e.target.value }))}
-                />
-                <Input
-                  placeholder="Duração"
-                  value={newProcedure.duration}
-                  onChange={(e) => setNewProcedure(prev => ({ ...prev, duration: e.target.value }))}
-                />
-                <Button onClick={addProcedure}>Adicionar</Button>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documentos Fiscais e Assinatura
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input placeholder="API municipal" value={settings.fiscal.municipalApiUrl} onChange={event => updateSettingsGroup('fiscal', 'municipalApiUrl', event.target.value)} />
+                <Input placeholder="Provedor/API" value={settings.fiscal.municipalProvider} onChange={event => updateSettingsGroup('fiscal', 'municipalProvider', event.target.value)} />
+                <Input placeholder="Código da cidade" value={settings.fiscal.cityCode} onChange={event => updateSettingsGroup('fiscal', 'cityCode', event.target.value)} />
+                <Input placeholder="Código do serviço" value={settings.fiscal.defaultServiceCode} onChange={event => updateSettingsGroup('fiscal', 'defaultServiceCode', event.target.value)} />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label>Ambiente</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.fiscal.environment} onChange={event => updateSettingsGroup('fiscal', 'environment', event.target.value)}>
+                    <option value="homologation">Homologação</option>
+                    <option value="production">Produção</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Alíquota padrão (%)</Label>
+                  <Input type="number" value={settings.fiscal.defaultTaxRate} onChange={event => updateSettingsGroup('fiscal', 'defaultTaxRate', Number(event.target.value))} />
+                </div>
+                <div>
+                  <Label>Próxima nota</Label>
+                  <Input type="number" value={settings.fiscal.nextInvoiceNumber} onChange={event => updateSettingsGroup('fiscal', 'nextInvoiceNumber', Number(event.target.value))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ['includeCnpjOnAllDocuments', 'Incluir CNPJ em todos os documentos'],
+                  ['issueInvoices', 'Emitir nota fiscal'],
+                  ['issueReceipts', 'Emitir recibo'],
+                  ['issuePaymentProofs', 'Emitir comprovante']
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <input type="checkbox" checked={Boolean(settings.fiscal[key])} onChange={event => updateSettingsGroup('fiscal', key, event.target.checked)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+                <p className="font-semibold text-gray-900">Emissão rápida de demonstração</p>
+                <p className="text-sm text-gray-500">Gera PDF interno com CNPJ da clínica, assinatura digital configurada e dados fiscais básicos.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={emitFiscalInvoice}>Emitir nota fiscal</Button>
+                  <Button type="button" variant="outline" onClick={emitReceipt}>Emitir recibo</Button>
+                  <Button type="button" variant="outline" onClick={emitPaymentProof}>Emitir comprovante</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-              {/* Procedures List */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Backup e Segurança
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ['dailyAutoBackup', 'Backup automático diário'],
+                  ['manualBackupEnabled', 'Permitir backup manual'],
+                  ['restoreEnabled', 'Permitir restauração'],
+                  ['twoFactorEnabled', 'Autenticação em dois fatores'],
+                  ['passwordResetEnabled', 'Redefinição de senha']
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <input type="checkbox" checked={Boolean(settings.security[key])} onChange={event => updateSettingsGroup('security', key, event.target.checked)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label>Expiração de sessão (min)</Label>
+                  <Input type="number" value={settings.security.sessionTimeoutMinutes} onChange={event => updateSettingsGroup('security', 'sessionTimeoutMinutes', Number(event.target.value))} />
+                </div>
+                <div>
+                  <Label>Retenção de backups</Label>
+                  <Input type="number" value={settings.security.backupRetentionDays} onChange={event => updateSettingsGroup('security', 'backupRetentionDays', Number(event.target.value))} />
+                </div>
+                <div>
+                  <Label>Último backup</Label>
+                  <Input value={formatDateTime(settings.security.lastBackupAt)} readOnly />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={createManualBackup} disabled={!settings.security.manualBackupEnabled}>Backup manual</Button>
+                <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer">
+                  <span>Importar JSON</span>
+                  <input type="file" accept="application/json" className="hidden" onChange={importBackupFile} />
+                </label>
+              </div>
               <div className="space-y-2">
-                {procedures.map((procedure) => (
-                  <div key={procedure.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1 grid grid-cols-3 gap-4">
-                      <span className="font-medium">{procedure.name}</span>
-                      <span>R$ {procedure.cost.toFixed(2)}</span>
-                      <span className="text-gray-600">{procedure.duration}</span>
+                {backups.slice(0, 5).map(backup => (
+                  <div key={backup.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{backup.label}</p>
+                      <p className="text-xs text-gray-500">{formatDateTime(backup.createdAt)} • {backup.createdBy}</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeProcedure(procedure.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => restoreBackup(backup.id)} disabled={!settings.security.restoreEnabled}>
+                      Restaurar versão
+                    </Button>
+                  </div>
+                ))}
+                {backups.length === 0 && (
+                  <p className="text-sm text-gray-500">Nenhum backup interno disponível.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SettingsIcon className="h-5 w-5" />
+                Dashboard Configurável
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-500">Defina quais indicadores aparecem no dashboard principal para o administrador.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {DASHBOARD_INDICATORS.map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <input type="checkbox" checked={settings.dashboard.enabledIndicators.includes(key)} onChange={() => toggleDashboardIndicator(key)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Unidades Veterinárias
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input placeholder="Nome da unidade" value={unitForm.name} onChange={event => setUnitForm(prev => ({ ...prev, name: event.target.value }))} />
+                <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={unitForm.type} onChange={event => setUnitForm(prev => ({ ...prev, type: event.target.value }))}>
+                  <option value="matriz">Matriz</option>
+                  <option value="filial">Filial</option>
+                  <option value="atendimento_movel">Atendimento móvel</option>
+                  <option value="hospital_parceiro">Hospital parceiro</option>
+                </select>
+                <Input placeholder="Cidade" value={unitForm.city} onChange={event => setUnitForm(prev => ({ ...prev, city: event.target.value }))} />
+                <Input placeholder="Estado" value={unitForm.state} onChange={event => setUnitForm(prev => ({ ...prev, state: event.target.value }))} />
+                <Input placeholder="Endereço" value={unitForm.address} onChange={event => setUnitForm(prev => ({ ...prev, address: event.target.value }))} />
+                <Button type="button" onClick={addClinicUnit}>Adicionar unidade</Button>
+              </div>
+              <div className="space-y-2">
+                {settings.units.map(unit => (
+                  <div key={unit.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{unit.name}</p>
+                      <p className="text-xs text-gray-500">{unit.type} • {unit.city}/{unit.state} • {unit.address || 'Sem endereço'}</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => removeClinicUnit(unit.id)} className="text-red-600">
                       Remover
                     </Button>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Workflow className="h-5 w-5" />
+                Lembretes Clínicos
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input placeholder="Nome do lembrete" value={reminderForm.name} onChange={event => setReminderForm(prev => ({ ...prev, name: event.target.value }))} />
+                <Input placeholder="Dias após atendimento" type="number" value={reminderForm.daysAfter} onChange={event => setReminderForm(prev => ({ ...prev, daysAfter: event.target.value }))} />
+                <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                  <input type="checkbox" checked={reminderForm.active} onChange={event => setReminderForm(prev => ({ ...prev, active: event.target.checked }))} />
+                  <span>Lembrete ativo</span>
+                </label>
+              </div>
+              <textarea className="w-full border rounded-md p-3 min-h-[96px]" placeholder="Mensagem padrão do lembrete" value={reminderForm.message} onChange={event => setReminderForm(prev => ({ ...prev, message: event.target.value }))} />
+              <Button type="button" onClick={addClinicalReminder}>Adicionar lembrete</Button>
+              <div className="space-y-2">
+                {settings.clinicalReminders.map(reminder => (
+                  <div key={reminder.id} className="rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{reminder.name}</p>
+                        <p className="text-xs text-gray-500">{reminder.daysAfter} dias • {reminder.active ? 'Ativo' : 'Inativo'}</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeClinicalReminder(reminder.id)} className="text-red-600">
+                        Remover
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-600">{reminder.message}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Auditoria
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ['enabled', 'Auditoria ativa'],
+                  ['logSensitiveActions', 'Log de ações sensíveis']
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <input type="checkbox" checked={Boolean(settings.audit[key])} onChange={event => updateSettingsGroup('audit', key, event.target.checked)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+                <div>
+                  <Label>Retenção (dias)</Label>
+                  <Input type="number" value={settings.audit.retainDays} onChange={event => updateSettingsGroup('audit', 'retainDays', Number(event.target.value))} />
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[360px] overflow-y-auto">
+                {auditLogs.map(log => (
+                  <div key={log.id} className="rounded-lg border p-3 text-sm">
+                    <p className="font-medium text-gray-900">{log.actorName} • {log.action} • {log.entity}</p>
+                    <p className="text-xs text-gray-500">{formatDateTime(log.createdAt)} • Campo: {log.changedField || 'geral'}</p>
+                    <p className="mt-2 text-xs text-gray-600">Anterior: {JSON.stringify(log.previousValue ?? null)}</p>
+                    <p className="text-xs text-gray-600">Novo: {JSON.stringify(log.newValue ?? null)}</p>
+                  </div>
+                ))}
+                {auditLogs.length === 0 && (
+                  <p className="text-sm text-gray-500">Nenhum evento auditado até o momento.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              RBAC, Perfis e Usuários
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
+              <div className="space-y-4">
+                <div className="rounded-lg border p-4 space-y-3">
+                  <p className="font-semibold text-gray-900">Perfis cadastrados</p>
+                  <div className="space-y-2">
+                    {profiles.map(profile => (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() => setSelectedProfileId(profile.id)}
+                        className={`w-full rounded-lg border px-3 py-3 text-left ${selectedProfileId === profile.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                      >
+                        <p className="font-medium text-gray-900">{profile.name}</p>
+                        <p className="text-xs text-gray-500">{profile.type === 'standard' ? 'Padrão' : 'Personalizado'}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t pt-3 space-y-3">
+                    <Input placeholder="Novo perfil personalizado" value={profileForm.name} onChange={event => setProfileForm(prev => ({ ...prev, name: event.target.value }))} />
+                    <Input placeholder="Descrição" value={profileForm.description} onChange={event => setProfileForm(prev => ({ ...prev, description: event.target.value }))} />
+                    <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={profileForm.baseRole} onChange={event => setProfileForm(prev => ({ ...prev, baseRole: event.target.value }))}>
+                      <option value="admin">Administrador</option>
+                      <option value="vet">Veterinário</option>
+                      <option value="secretary">Secretária</option>
+                    </select>
+                    <Button type="button" onClick={addProfile} className="w-full gap-2">
+                      <Plus className="h-4 w-4" />
+                      Criar Perfil
+                    </Button>
+                    {selectedProfile?.type === 'custom' && (
+                      <Button type="button" variant="outline" onClick={() => removeProfile(selectedProfile.id)} className="w-full text-red-600">
+                        Remover Perfil Selecionado
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {selectedProfile && (
+                  <>
+                    <div className="rounded-lg border p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="font-semibold text-gray-900">{selectedProfile.name}</p>
+                          <p className="text-sm text-gray-500">{selectedProfile.description || 'Sem descrição informada.'}</p>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Base: {selectedProfile.baseRole || 'custom'}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                        {[
+                          ['editAgenda', 'Pode editar agenda'],
+                          ['cancelAttendance', 'Pode cancelar atendimento'],
+                          ['viewValues', 'Pode visualizar valores'],
+                          ['sensitiveSettings', 'Configurações sensíveis']
+                        ].map(([key, label]) => (
+                          <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                            <input type="checkbox" checked={Boolean(selectedProfile.restrictions[key])} onChange={() => toggleProfileRestriction(key)} />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border">
+                      <table className="w-full border-collapse text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="p-3 text-left">Módulo</th>
+                            {ACTIONS.map(([, label]) => (
+                              <th key={label} className="p-3 text-center whitespace-nowrap">{label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {MODULES.map(([moduleKey, label]) => (
+                            <tr key={moduleKey} className="border-t">
+                              <td className="p-3 font-medium text-gray-900">{label}</td>
+                              {ACTIONS.map(([actionKey]) => (
+                                <td key={`${moduleKey}-${actionKey}`} className="p-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(selectedProfile.permissions[moduleKey]?.[actionKey])}
+                                    onChange={() => toggleProfilePermission(moduleKey, actionKey)}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-gray-900">Usuários do sistema</p>
+                <span className="text-xs text-gray-500">Campos obrigatórios de acesso, status, cadastro e último acesso</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                <Input placeholder="Nome completo" value={userForm.name} onChange={event => setUserForm(prev => ({ ...prev, name: event.target.value }))} />
+                <Input placeholder="E-mail" value={userForm.email} onChange={event => setUserForm(prev => ({ ...prev, email: event.target.value }))} />
+                <Input placeholder="Telefone" value={userForm.phone} onChange={event => setUserForm(prev => ({ ...prev, phone: event.target.value }))} />
+                <Input placeholder="Função" value={userForm.functionTitle} onChange={event => setUserForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
+                <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.accessProfileId} onChange={event => setUserForm(prev => ({ ...prev, accessProfileId: event.target.value }))}>
+                  {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                </select>
+                <Button type="button" onClick={addUser} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="p-3 text-left">Nome</th>
+                      <th className="p-3 text-left">Contato</th>
+                      <th className="p-3 text-left">Função</th>
+                      <th className="p-3 text-left">Perfil</th>
+                      <th className="p-3 text-left">Status</th>
+                      <th className="p-3 text-left">Cadastro</th>
+                      <th className="p-3 text-left">Último acesso</th>
+                      <th className="p-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map(user => (
+                      <tr key={user.id} className="border-b last:border-0">
+                        <td className="p-3">
+                          <div className="font-medium text-gray-900">{user.fullName || user.name}</div>
+                          <div className="text-xs text-gray-500">{user.email}</div>
+                        </td>
+                        <td className="p-3">{user.phone || '-'}</td>
+                        <td className="p-3">{user.functionTitle || '-'}</td>
+                        <td className="p-3">
+                          <select className="w-full px-2 py-2 rounded-md border border-input bg-background" value={user.accessProfileId || ''} onChange={event => updateUserField(user.id, 'accessProfileId', event.target.value)}>
+                            {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="p-3">
+                          <select className="w-full px-2 py-2 rounded-md border border-input bg-background" value={user.status || 'active'} onChange={event => updateUserField(user.id, 'status', event.target.value)}>
+                            <option value="active">Ativo</option>
+                            <option value="inactive">Inativo</option>
+                          </select>
+                        </td>
+                        <td className="p-3 text-xs text-gray-500">{formatDateTime(user.createdAt)}</td>
+                        <td className="p-3 text-xs text-gray-500">{formatDateTime(user.lastAccessAt)}</td>
+                        <td className="p-3 text-right">
+                          <Button type="button" variant="outline" size="sm" onClick={() => removeUser(user.id)} className="text-red-600">
+                            Remover
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Sedation Types Management */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Protocolos de Sedação
+              <Users className="h-5 w-5" />
+              Configuração da Equipe
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Add New Sedation */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                <Input
-                  placeholder="Nome do medicamento"
-                  value={newSedation.name}
-                  onChange={(e) => setNewSedation(prev => ({ ...prev, name: e.target.value }))}
-                />
-                <Input
-                  placeholder="Dosagem"
-                  value={newSedation.dosage}
-                  onChange={(e) => setNewSedation(prev => ({ ...prev, dosage: e.target.value }))}
-                />
-                <Input
-                  placeholder="Observações"
-                  value={newSedation.notes}
-                  onChange={(e) => setNewSedation(prev => ({ ...prev, notes: e.target.value }))}
-                />
-                <Button onClick={addSedation}>Adicionar</Button>
-              </div>
-
-              {/* Sedation List */}
-              <div className="space-y-2">
-                {sedationTypes.map((sedation) => (
-                  <div key={sedation.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1 grid grid-cols-3 gap-4">
-                      <span className="font-medium">{sedation.name}</span>
-                      <span className="text-blue-600">{sedation.dosage}</span>
-                      <span className="text-gray-600">{sedation.notes}</span>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+              <Input placeholder="Nome" value={teamForm.name} onChange={event => setTeamForm(prev => ({ ...prev, name: event.target.value }))} />
+              <Input placeholder="Função" value={teamForm.functionTitle} onChange={event => setTeamForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
+              <Input placeholder="Especialidade" value={teamForm.specialty} onChange={event => setTeamForm(prev => ({ ...prev, specialty: event.target.value }))} />
+              <Input placeholder="CRMV" value={teamForm.crmv} onChange={event => setTeamForm(prev => ({ ...prev, crmv: event.target.value }))} />
+              <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: event.target.value }))} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+              <Input placeholder="Telefone" value={teamForm.phone} onChange={event => setTeamForm(prev => ({ ...prev, phone: event.target.value }))} />
+              <Input placeholder="E-mail" value={teamForm.email} onChange={event => setTeamForm(prev => ({ ...prev, email: event.target.value }))} />
+              <Input placeholder="Assinatura" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} />
+              <Input placeholder="Foto (URL)" value={teamForm.photo} onChange={event => setTeamForm(prev => ({ ...prev, photo: event.target.value }))} />
+              <Button type="button" onClick={addTeamMember} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar membro
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {teamMembers.map(member => (
+                <div key={member.id} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-gray-900">{member.name}</p>
+                      <p className="text-sm text-gray-500">{member.functionTitle}</p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeSedation(sedation.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      Remover
+                    <Button type="button" variant="outline" size="sm" onClick={() => removeTeamMember(member.id)} className="text-red-600">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <Input value={member.specialty || ''} onChange={event => updateTeamMemberField(member.id, 'specialty', event.target.value)} placeholder="Especialidade" />
+                    <Input value={member.crmv || ''} onChange={event => updateTeamMemberField(member.id, 'crmv', event.target.value)} placeholder="CRMV" />
+                    <Input value={member.phone || ''} onChange={event => updateTeamMemberField(member.id, 'phone', event.target.value)} placeholder="Telefone" />
+                    <Input value={member.email || ''} onChange={event => updateTeamMemberField(member.id, 'email', event.target.value)} placeholder="E-mail" />
+                    <Input value={member.signature || ''} onChange={event => updateTeamMemberField(member.id, 'signature', event.target.value)} placeholder="Assinatura digital" />
+                    <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={member.status} onChange={event => updateTeamMemberField(member.id, 'status', event.target.value)}>
+                      <option value="active">Ativo</option>
+                      <option value="inactive">Inativo</option>
+                    </select>
+                  </div>
+                  <p className="text-xs text-gray-500">Cadastro: {formatDateTime(member.createdAt)}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documentos e PDF
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  ['classic', 'Modelo 1', 'Profissional clássico'],
+                  ['minimal', 'Modelo 2', 'Clínico minimalista'],
+                  ['premium', 'Modelo 3', 'Premium / personalizado']
+                ].map(([value, title, description]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => updateSettingsGroup('documents', 'selectedModel', value)}
+                    className={`rounded-lg border p-4 text-left ${settings.documents.selectedModel === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                  >
+                    <p className="font-semibold text-gray-900">{title}</p>
+                    <p className="text-xs text-gray-500">{description}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Cabeçalho</Label>
+                  <Input value={settings.documents.header} onChange={event => updateSettingsGroup('documents', 'header', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Rodapé</Label>
+                  <Input value={settings.documents.footer} onChange={event => updateSettingsGroup('documents', 'footer', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Posição da logo</Label>
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.documents.logoPosition} onChange={event => updateSettingsGroup('documents', 'logoPosition', event.target.value)}>
+                    <option value="left">Esquerda</option>
+                    <option value="center">Centro</option>
+                    <option value="right">Direita</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Fonte</Label>
+                  <Input value={settings.documents.fontFamily} onChange={event => updateSettingsGroup('documents', 'fontFamily', event.target.value)} />
+                </div>
+                <div>
+                  <Label>Tamanho do texto</Label>
+                  <Input type="number" value={settings.documents.fontSize} onChange={event => updateSettingsGroup('documents', 'fontSize', Number(event.target.value))} />
+                </div>
+                <div>
+                  <Label>Observações legais</Label>
+                  <Input value={settings.documents.legalNotes} onChange={event => updateSettingsGroup('documents', 'legalNotes', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {[
+                  ['showSignature', 'Assinatura'],
+                  ['autoCrmv', 'CRMV automático'],
+                  ['autoCnpj', 'CNPJ automático'],
+                  ['showAddress', 'Endereço'],
+                  ['showQrCode', 'QR code']
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <input type="checkbox" checked={Boolean(settings.documents[key])} onChange={event => updateSettingsGroup('documents', key, event.target.checked)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Workflow className="h-5 w-5" />
+                Tipos de Consulta e Anamnese
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input placeholder="Tipo de consulta" value={consultationForm.name} onChange={event => setConsultationForm(prev => ({ ...prev, name: event.target.value }))} />
+                <Input placeholder="Espécie/foco" value={consultationForm.speciesFocus} onChange={event => setConsultationForm(prev => ({ ...prev, speciesFocus: event.target.value }))} />
+                <Input placeholder="Valor padrão" type="number" value={consultationForm.defaultValue} onChange={event => setConsultationForm(prev => ({ ...prev, defaultValue: event.target.value }))} />
+                <Input placeholder="Duração" value={consultationForm.duration} onChange={event => setConsultationForm(prev => ({ ...prev, duration: event.target.value }))} />
+              </div>
+              <textarea className="w-full border rounded-md p-3 min-h-[90px]" placeholder="Texto padrão de anamnese" value={consultationForm.anamnesisText} onChange={event => setConsultationForm(prev => ({ ...prev, anamnesisText: event.target.value }))} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input placeholder="Checklist prévio separado por vírgula" value={consultationForm.checklist} onChange={event => setConsultationForm(prev => ({ ...prev, checklist: event.target.value }))} />
+                <Input placeholder="Campos obrigatórios separados por vírgula" value={consultationForm.requiredFields} onChange={event => setConsultationForm(prev => ({ ...prev, requiredFields: event.target.value }))} />
+              </div>
+              <Button type="button" onClick={addConsultationTemplate} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar modelo
+              </Button>
+              <div className="space-y-3">
+                {settings.consultationTemplates.map(template => (
+                  <div key={template.id} className="rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{template.name}</p>
+                        <p className="text-sm text-gray-500">{template.speciesFocus} • {template.duration} • {formatCurrency(template.defaultValue)}</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeConsultationTemplate(template.id)} className="text-red-600">
+                        Remover
+                      </Button>
+                    </div>
+                    <p className="mt-3 text-sm text-gray-600">{template.anamnesisText}</p>
+                    <p className="mt-2 text-xs text-gray-500">Checklist: {template.checklist.join(', ') || 'Não informado'}</p>
+                    <p className="text-xs text-gray-500">Obrigatórios: {template.requiredFields.join(', ') || 'Não informado'}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <SettingsIcon className="h-5 w-5" />
+              Procedimentos e Valores
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4 rounded-lg border bg-gray-50 p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input placeholder="Nome do procedimento" value={newProcedure.name} onChange={event => handleProcedureFieldChange('name', event.target.value)} />
+                <Input placeholder="Categoria" value={newProcedure.category} onChange={event => handleProcedureFieldChange('category', event.target.value)} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <textarea className="w-full border rounded-md p-3 min-h-[96px] bg-white" placeholder="Descrição" value={newProcedure.description} onChange={event => handleProcedureFieldChange('description', event.target.value)} />
+                <textarea className="w-full border rounded-md p-3 min-h-[96px] bg-white" placeholder="Observações" value={newProcedure.notes} onChange={event => handleProcedureFieldChange('notes', event.target.value)} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Input placeholder="Valor" type="number" value={newProcedure.chargePrice} onChange={event => handleProcedureFieldChange('chargePrice', event.target.value)} />
+                <Input placeholder="Margem %" type="number" value={newProcedure.marginPercent} onChange={event => handleProcedureFieldChange('marginPercent', event.target.value)} />
+                <Input placeholder="Tempo médio" value={newProcedure.duration} onChange={event => handleProcedureFieldChange('duration', event.target.value)} />
+                <div className="rounded-lg border bg-white px-3 py-2 text-sm">
+                  <p className="text-xs text-gray-500">Custo calculado</p>
+                  <p className="font-semibold">{formatCurrency(procedureOperationalCost)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_130px_140px] gap-3">
+                <select className="w-full border rounded-md p-2 bg-white" value={selectedInventoryItemId} onChange={event => setSelectedInventoryItemId(event.target.value)}>
+                  <option value="">Selecione um insumo...</option>
+                  {inventoryItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} - {formatCurrency(item.unitCost ?? item.costPrice)}/{item.unit}
+                    </option>
+                  ))}
+                </select>
+                <Input type="number" min="0.001" step="0.001" value={selectedInventoryQuantity} onChange={event => setSelectedInventoryQuantity(event.target.value)} />
+                <Button type="button" onClick={addProcedureItem} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Vincular insumo
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {newProcedure.items.map(item => (
+                  <div key={item.inventoryItemId} className="flex items-center justify-between rounded-md border bg-white p-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{item.itemName}</p>
+                      <p className="text-sm text-gray-500">{item.quantity} {item.unit} • {formatCurrency(item.costUnit)}</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => removeProcedureItem(item.inventoryItemId)} className="text-red-600">
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-lg bg-orange-50 border border-orange-100 p-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-orange-700 font-semibold">Custo</p>
+                  <p className="text-lg font-bold text-orange-900">{formatCurrency(procedureOperationalCost)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-orange-700 font-semibold">Valor sugerido</p>
+                  <p className="text-lg font-bold text-orange-900">{formatCurrency(procedureChargePrice)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-orange-700 font-semibold">Margem</p>
+                  <p className="text-lg font-bold text-orange-900">{procedureMargin.toFixed(2)}%</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" onClick={addProcedure}>Salvar procedimento</Button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {procedures.map(procedure => (
+                <div key={procedure.id} className="flex flex-col gap-3 rounded-lg border p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="grid flex-1 grid-cols-1 md:grid-cols-5 gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{procedure.name}</p>
+                      <p className="text-sm text-gray-500">{procedure.category || 'Sem categoria'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-gray-500">Cobrança</p>
+                      <p>{formatCurrency(procedure.chargePrice ?? procedure.baseCost)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-gray-500">Custo</p>
+                      <p>{formatCurrency(procedure.operationalCost)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-gray-500">Margem</p>
+                      <p>{Number(procedure.marginPercent || 0).toFixed(2)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-gray-500">Tempo / insumos</p>
+                      <p>{procedure.averageTime || procedure.duration || '-'} / {procedure.items.length}</p>
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => removeProcedure(procedure.id)} className="text-red-600">
+                    Remover
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Modelos de Documentos
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input placeholder="Tipo" value={documentTemplateForm.type} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, type: event.target.value }))} />
+                <Input placeholder="Título" value={documentTemplateForm.title} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, title: event.target.value }))} />
+              </div>
+              <textarea className="w-full border rounded-md p-3 min-h-[110px]" placeholder="Texto do modelo" value={documentTemplateForm.content} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, content: event.target.value }))} />
+              <Button type="button" onClick={addDocumentTemplate} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Salvar modelo
+              </Button>
+              <div className="space-y-3">
+                {settings.documentTemplates.map(template => (
+                  <div key={template.id} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{template.title}</p>
+                        <p className="text-xs uppercase text-gray-500">{template.type}</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeDocumentTemplate(template.id)} className="text-red-600">
+                        Remover
+                      </Button>
+                    </div>
+                    <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-600 font-sans">{template.content}</pre>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Mensagens Automáticas e WhatsApp
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input placeholder="Tipo de mensagem" value={messageTemplateForm.type} onChange={event => setMessageTemplateForm(prev => ({ ...prev, type: event.target.value }))} />
+                <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={messageTemplateForm.channel} onChange={event => setMessageTemplateForm(prev => ({ ...prev, channel: event.target.value }))}>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="email">E-mail</option>
+                  <option value="sms">SMS</option>
+                </select>
+                <Input placeholder="Variáveis separadas por vírgula" value={messageTemplateForm.variables} onChange={event => setMessageTemplateForm(prev => ({ ...prev, variables: event.target.value }))} />
+              </div>
+              <textarea className="w-full border rounded-md p-3 min-h-[110px]" placeholder="Ex: Olá, {nome_tutor}..." value={messageTemplateForm.template} onChange={event => setMessageTemplateForm(prev => ({ ...prev, template: event.target.value }))} />
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={messageTemplateForm.enabled} onChange={event => setMessageTemplateForm(prev => ({ ...prev, enabled: event.target.checked }))} />
+                Mensagem ativa
+              </label>
+              <Button type="button" onClick={addMessageTemplate} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar mensagem
+              </Button>
+              <div className="space-y-3">
+                {settings.automatedMessages.map(message => (
+                  <div key={message.id} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{message.type}</p>
+                        <p className="text-xs text-gray-500">{message.channel} • {message.enabled ? 'Ativa' : 'Inativa'}</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeMessageTemplate(message.id)} className="text-red-600">
+                        Remover
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-600">{message.template}</p>
+                    <p className="mt-1 text-xs text-gray-500">Variáveis: {message.variables.join(', ') || 'Nenhuma'}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-4">
+                <p className="font-semibold text-gray-900">Integração com WhatsApp</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input placeholder="Provider" value={settings.whatsapp.provider} onChange={event => updateSettingsGroup('whatsapp', 'provider', event.target.value)} />
+                  <Input placeholder="API URL" value={settings.whatsapp.apiUrl} onChange={event => updateSettingsGroup('whatsapp', 'apiUrl', event.target.value)} />
+                  <Input placeholder="Nome da instância" value={settings.whatsapp.instanceName} onChange={event => updateSettingsGroup('whatsapp', 'instanceName', event.target.value)} />
+                  <Input placeholder="Token" value={settings.whatsapp.token} onChange={event => updateSettingsGroup('whatsapp', 'token', event.target.value)} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {[
+                    ['connected', 'Conectado'],
+                    ['autoSendMessages', 'Envio automático'],
+                    ['sendPdf', 'Envio de PDF'],
+                    ['sendReminders', 'Lembretes'],
+                    ['confirmAppointments', 'Confirmação de consulta'],
+                    ['chargeNotifications', 'Cobrança'],
+                    ['paymentLink', 'Link de pagamento']
+                  ].map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                      <input type="checkbox" checked={Boolean(settings.whatsapp[key])} onChange={event => updateSettingsGroup('whatsapp', key, event.target.checked)} />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <SettingsIcon className="h-5 w-5" />
+              Protocolos de Sedação
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 rounded-lg border bg-gray-50 p-4">
+              <Input placeholder="Medicamento" value={newSedation.name} onChange={event => setNewSedation(prev => ({ ...prev, name: event.target.value }))} />
+              <Input placeholder="Dosagem" value={newSedation.dosage} onChange={event => setNewSedation(prev => ({ ...prev, dosage: event.target.value }))} />
+              <Input placeholder="Observações" value={newSedation.notes} onChange={event => setNewSedation(prev => ({ ...prev, notes: event.target.value }))} />
+              <Button type="button" onClick={addSedation}>Adicionar</Button>
+            </div>
+            <div className="space-y-2">
+              {sedationTypes.map(sedation => (
+                <div key={sedation.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="grid flex-1 grid-cols-1 md:grid-cols-3 gap-4">
+                    <span className="font-medium">{sedation.name}</span>
+                    <span className="text-blue-600">{sedation.dosage}</span>
+                    <span className="text-gray-600">{sedation.notes}</span>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => removeSedation(sedation.id)} className="text-red-600">
+                    Remover
+                  </Button>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

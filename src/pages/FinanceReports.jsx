@@ -1,148 +1,278 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { Select } from '../components/ui/Select'
-import { Label } from '../components/ui/Label'
 import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  PieChart,
   BarChart,
   Download,
-  Calendar
+  Calendar,
+  Users,
+  Wallet,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { mockDB } from '../services/mockDatabase'
 
-export default function FinanceReports() {
-  const [period, setPeriod] = useState('last30')
+const parseFlexibleDate = (value) => {
+  if (!value) return new Date('')
+  if (value.includes('/')) {
+    const [day, month, year] = value.split('/')
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
+  return new Date(value)
+}
 
-  // Mock Data for different periods
-  const reportData = {
-    'last30': {
-      title: 'Últimos 30 dias',
-      revenue: '45.280,00',
-      expense: '12.450,00',
-      profit: '32.830,00',
-      growth: { rev: '+12%', exp: '-5%', prof: '+28%' },
-      chartData: [40, 65, 45, 80, 55, 90, 70, 85, 60, 75, 50, 95],
-      topExpenses: [
-        { name: 'Fornecedor Dental Med', value: 'R$ 2.450,00', date: '12/06' },
-        { name: 'Aluguel Clínica', value: 'R$ 3.500,00', date: '05/06' },
-        { name: 'Folha de Pagamento', value: 'R$ 4.200,00', date: '05/06' }
-      ]
-    },
-    'currentMonth': {
-      title: 'Mês Atual',
-      revenue: '18.500,00',
-      expense: '5.200,00',
-      profit: '13.300,00',
-      growth: { rev: '+5%', exp: '+2%', prof: '+8%' },
-      chartData: [0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0], // Just June
-      topExpenses: [
-        { name: 'Conta de Luz', value: 'R$ 850,00', date: '10/06' },
-        { name: 'Internet', value: 'R$ 200,00', date: '05/06' }
-      ]
-    },
-    'lastMonth': {
-      title: 'Mês Anterior',
-      revenue: '42.100,00',
-      expense: '11.800,00',
-      profit: '30.300,00',
-      growth: { rev: '-2%', exp: '-1%', prof: '-3%' },
-      chartData: [0, 0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0], // Just May
-      topExpenses: [
-        { name: 'Manutenção Ar Cond.', value: 'R$ 1.200,00', date: '20/05' },
-        { name: 'Compra Estoque', value: 'R$ 3.000,00', date: '15/05' }
-      ]
-    },
-    'currentYear': {
-      title: 'Ano Atual',
-      revenue: '245.000,00',
-      expense: '85.000,00',
-      profit: '160.000,00',
-      growth: { rev: '+15%', exp: '+10%', prof: '+18%' },
-      chartData: [40, 55, 45, 60, 55, 65, 0, 0, 0, 0, 0, 0],
-      topExpenses: [
-        { name: 'Equipamento Raio-X', value: 'R$ 15.000,00', date: '10/02' },
-        { name: 'Reforma Recepção', value: 'R$ 8.500,00', date: '15/03' }
-      ]
+const percentDiff = (current, previous) => {
+  if (!previous && !current) return '0%'
+  if (!previous) return '+100%'
+  const value = ((current - previous) / previous) * 100
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+}
+
+const getPeriodRange = (period) => {
+  const now = new Date()
+  if (period === 'last30') {
+    return {
+      title: 'Ultimos 30 dias',
+      start: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29),
+      end: now,
     }
   }
 
-  const currentData = reportData[period]
+  if (period === 'currentMonth') {
+    return {
+      title: 'Mes atual',
+      start: new Date(now.getFullYear(), now.getMonth(), 1),
+      end: now,
+    }
+  }
+
+  if (period === 'lastMonth') {
+    return {
+      title: 'Mes anterior',
+      start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+      end: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59),
+    }
+  }
+
+  return {
+    title: 'Ano atual',
+    start: new Date(now.getFullYear(), 0, 1),
+    end: now,
+  }
+}
+
+const getPreviousRange = (period, currentRange) => {
+  if (period === 'last30') {
+    return {
+      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), currentRange.start.getDate() - 30),
+      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), currentRange.start.getDate() - 1, 23, 59, 59),
+    }
+  }
+
+  if (period === 'currentMonth') {
+    return {
+      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth() - 1, 1),
+      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), 0, 23, 59, 59),
+    }
+  }
+
+  if (period === 'lastMonth') {
+    return {
+      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth() - 1, 1),
+      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), 0, 23, 59, 59),
+    }
+  }
+
+  return {
+    start: new Date(currentRange.start.getFullYear() - 1, 0, 1),
+    end: new Date(currentRange.start.getFullYear() - 1, 11, 31, 23, 59, 59),
+  }
+}
+
+export default function FinanceReports() {
+  const [period, setPeriod] = useState('last30')
+  const records = mockDB.getFinancialRecords()
+  const receivables = mockDB.getReceivables()
+  const incomeEntries = mockDB.getCashFlow().filter((entry) => entry.type === 'income')
+
+  const report = useMemo(() => {
+    const currentRange = getPeriodRange(period)
+    const previousRange = getPreviousRange(period, currentRange)
+
+    const isInRange = (value, start, end) => {
+      const date = parseFlexibleDate(value)
+      return date >= start && date <= end
+    }
+
+    const currentRecords = records.filter((record) => isInRange(record.date, currentRange.start, currentRange.end))
+    const previousRecords = records.filter((record) => isInRange(record.date, previousRange.start, previousRange.end))
+    const currentIncome = incomeEntries.filter((entry) => isInRange(entry.date, currentRange.start, currentRange.end))
+    const currentReceivables = receivables.filter((item) => isInRange(item.dueDate, currentRange.start, currentRange.end))
+
+    const revenue = currentRecords.reduce((sum, item) => sum + item.grossAmount, 0)
+    const expense = currentRecords.reduce((sum, item) => sum + item.totalCost, 0)
+    const profit = currentRecords.reduce((sum, item) => sum + item.grossProfit, 0)
+    const previousRevenue = previousRecords.reduce((sum, item) => sum + item.grossAmount, 0)
+    const previousExpense = previousRecords.reduce((sum, item) => sum + item.totalCost, 0)
+    const previousProfit = previousRecords.reduce((sum, item) => sum + item.grossProfit, 0)
+
+    const bucketCount = period === 'currentYear' ? 12 : 6
+    const chartData = Array.from({ length: bucketCount }, (_, index) => {
+      if (period === 'currentYear') {
+        const start = new Date(currentRange.start.getFullYear(), index, 1)
+        const end = new Date(currentRange.start.getFullYear(), index + 1, 0, 23, 59, 59)
+        return {
+          label: start.toLocaleDateString('pt-BR', { month: 'short' }),
+          revenue: currentRecords
+            .filter((record) => isInRange(record.date, start, end))
+            .reduce((sum, item) => sum + item.grossAmount, 0),
+          expense: currentRecords
+            .filter((record) => isInRange(record.date, start, end))
+            .reduce((sum, item) => sum + item.totalCost, 0),
+        }
+      }
+
+      const totalMs = currentRange.end.getTime() - currentRange.start.getTime()
+      const chunkMs = totalMs / bucketCount
+      const start = new Date(currentRange.start.getTime() + chunkMs * index)
+      const end = new Date(
+        index === bucketCount - 1 ? currentRange.end.getTime() : currentRange.start.getTime() + chunkMs * (index + 1)
+      )
+      return {
+        label: formatDate(start),
+        revenue: currentRecords
+          .filter((record) => isInRange(record.date, start, end))
+          .reduce((sum, item) => sum + item.grossAmount, 0),
+        expense: currentRecords
+          .filter((record) => isInRange(record.date, start, end))
+          .reduce((sum, item) => sum + item.totalCost, 0),
+      }
+    })
+
+    const patientHistory = Object.values(
+      currentRecords.reduce((acc, record) => {
+        const key = record.patientId
+        if (!acc[key]) {
+          acc[key] = {
+            id: key,
+            patientName: record.patientName,
+            ownerName: record.ownerName,
+            totalGross: 0,
+            totalProfit: 0,
+            count: 0,
+            lastDate: record.date,
+          }
+        }
+        acc[key].totalGross += record.grossAmount
+        acc[key].totalProfit += record.grossProfit
+        acc[key].count += 1
+        if (parseFlexibleDate(record.date) > parseFlexibleDate(acc[key].lastDate)) {
+          acc[key].lastDate = record.date
+        }
+        return acc
+      }, {})
+    ).sort((a, b) => b.totalGross - a.totalGross)
+
+    return {
+      title: currentRange.title,
+      revenue,
+      expense,
+      profit,
+      growth: {
+        rev: percentDiff(revenue, previousRevenue),
+        exp: percentDiff(expense, previousExpense),
+        prof: percentDiff(profit, previousProfit),
+      },
+      chartData,
+      patientHistory: patientHistory.slice(0, 6),
+      receivedAmount: currentIncome.reduce((sum, item) => sum + item.amount, 0),
+      paidCount: currentReceivables.filter((item) => item.status === 'paid').length,
+      pendingCount: currentReceivables.filter((item) => item.status !== 'paid').length,
+      averageMargin: currentRecords.length
+        ? currentRecords.reduce((sum, item) => sum + item.marginPercent, 0) / currentRecords.length
+        : 0,
+    }
+  }, [incomeEntries, period, receivables, records])
 
   const handleExport = () => {
     import('jspdf').then(({ default: jsPDF }) => {
-        const doc = new jsPDF();
-        
-        // Header
-        doc.setFillColor(11, 44, 77); // #0B2C4D
-        doc.rect(0, 0, 210, 30, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(20);
-        doc.text('Relatório Financeiro', 10, 20);
-        doc.setFontSize(10);
-        doc.text(`Período: ${currentData.title}`, 10, 26);
-        
-        // Summary
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(14);
-        doc.text('Resumo', 10, 45);
-        
-        doc.setFontSize(12);
-        doc.text(`Receita Total: R$ ${currentData.revenue}`, 10, 55);
-        doc.text(`Despesas Totais: R$ ${currentData.expense}`, 10, 62);
-        doc.text(`Lucro Líquido: R$ ${currentData.profit}`, 10, 69);
-        
-        // Top Expenses
-        doc.setFontSize(14);
-        doc.text('Maiores Despesas', 10, 85);
-        
-        let y = 95;
-        doc.setFontSize(10);
-        currentData.topExpenses.forEach((item, index) => {
-            doc.text(`${index + 1}. ${item.name} (${item.date}) - ${item.value}`, 10, y);
-            y += 7;
-        });
+      const doc = new jsPDF()
 
-        // Footer
-        doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150);
-        doc.text(`Gerado em ${new Date().toLocaleDateString()} pelo VetTooth`, 10, 280);
+      doc.setFillColor(11, 44, 77)
+      doc.rect(0, 0, 210, 30, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(20)
+      doc.text('Relatorio Financeiro', 10, 20)
+      doc.setFontSize(10)
+      doc.text(`Periodo: ${report.title}`, 10, 26)
 
-        doc.save(`relatorio_financeiro_${period}.pdf`);
-    });
-  };
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(14)
+      doc.text('Resumo', 10, 45)
+      doc.setFontSize(11)
+      doc.text(`Receita total: ${formatCurrency(report.revenue)}`, 10, 55)
+      doc.text(`Custo operacional: ${formatCurrency(report.expense)}`, 10, 62)
+      doc.text(`Lucro bruto: ${formatCurrency(report.profit)}`, 10, 69)
+      doc.text(`Recebido em caixa: ${formatCurrency(report.receivedAmount)}`, 10, 76)
+      doc.text(`Margem media: ${report.averageMargin.toFixed(1)}%`, 10, 83)
+
+      let y = 98
+      doc.setFontSize(13)
+      doc.text('Historico por paciente', 10, y)
+      y += 8
+      doc.setFontSize(10)
+
+      report.patientHistory.forEach((item, index) => {
+        doc.text(
+          `${index + 1}. ${item.patientName} / ${item.ownerName} - ${formatCurrency(item.totalGross)} - ${item.count} atendimentos`,
+          10,
+          y
+        )
+        y += 7
+      })
+
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} pelo VetTooth`, 10, 280)
+      doc.save(`relatorio_financeiro_${period}.pdf`)
+    })
+  }
+
+  const maxChartValue = Math.max(...report.chartData.map((item) => Math.max(item.revenue, item.expense)), 1)
 
   return (
     <Layout>
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Relatórios Financeiros</h1>
-          
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Relatorios Financeiros</h1>
+            <p className="text-sm text-gray-500">Periodo calculado em cima dos atendimentos e recebimentos reais.</p>
+          </div>
+
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <select 
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <select
                 value={period}
-                onChange={(e) => setPeriod(e.target.value)}
+                onChange={(event) => setPeriod(event.target.value)}
                 className="pl-10 h-10 rounded-lg border-gray-200 text-sm focus:ring-[#0B2C4D] focus:border-[#0B2C4D]"
               >
-                <option value="last30">Últimos 30 dias</option>
-                <option value="currentMonth">Mês atual</option>
-                <option value="lastMonth">Mês anterior</option>
+                <option value="last30">Ultimos 30 dias</option>
+                <option value="currentMonth">Mes atual</option>
+                <option value="lastMonth">Mes anterior</option>
                 <option value="currentYear">Ano atual</option>
               </select>
             </div>
             <Button onClick={handleExport} className="bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white gap-2">
-              <Download className="h-4 w-4" /> Exportar Relatório (PDF)
+              <Download className="h-4 w-4" />
+              Exportar PDF
             </Button>
           </div>
         </div>
 
-        {/* Cards de Resumo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="border-none shadow-sm bg-teal-50">
             <CardContent className="p-6">
@@ -150,10 +280,10 @@ export default function FinanceReports() {
                 <div className="p-3 bg-teal-100 rounded-xl">
                   <TrendingUp className="h-6 w-6 text-teal-600" />
                 </div>
-                <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-1 rounded-full">{currentData.growth.rev}</span>
+                <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-1 rounded-full">{report.growth.rev}</span>
               </div>
               <p className="text-sm text-gray-600 font-medium">Receita Total</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.revenue}</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.revenue)}</h3>
             </CardContent>
           </Card>
 
@@ -163,10 +293,10 @@ export default function FinanceReports() {
                 <div className="p-3 bg-red-100 rounded-xl">
                   <TrendingDown className="h-6 w-6 text-red-600" />
                 </div>
-                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full">{currentData.growth.exp}</span>
+                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full">{report.growth.exp}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">Despesas Totais</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.expense}</h3>
+              <p className="text-sm text-gray-600 font-medium">Custo Operacional</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.expense)}</h3>
             </CardContent>
           </Card>
 
@@ -176,94 +306,149 @@ export default function FinanceReports() {
                 <div className="p-3 bg-blue-100 rounded-xl">
                   <DollarSign className="h-6 w-6 text-blue-600" />
                 </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">{currentData.growth.prof}</span>
+                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">{report.growth.prof}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">Lucro Líquido</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">R$ {currentData.profit}</h3>
+              <p className="text-sm text-gray-600 font-medium">Lucro Bruto</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.profit)}</h3>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <Wallet className="h-5 w-5 text-teal-600" />
+                <div>
+                  <p className="text-sm text-gray-500">Recebido em caixa</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(report.receivedAmount)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="text-sm text-gray-500">Pacientes faturados</p>
+                  <p className="font-bold text-gray-900">{report.patientHistory.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm text-gray-500">Contas pagas</p>
+                  <p className="font-bold text-gray-900">{report.paidCount}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <TrendingDown className="h-5 w-5 text-orange-600" />
+                <div>
+                  <p className="text-sm text-gray-500">Contas pendentes</p>
+                  <p className="font-bold text-gray-900">{report.pendingCount}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gráfico de Evolução (Simulado) */}
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Evolução Financeira</h3>
+                <h3 className="text-lg font-bold text-gray-900">Evolucao Financeira</h3>
                 <BarChart className="h-5 w-5 text-gray-400" />
               </div>
-              
-              <div className="h-64 flex items-end justify-between gap-2 px-2">
-                {currentData.chartData.map((h, i) => (
-                  <div key={i} className="flex-1 flex flex-col justify-end gap-1 group">
-                    <div className="w-full bg-[#00BFA5] rounded-t-sm opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${h}%` }}></div>
-                    <div className="w-full bg-red-300 rounded-t-sm opacity-80 group-hover:opacity-100 transition-opacity" style={{ height: `${h * 0.4}%` }}></div>
+
+              <div className="h-64 flex items-end justify-between gap-3 px-2">
+                {report.chartData.map((item) => (
+                  <div key={item.label} className="flex-1 flex items-end gap-1 h-full">
+                    <div className="flex-1 flex flex-col justify-end items-center gap-2 h-full">
+                      <div
+                        className="w-full bg-[#00BFA5] rounded-t-sm opacity-80"
+                        style={{ height: `${(item.revenue / maxChartValue) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex-1 flex flex-col justify-end items-center gap-2 h-full">
+                      <div
+                        className="w-full bg-red-300 rounded-t-sm opacity-80"
+                        style={{ height: `${(item.expense / maxChartValue) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between mt-4 text-xs text-gray-500 font-medium px-2">
-                <span>Jan</span><span>Fev</span><span>Mar</span><span>Abr</span><span>Mai</span><span>Jun</span>
-                <span>Jul</span><span>Ago</span><span>Set</span><span>Out</span><span>Nov</span><span>Dez</span>
+              <div className="flex justify-between mt-4 text-[11px] text-gray-500 font-medium gap-2">
+                {report.chartData.map((item) => (
+                  <span key={`${item.label}-axis`} className="truncate">
+                    {item.label}
+                  </span>
+                ))}
               </div>
-              
+
               <div className="flex items-center justify-center gap-6 mt-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-[#00BFA5] rounded-full"></div>
-                  <span className="text-sm text-gray-600">Receitas</span>
+                  <div className="w-3 h-3 bg-[#00BFA5] rounded-full" />
+                  <span className="text-sm text-gray-600">Receita</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-300 rounded-full"></div>
-                  <span className="text-sm text-gray-600">Despesas</span>
+                  <div className="w-3 h-3 bg-red-300 rounded-full" />
+                  <span className="text-sm text-gray-600">Custo</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Categorias */}
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Despesas por Categoria</h3>
-                <PieChart className="h-5 w-5 text-gray-400" />
+                <h3 className="text-lg font-bold text-gray-900">Historico por Paciente</h3>
+                <Users className="h-5 w-5 text-gray-400" />
               </div>
 
               <div className="space-y-4">
-                {[
-                  { name: 'Insumos e Medicamentos', value: 45, color: 'bg-blue-500' },
-                  { name: 'Pessoal e Salários', value: 30, color: 'bg-teal-500' },
-                  { name: 'Infraestrutura', value: 15, color: 'bg-orange-400' },
-                  { name: 'Marketing', value: 10, color: 'bg-purple-500' }
-                ].map((item, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-gray-700">{item.name}</span>
-                      <span className="font-bold text-gray-900">{item.value}%</span>
+                {report.patientHistory.map((patient, index) => (
+                  <div key={patient.id} className="rounded-xl border border-gray-100 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{patient.patientName}</p>
+                          <p className="text-xs text-gray-500">{patient.ownerName}</p>
+                        </div>
+                      </div>
+                      <span className="font-bold text-gray-900">{formatCurrency(patient.totalGross)}</span>
                     </div>
-                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full ${item.color}`} style={{ width: `${item.value}%` }}></div>
+                    <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+                      <div>
+                        <p className="text-gray-500">Atendimentos</p>
+                        <p className="font-medium text-gray-900">{patient.count}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Lucro</p>
+                        <p className="font-medium text-green-600">{formatCurrency(patient.totalProfit)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Ultimo</p>
+                        <p className="font-medium text-gray-900">{formatDate(parseFlexibleDate(patient.lastDate))}</p>
+                      </div>
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <h4 className="text-sm font-bold text-gray-900 mb-4">Maiores Despesas do Mês</h4>
-                <div className="space-y-3">
-                  {currentData.topExpenses.map((expense, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-600 font-bold text-xs">
-                          {i + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{expense.name}</p>
-                          <p className="text-xs text-gray-500">{expense.date}</p>
-                        </div>
-                      </div>
-                      <span className="font-bold text-gray-900">{expense.value}</span>
-                    </div>
-                  ))}
-                </div>
+                {report.patientHistory.length === 0 && (
+                  <p className="text-sm text-gray-400">Nenhum registro financeiro encontrado neste periodo.</p>
+                )}
               </div>
             </CardContent>
           </Card>

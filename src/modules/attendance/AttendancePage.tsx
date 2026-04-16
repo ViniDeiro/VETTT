@@ -217,6 +217,7 @@ export const AttendancePage: React.FC = () => {
       const newAttendance = mockDB.createAttendance({
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
+        ownerName,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
         reason: isRetorno ? 'Retorno' : '', // Pre-fill Retorno, otherwise empty
@@ -243,16 +244,7 @@ export const AttendancePage: React.FC = () => {
       const template = procedures.find(proc => proc.id === selectedProcedureId);
       if (!template) return;
 
-      const price = procedureCustomPrice ? Number(procedureCustomPrice) : template.baseCost;
-
-      const newProcedure = {
-          id: Math.random().toString(36).substr(2, 9),
-          attendanceId: currentAttendance.id,
-          name: template.name,
-          price,
-          notes: procedureNotes,
-          timestamp: new Date().toISOString()
-      };
+      const price = procedureCustomPrice ? Number(procedureCustomPrice) : (template.chargePrice ?? template.baseCost);
 
       const autoConsumedItems: ConsumptionItem[] = template.items
           .map(pItem => {
@@ -263,12 +255,31 @@ export const AttendancePage: React.FC = () => {
                   inventoryItemId: invItem.id,
                   itemName: invItem.name,
                   quantityUsed: pItem.quantity,
-                  unit: invItem.unit,
-                  costAtMoment: invItem.costPrice,
+                  unit: pItem.unit || invItem.unit,
+                  costAtMoment: invItem.unitCost ?? invItem.costPrice,
                   priceAtMoment: invItem.salePrice
               };
           })
           .filter(Boolean) as ConsumptionItem[];
+
+      const procedureCost = Number(
+          (template.operationalCost ?? autoConsumedItems.reduce((acc, item) => acc + (item.costAtMoment * item.quantityUsed), 0)).toFixed(2)
+      );
+      const procedureMargin = price > 0 ? Number((((price - procedureCost) / price) * 100).toFixed(2)) : 0;
+
+      const newProcedure = {
+          id: Math.random().toString(36).substr(2, 9),
+          attendanceId: currentAttendance.id,
+          procedureTemplateId: template.id,
+          name: template.name,
+          category: template.category,
+          price,
+          cost: procedureCost,
+          marginPercent: procedureMargin,
+          consumedItems: autoConsumedItems,
+          notes: procedureNotes,
+          timestamp: new Date().toISOString()
+      };
 
       const updatedProcedures = [...(currentAttendance.procedures || []), newProcedure];
       const updatedConsumedItems = [...consumedItems, ...autoConsumedItems];
@@ -291,14 +302,37 @@ export const AttendancePage: React.FC = () => {
   const handleRemoveProcedure = (procedureId: string) => {
       if (!currentAttendance) return;
 
+      const removedProcedure = (currentAttendance.procedures || []).find(proc => proc.id === procedureId);
       const updatedProcedures = (currentAttendance.procedures || []).filter(proc => proc.id !== procedureId);
+      let updatedConsumedItems = [...consumedItems];
+
+      if (removedProcedure?.consumedItems?.length) {
+          removedProcedure.consumedItems.forEach(removedItem => {
+              const itemIndex = updatedConsumedItems.findIndex(item =>
+                  item.inventoryItemId === removedItem.inventoryItemId &&
+                  item.quantityUsed === removedItem.quantityUsed &&
+                  item.unit === removedItem.unit &&
+                  item.costAtMoment === removedItem.costAtMoment &&
+                  item.priceAtMoment === removedItem.priceAtMoment
+              );
+
+              if (itemIndex !== -1) {
+                  updatedConsumedItems.splice(itemIndex, 1);
+              }
+          });
+      }
+
       const updatedAttendance = {
           ...currentAttendance,
-          procedures: updatedProcedures
+          procedures: updatedProcedures,
+          consumedItems: updatedConsumedItems
       };
 
-      mockDB.updateAttendance(currentAttendance.id, { procedures: updatedProcedures });
-      setCurrentAttendance(updatedAttendance);
+      mockDB.updateAttendance(currentAttendance.id, {
+          procedures: updatedProcedures,
+          consumedItems: updatedConsumedItems
+      });
+      syncAttendanceState(updatedAttendance);
   };
 
 
@@ -314,7 +348,7 @@ export const AttendancePage: React.FC = () => {
         itemName: selectedItemToAdd.name,
         quantityUsed: qtyToAdd,
         unit: selectedItemToAdd.unit,
-        costAtMoment: selectedItemToAdd.costPrice,
+        costAtMoment: selectedItemToAdd.unitCost ?? selectedItemToAdd.costPrice,
         priceAtMoment: selectedItemToAdd.salePrice
       };
 
@@ -451,6 +485,7 @@ export const AttendancePage: React.FC = () => {
               activeAttendance = mockDB.createAttendance({
                   patientId: selectedPatient!.id,
                   patientName: selectedPatient!.name,
+                  ownerName: selectedPatient!.ownerName,
                   vetId: 'current-vet-id',
                   date: new Date().toLocaleDateString('pt-BR'),
                   reason: 'Atendimento Rápido',
@@ -1245,7 +1280,7 @@ export const AttendancePage: React.FC = () => {
                                                 const nextId = e.target.value;
                                                 setSelectedProcedureId(nextId);
                                                 const selectedTemplate = procedures.find(proc => proc.id === nextId);
-                                                setProcedureCustomPrice(selectedTemplate ? selectedTemplate.baseCost.toString() : '');
+                                                setProcedureCustomPrice(selectedTemplate ? String(selectedTemplate.chargePrice ?? selectedTemplate.baseCost) : '');
                                             }}
                                         >
                                             <option value="">Selecione...</option>

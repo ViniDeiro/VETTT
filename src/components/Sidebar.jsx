@@ -18,25 +18,27 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { useAuth } from '../modules/auth/AuthContext'
+import { mockDB } from '../services/mockDatabase'
 
 const navigation = [
   { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Pacientes', href: '/clients', icon: Users },
-  { name: 'Atendimento', href: '/attendance-new', icon: Stethoscope },
-  { name: 'Agendamento', href: '/agenda', icon: Calendar },
-  { name: 'Estoque', href: '/inventory-new', icon: Package },
+  { name: 'Pacientes', href: '/clients', icon: Users, moduleKey: 'patients' },
+  { name: 'Atendimento', href: '/attendance-new', icon: Stethoscope, moduleKey: 'attendance' },
+  { name: 'Agendamento', href: '/agenda', icon: Calendar, moduleKey: 'agenda' },
+  { name: 'Estoque', href: '/inventory-new', icon: Package, moduleKey: 'inventory' },
   { 
     name: 'Financeiro', 
     href: '/finance', 
     icon: CreditCard,
+    moduleKey: 'finance',
     submenu: [
-      { name: 'A Receber', href: '/finance-receivables' },
-      { name: 'Receitas', href: '/finance/revenue' },
-      { name: 'Custos', href: '/finance/expenses' },
-      { name: 'Relatórios', href: '/finance/reports' },
+      { name: 'A Receber', href: '/finance-receivables', moduleKey: 'finance' },
+      { name: 'Receitas', href: '/finance/revenue', moduleKey: 'finance' },
+      { name: 'Custos', href: '/finance/expenses', moduleKey: 'finance' },
+      { name: 'Relatórios', href: '/finance/reports', moduleKey: 'reports' },
     ]
   },
-  { name: 'Configurações', href: '/settings', icon: Settings },
+  { name: 'Configurações', href: '/settings', icon: Settings, moduleKey: 'settings' },
   { name: 'IA', href: '/ai-assistant', icon: Bot },
 ]
 
@@ -45,21 +47,26 @@ export default function Sidebar() {
   const [financeOpen, setFinanceOpen] = useState(false)
   const [patientsOpen, setPatientsOpen] = useState(false)
   const [clinicName, setClinicName] = useState('VETTOOTH')
+  const [sidebarColor, setSidebarColor] = useState('#0B2C4D')
   const location = useLocation()
-  const { logout } = useAuth()
+  const { logout, canAccess } = useAuth()
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem('vet_settings')
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings)
-        if (parsed.clinic && parsed.clinic.name) {
-          // Simplistic name extraction or use full name
-          setClinicName(parsed.clinic.name)
-        }
-      } catch (e) {
-        console.error('Error loading settings in Sidebar', e)
+    const syncSettings = () => {
+      const settings = mockDB.getSettings()
+      if (settings?.clinic?.fantasyName) {
+        setClinicName(settings.clinic.fantasyName)
       }
+      if (settings?.appearance?.sidebarColor) {
+        setSidebarColor(settings.appearance.sidebarColor)
+      }
+    }
+
+    syncSettings()
+    window.addEventListener('vet-settings-updated', syncSettings)
+
+    return () => {
+      window.removeEventListener('vet-settings-updated', syncSettings)
     }
   }, [])
 
@@ -91,9 +98,11 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-[#0B2C4D] shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+        "fixed inset-y-0 left-0 z-50 w-64 shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
         isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
+      )}
+      style={{ backgroundColor: sidebarColor }}
+      >
         <div className="flex flex-col h-full text-white">
           {/* Logo */}
           <div className="flex items-center h-20 px-6 border-b border-white/10">
@@ -112,6 +121,10 @@ export default function Sidebar() {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
+              if (item.moduleKey && !canAccess(item.moduleKey)) {
+                return null
+              }
+
               const isActive = location.pathname === item.href || (item.submenu && location.pathname.startsWith(item.href))
               
               if (item.submenu) {
@@ -139,6 +152,9 @@ export default function Sidebar() {
                     {isSubmenuOpen && (
                       <div className="ml-12 mt-1 space-y-1 border-l border-white/10 pl-2">
                         {item.submenu.map((subItem) => {
+                           if (subItem.moduleKey && !canAccess(subItem.moduleKey)) {
+                             return null
+                           }
                            const isSubActive = location.pathname === subItem.href
                            return (
                              <Link

@@ -38,13 +38,19 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
     const template = proceduresList.find(p => p.id === selectedProcedureId);
     if (!template) return;
 
-    const price = customPrice ? Number(customPrice) : template.baseCost;
+    const price = customPrice ? Number(customPrice) : (template.chargePrice ?? template.baseCost);
+    const procedureCost = Number((template.operationalCost || 0).toFixed(2));
+    const procedureMargin = price > 0 ? Number((((price - procedureCost) / price) * 100).toFixed(2)) : 0;
 
     const newSurgery: AppliedProcedure = {
       id: Math.random().toString(36).substr(2, 9),
       attendanceId: attendance.id,
+      procedureTemplateId: template.id,
       name: `Cirurgia: ${template.name}`,
+      category: template.category || 'Cirurgia',
       price: price,
+      cost: procedureCost,
+      marginPercent: procedureMargin,
       notes: notes,
       timestamp: new Date().toISOString()
     };

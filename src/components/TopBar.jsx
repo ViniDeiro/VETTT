@@ -5,7 +5,7 @@ import { useAuth } from '../modules/auth/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
 
 export default function TopBar() {
-    const { logout, user } = useAuth()
+    const { logout, user, profile, teamMember } = useAuth()
     const navigate = useNavigate()
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isNotifOpen, setIsNotifOpen] = useState(false)
@@ -57,8 +57,8 @@ export default function TopBar() {
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
                     >
                         <div className="flex flex-col items-end hidden md:flex">
-                            <span className="text-sm font-semibold text-gray-900">{user?.name || 'Dra. Sofia Silva'}</span>
-                            <span className="text-xs text-gray-500">{user?.role === 'admin' ? 'Administradora' : 'Veterinária'}</span>
+                            <span className="text-sm font-semibold text-gray-900">{user?.fullName || user?.name || 'Usuario'}</span>
+                            <span className="text-xs text-gray-500">{profile?.name || teamMember?.functionTitle || 'Perfil do sistema'}</span>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
                             <img
