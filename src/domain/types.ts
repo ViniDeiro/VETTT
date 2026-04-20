@@ -145,6 +145,7 @@ export interface DocumentTemplateDefinition {
   type: string;
   title: string;
   content: string;
+  isDefault?: boolean;
 }
 
 export interface RegionalSettings {

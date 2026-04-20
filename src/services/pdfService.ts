@@ -61,19 +61,43 @@ class PdfService {
     return { settings, currentUser, teamMember, primary };
   }
 
+  private getDocumentLogo(settings: GeneralSettings) {
+    return settings.clinic.documentLogo || settings.clinic.logo || null;
+  }
+
+  private getImageFormat(imageSource: string) {
+    const lowerSource = imageSource.toLowerCase();
+
+    if (lowerSource.startsWith('data:image/jpeg') || lowerSource.startsWith('data:image/jpg') || lowerSource.endsWith('.jpg') || lowerSource.endsWith('.jpeg')) {
+      return 'JPEG';
+    }
+
+    if (lowerSource.startsWith('data:image/webp') || lowerSource.endsWith('.webp')) {
+      return 'WEBP';
+    }
+
+    return 'PNG';
+  }
+
+  private addImageSafely(doc: jsPDF, imageSource: string, x: number, y: number, width: number, height: number) {
+    try {
+      doc.addImage(imageSource, this.getImageFormat(imageSource), x, y, width, height, undefined, 'FAST');
+    } catch (e) {
+      console.error('Error adding logo to PDF', e);
+    }
+  }
+
   private addHeader(doc: jsPDF, title: string) {
     const { settings, primary } = this.getDocumentContext();
     const model = settings.documents.selectedModel || 'classic';
-    const logoUrl = settings.clinic.logoUrl;
+    const logoUrl = this.getDocumentLogo(settings);
     const logoPos = settings.documents.logoPosition || 'left';
 
     if (model === 'minimal') {
       // Minimal Model: Clean top with colored bar below
       if (logoUrl) {
-          try {
-              const xPos = logoPos === 'left' ? 20 : logoPos === 'right' ? 160 : 90;
-              doc.addImage(logoUrl, 'PNG', xPos, 15, 30, 30, undefined, 'FAST');
-          } catch (e) { console.error('Error adding logo to PDF', e); }
+          const xPos = logoPos === 'left' ? 20 : logoPos === 'right' ? 160 : 90;
+          this.addImageSafely(doc, logoUrl, xPos, 15, 30, 30);
       }
 
       doc.setFillColor(primary.r, primary.g, primary.b);
@@ -97,9 +121,7 @@ class PdfService {
       doc.rect(0, 0, 210, 8, 'F'); // Top colored strip
 
       if (logoUrl) {
-          try {
-              doc.addImage(logoUrl, 'PNG', 90, 15, 30, 30, undefined, 'FAST');
-          } catch (e) { console.error('Error adding logo to PDF', e); }
+          this.addImageSafely(doc, logoUrl, 90, 15, 30, 30);
       }
 
       doc.setTextColor(50, 50, 50);
@@ -125,11 +147,8 @@ class PdfService {
       doc.rect(0, 0, 210, 40, 'F');
       
       if (logoUrl) {
-          try {
-              const xPos = logoPos === 'left' ? 15 : logoPos === 'right' ? 165 : 90;
-              // If center, we might need to adjust text to not overlap
-              doc.addImage(logoUrl, 'PNG', xPos, 5, 30, 30, undefined, 'FAST');
-          } catch (e) { console.error('Error adding logo to PDF', e); }
+          const xPos = logoPos === 'left' ? 15 : logoPos === 'right' ? 165 : 90;
+          this.addImageSafely(doc, logoUrl, xPos, 5, 30, 30);
       }
 
       doc.setTextColor(255, 255, 255);

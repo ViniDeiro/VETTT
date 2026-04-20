@@ -123,7 +123,8 @@ const EMPTY_CONSULTATION_FORM = {
 const EMPTY_DOCUMENT_TEMPLATE = {
   type: '',
   title: '',
-  content: ''
+  content: '',
+  isDefault: false
 }
 
 const EMPTY_MESSAGE_TEMPLATE = {
@@ -237,10 +238,12 @@ export default function Settings() {
   const [selectedInventoryItemId, setSelectedInventoryItemId] = useState('')
   const [selectedInventoryQuantity, setSelectedInventoryQuantity] = useState('1')
   const [newProcedure, setNewProcedure] = useState(EMPTY_PROCEDURE_FORM)
+  const [editingProcedureId, setEditingProcedureId] = useState(null)
   const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
   const [teamForm, setTeamForm] = useState(EMPTY_TEAM_FORM)
   const [consultationForm, setConsultationForm] = useState(EMPTY_CONSULTATION_FORM)
   const [documentTemplateForm, setDocumentTemplateForm] = useState(EMPTY_DOCUMENT_TEMPLATE)
+  const [editingDocumentTemplateId, setEditingDocumentTemplateId] = useState(null)
   const [messageTemplateForm, setMessageTemplateForm] = useState(EMPTY_MESSAGE_TEMPLATE)
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM)
   const [unitForm, setUnitForm] = useState(EMPTY_UNIT_FORM)
@@ -294,6 +297,24 @@ export default function Settings() {
     settings.regional.language,
     settings.regional.timeFormat
   ])
+  const documentPreview = useMemo(() => ({
+    logo: settings.clinic.documentLogo || settings.clinic.logo || '',
+    clinicName: settings.clinic.fantasyName || 'Vet Tooth',
+    header: settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada',
+    footer: settings.documents.footer || `${settings.clinic.city || 'Cidade'}/${settings.clinic.state || 'UF'}`
+  }), [
+    settings.clinic.documentLogo,
+    settings.clinic.logo,
+    settings.clinic.fantasyName,
+    settings.clinic.legalName,
+    settings.clinic.city,
+    settings.clinic.state,
+    settings.documents.header,
+    settings.documents.footer
+  ])
+  const sortedDocumentTemplates = useMemo(() => (
+    [...settings.documentTemplates].sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault)))
+  ), [settings.documentTemplates])
 
   useEffect(() => {
     mockDB.ensureMockProcedures()
@@ -433,19 +454,22 @@ export default function Settings() {
 
   const handleSaveSettings = async () => {
     setIsSaving(true)
-    await new Promise(resolve => setTimeout(resolve, 400))
-    mockDB.saveSettings(settings)
-    setSettings(mockDB.getSettings())
-    setAuditLogs([...mockDB.getAuditLogs()])
-    setBackups([...mockDB.getBackups()])
-    localStorage.setItem('vet_settings', JSON.stringify({
-      clinic: {
-        name: settings.clinic.fantasyName
-      }
-    }))
-    window.dispatchEvent(new Event('vet-settings-updated'))
-    setIsSaving(false)
-    alert('Configurações salvas com sucesso.')
+
+    try {
+      mockDB.saveSettings(settings)
+      setSettings(mockDB.getSettings())
+      setAuditLogs([...mockDB.getAuditLogs()])
+      setBackups([...mockDB.getBackups()])
+      localStorage.setItem('vet_settings', JSON.stringify({
+        clinic: {
+          name: settings.clinic.fantasyName
+        }
+      }))
+      window.dispatchEvent(new Event('vet-settings-updated'))
+      alert('Configurações salvas com sucesso.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const exportData = () => {
@@ -470,6 +494,29 @@ export default function Settings() {
 
   const handleProcedureFieldChange = (field, value) => {
     setNewProcedure(prev => ({ ...prev, [field]: value }))
+  }
+
+  const resetProcedureForm = () => {
+    setNewProcedure(EMPTY_PROCEDURE_FORM)
+    setSelectedInventoryItemId('')
+    setSelectedInventoryQuantity('1')
+    setEditingProcedureId(null)
+  }
+
+  const startProcedureEdit = procedure => {
+    setEditingProcedureId(procedure.id)
+    setNewProcedure({
+      name: procedure.name || '',
+      category: procedure.category || '',
+      description: procedure.description || '',
+      chargePrice: String(procedure.chargePrice ?? procedure.baseCost ?? ''),
+      marginPercent: String(procedure.marginPercent ?? ''),
+      duration: procedure.averageTime || procedure.duration || '',
+      notes: procedure.notes || '',
+      items: (procedure.items || []).map(item => ({ ...item }))
+    })
+    setSelectedInventoryItemId('')
+    setSelectedInventoryQuantity('1')
   }
 
   const addProcedureItem = () => {
@@ -517,7 +564,7 @@ export default function Settings() {
     }))
   }
 
-  const addProcedure = () => {
+  const saveProcedure = () => {
     const hasRequiredFields = (
       newProcedure.name &&
       newProcedure.category &&
@@ -537,8 +584,7 @@ export default function Settings() {
       return
     }
 
-    const savedProcedure = mockDB.createProcedure({
-      id: '',
+    const procedurePayload = {
       name: newProcedure.name,
       category: newProcedure.category,
       description: newProcedure.description,
@@ -550,12 +596,25 @@ export default function Settings() {
       notes: newProcedure.notes,
       operationalCost: procedureOperationalCost,
       items: newProcedure.items
-    })
+    }
 
-    setProcedures(prev => [...prev, savedProcedure])
-    setNewProcedure(EMPTY_PROCEDURE_FORM)
-    setSelectedInventoryItemId('')
-    setSelectedInventoryQuantity('1')
+    if (editingProcedureId) {
+      const updatedProcedure = mockDB.updateProcedure(editingProcedureId, procedurePayload)
+      if (!updatedProcedure) {
+        alert('Nao foi possivel atualizar o procedimento.')
+        return
+      }
+
+      setProcedures(prev => prev.map(item => item.id === editingProcedureId ? updatedProcedure : item))
+    } else {
+      const savedProcedure = mockDB.createProcedure({
+        id: '',
+        ...procedurePayload
+      })
+      setProcedures(prev => [...prev, savedProcedure])
+    }
+
+    resetProcedureForm()
   }
 
   const removeProcedure = id => {
@@ -656,27 +715,79 @@ export default function Settings() {
     }))
   }
 
-  const addDocumentTemplate = () => {
+  const resetDocumentTemplateForm = () => {
+    setDocumentTemplateForm(EMPTY_DOCUMENT_TEMPLATE)
+    setEditingDocumentTemplateId(null)
+  }
+
+  const startDocumentTemplateEdit = template => {
+    setEditingDocumentTemplateId(template.id)
+    setDocumentTemplateForm({
+      type: template.type || '',
+      title: template.title || '',
+      content: template.content || '',
+      isDefault: Boolean(template.isDefault)
+    })
+  }
+
+  const setDefaultDocumentTemplate = templateId => {
+    setSettings(prev => ({
+      ...prev,
+      documentTemplates: prev.documentTemplates.map(template => ({
+        ...template,
+        isDefault: template.id === templateId
+      }))
+    }))
+  }
+
+  const saveDocumentTemplate = () => {
     if (!documentTemplateForm.type || !documentTemplateForm.title || !documentTemplateForm.content) {
       alert('Preencha tipo, titulo e conteudo do modelo.')
       return
     }
 
+    const nextTemplate = {
+      id: editingDocumentTemplateId || `doc-${Date.now()}`,
+      type: documentTemplateForm.type,
+      title: documentTemplateForm.title,
+      content: documentTemplateForm.content,
+      isDefault: Boolean(documentTemplateForm.isDefault)
+    }
+
     setSettings(prev => ({
       ...prev,
-      documentTemplates: [...prev.documentTemplates, {
-        id: `doc-${Date.now()}`,
-        ...documentTemplateForm
-      }]
+      documentTemplates: (() => {
+        const existingTemplates = editingDocumentTemplateId
+          ? prev.documentTemplates.map(template => template.id === editingDocumentTemplateId ? nextTemplate : template)
+          : [...prev.documentTemplates, nextTemplate]
+
+        const shouldUseDefault = nextTemplate.isDefault || existingTemplates.every(template => !template.isDefault)
+
+        return existingTemplates.map((template, index) => ({
+          ...template,
+          isDefault: shouldUseDefault ? template.id === nextTemplate.id : Boolean(template.isDefault) || index === 0
+        }))
+      })()
     }))
-    setDocumentTemplateForm(EMPTY_DOCUMENT_TEMPLATE)
+    resetDocumentTemplateForm()
   }
 
   const removeDocumentTemplate = templateId => {
     setSettings(prev => ({
       ...prev,
-      documentTemplates: prev.documentTemplates.filter(template => template.id !== templateId)
+      documentTemplates: (() => {
+        const remainingTemplates = prev.documentTemplates.filter(template => template.id !== templateId)
+        const hasDefault = remainingTemplates.some(template => template.isDefault)
+
+        return remainingTemplates.map((template, index) => ({
+          ...template,
+          isDefault: hasDefault ? Boolean(template.isDefault) : index === 0
+        }))
+      })()
     }))
+    if (editingDocumentTemplateId === templateId) {
+      resetDocumentTemplateForm()
+    }
   }
 
   const addMessageTemplate = () => {
@@ -1105,6 +1216,13 @@ export default function Settings() {
                     </Button>
                     <input type="file" id="logo-upload" className="hidden" accept="image/*" onChange={handleImageUpload('clinic', 'logo')} />
                   </div>
+                  <div className="h-20 rounded-md border bg-slate-50 flex items-center justify-center overflow-hidden">
+                    {settings.clinic.logo ? (
+                      <img src={settings.clinic.logo} alt="Logo da clínica" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-xs text-gray-500">Prévia do logo da clínica</span>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Logo dos documentos</Label>
@@ -1114,6 +1232,13 @@ export default function Settings() {
                       <Plus className="h-4 w-4" />
                     </Button>
                     <input type="file" id="doc-logo-upload" className="hidden" accept="image/*" onChange={handleImageUpload('clinic', 'documentLogo')} />
+                  </div>
+                  <div className="h-20 rounded-md border bg-slate-50 flex items-center justify-center overflow-hidden">
+                    {documentPreview.logo ? (
+                      <img src={documentPreview.logo} alt="Logo dos documentos" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-xs text-gray-500">Prévia do logo dos documentos</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1948,6 +2073,15 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-4 rounded-lg border bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{editingProcedureId ? 'Editando procedimento' : 'Novo procedimento'}</p>
+                    <p className="text-xs text-gray-500">Cadastre ou ajuste nome, valor, margem, tempo e insumos vinculados.</p>
+                  </div>
+                  {editingProcedureId && (
+                    <Button type="button" variant="outline" onClick={resetProcedureForm}>Cancelar edição</Button>
+                  )}
+                </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input placeholder="Nome do procedimento" value={newProcedure.name} onChange={event => handleProcedureFieldChange('name', event.target.value)} />
                 <Input placeholder="Categoria" value={newProcedure.category} onChange={event => handleProcedureFieldChange('category', event.target.value)} />
@@ -2007,8 +2141,11 @@ export default function Settings() {
                   <p className="text-lg font-bold text-orange-900">{procedureMargin.toFixed(2)}%</p>
                 </div>
               </div>
-              <div className="flex justify-end">
-                <Button type="button" onClick={addProcedure}>Salvar procedimento</Button>
+              <div className="flex justify-end gap-2">
+                {editingProcedureId && (
+                  <Button type="button" variant="outline" onClick={resetProcedureForm}>Cancelar</Button>
+                )}
+                <Button type="button" onClick={saveProcedure}>{editingProcedureId ? 'Atualizar procedimento' : 'Salvar procedimento'}</Button>
               </div>
             </div>
             <div className="space-y-3">
@@ -2036,9 +2173,14 @@ export default function Settings() {
                       <p>{procedure.averageTime || procedure.duration || '-'} / {procedure.items.length}</p>
                     </div>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => removeProcedure(procedure.id)} className="text-red-600">
-                    Remover
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => startProcedureEdit(procedure)}>
+                      Editar
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => removeProcedure(procedure.id)} className="text-red-600">
+                      Remover
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -2054,26 +2196,61 @@ export default function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg border bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{editingDocumentTemplateId ? 'Editando modelo de documento' : 'Novo modelo de documento'}</p>
+                    <p className="text-xs text-gray-500">Salve textos prontos e marque um deles como padrão para ficar guardado.</p>
+                  </div>
+                  {editingDocumentTemplateId && (
+                    <Button type="button" variant="outline" onClick={resetDocumentTemplateForm}>Cancelar edição</Button>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Input placeholder="Tipo" value={documentTemplateForm.type} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, type: event.target.value }))} />
                 <Input placeholder="Título" value={documentTemplateForm.title} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, title: event.target.value }))} />
               </div>
               <textarea className="w-full border rounded-md p-3 min-h-[110px]" placeholder="Texto do modelo" value={documentTemplateForm.content} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, content: event.target.value }))} />
-              <Button type="button" onClick={addDocumentTemplate} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Salvar modelo
-              </Button>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={documentTemplateForm.isDefault} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, isDefault: event.target.checked }))} />
+                Marcar como modelo padrão
+              </label>
+              <div className="flex gap-2">
+                <Button type="button" onClick={saveDocumentTemplate} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  {editingDocumentTemplateId ? 'Atualizar modelo' : 'Salvar modelo'}
+                </Button>
+                {editingDocumentTemplateId && (
+                  <Button type="button" variant="outline" onClick={resetDocumentTemplateForm}>Cancelar</Button>
+                )}
+              </div>
               <div className="space-y-3">
-                {settings.documentTemplates.map(template => (
+                {sortedDocumentTemplates.map(template => (
                   <div key={template.id} className="rounded-lg border p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-gray-900">{template.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{template.title}</p>
+                          {template.isDefault && (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Padrão</span>
+                          )}
+                        </div>
                         <p className="text-xs uppercase text-gray-500">{template.type}</p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={() => removeDocumentTemplate(template.id)} className="text-red-600">
-                        Remover
-                      </Button>
+                      <div className="flex gap-2">
+                        {!template.isDefault && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => setDefaultDocumentTemplate(template.id)}>
+                            Definir padrão
+                          </Button>
+                        )}
+                        <Button type="button" variant="outline" size="sm" onClick={() => startDocumentTemplateEdit(template)}>
+                          Editar
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => removeDocumentTemplate(template.id)} className="text-red-600">
+                          Remover
+                        </Button>
+                      </div>
                     </div>
                     <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-600 font-sans">{template.content}</pre>
                   </div>
@@ -2195,12 +2372,18 @@ export default function Settings() {
                 {/* Header Rendering */}
                 {previewModel === 'classic' && (
                   <div className="mb-6">
-                    <div className="h-24 bg-[#0B2C4D] -mx-6 -mt-6 p-6 text-white flex items-center justify-between">
+                    <div className="h-24 -mx-6 -mt-6 p-6 text-white flex items-center justify-between" style={{ backgroundColor: settings.appearance.primaryColor }}>
                       <div>
-                          <div className="text-lg font-bold">Vet Tooth</div>
-                          <div className="text-[10px] opacity-80">Odontologia Veterinária Especializada</div>
+                          <div className="text-lg font-bold">{documentPreview.clinicName}</div>
+                          <div className="text-[10px] opacity-80">{documentPreview.header}</div>
                       </div>
-                      <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-[10px]">LOGO</div>
+                      <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-[10px] overflow-hidden">
+                        {documentPreview.logo ? (
+                          <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                        ) : (
+                          'LOGO'
+                        )}
+                      </div>
                     </div>
                     <div className="mt-6 text-center">
                       <div className="text-sm font-bold border-b-2 inline-block px-4 pb-1">RECEITUÁRIO</div>
@@ -2211,25 +2394,37 @@ export default function Settings() {
                 {previewModel === 'minimal' && (
                   <div className="mb-6">
                     <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 bg-gray-100 flex items-center justify-center text-[10px] border">LOGO</div>
+                      <div className="w-12 h-12 bg-gray-100 flex items-center justify-center text-[10px] border overflow-hidden">
+                        {documentPreview.logo ? (
+                          <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                        ) : (
+                          'LOGO'
+                        )}
+                      </div>
                       <div className="text-right">
-                         <div className="text-sm font-bold text-[#0B2C4D]">Vet Tooth</div>
-                         <div className="text-[9px] text-gray-500">Clínica Geral</div>
+                         <div className="text-sm font-bold" style={{ color: settings.appearance.primaryColor }}>{documentPreview.clinicName}</div>
+                         <div className="text-[9px] text-gray-500">{documentPreview.header}</div>
                       </div>
                     </div>
-                    <div className="h-[2px] bg-[#0B2C4D] w-full mb-8"></div>
+                    <div className="h-[2px] w-full mb-8" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
                     <div className="text-center font-bold text-lg mb-8 tracking-tight">Prescrição Médica</div>
                   </div>
                 )}
 
                 {previewModel === 'premium' && (
                   <div className="mb-6">
-                     <div className="h-1.5 bg-[#0B2C4D] -mx-6 -mt-6"></div>
+                     <div className="h-1.5 -mx-6 -mt-6" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
                      <div className="flex flex-col items-center mt-4">
-                        <div className="w-16 h-16 bg-gray-50 rounded-full border flex items-center justify-center text-[9px] mb-2">LOGO</div>
-                        <div className="text-xl font-bold uppercase tracking-widest text-slate-800">Vet Tooth</div>
-                        <div className="w-24 h-[1px] bg-[#0B2C4D] my-2"></div>
-                        <div className="text-[10px] italic text-slate-500 mb-8 underline underline-offset-4">Relatório Clínico Premium</div>
+                        <div className="w-16 h-16 bg-gray-50 rounded-full border flex items-center justify-center text-[9px] mb-2 overflow-hidden">
+                          {documentPreview.logo ? (
+                            <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                          ) : (
+                            'LOGO'
+                          )}
+                        </div>
+                        <div className="text-xl font-bold uppercase tracking-widest text-slate-800">{documentPreview.clinicName}</div>
+                        <div className="w-24 h-[1px] my-2" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
+                        <div className="text-[10px] italic text-slate-500 mb-8 underline underline-offset-4">{documentPreview.header}</div>
                      </div>
                   </div>
                 )}
@@ -2257,7 +2452,7 @@ export default function Settings() {
                       <div className="text-[7px] text-gray-500">CRMV-SP 12345</div>
                    </div>
                    <div className="flex flex-col items-end gap-1">
-                      <div className="text-[7px] text-gray-400 max-w-[120px] text-right">Rua das Flores, 123 - Centro, Sorocaba/SP</div>
+                      <div className="text-[7px] text-gray-400 max-w-[120px] text-right">{documentPreview.footer}</div>
                       <div className="w-8 h-8 bg-gray-100 border text-[6px] flex items-center justify-center">QR</div>
                    </div>
                 </div>

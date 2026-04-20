@@ -412,7 +412,8 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       id: 'doc-1',
       type: 'receita',
       title: 'Receita padrao',
-      content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\nPrescricao: {conteudo}'
+      content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\nPrescricao: {conteudo}',
+      isDefault: true
     },
     {
       id: 'doc-2',
@@ -708,6 +709,13 @@ class MockDatabaseService {
   }
 
   private normalizeSettings(settings?: Partial<GeneralSettings> | null): GeneralSettings {
+    const normalizedDocumentTemplates = (settings?.documentTemplates || INITIAL_GENERAL_SETTINGS.documentTemplates).map((template, index) => ({
+      ...template,
+      isDefault: Boolean(template.isDefault) || index === 0
+    }));
+
+    const hasDefaultDocumentTemplate = normalizedDocumentTemplates.some(template => template.isDefault);
+
     return {
       ...INITIAL_GENERAL_SETTINGS,
       ...settings,
@@ -721,7 +729,10 @@ class MockDatabaseService {
       security: { ...INITIAL_GENERAL_SETTINGS.security, ...(settings?.security || {}) },
       dashboard: { ...INITIAL_GENERAL_SETTINGS.dashboard, ...(settings?.dashboard || {}) },
       consultationTemplates: settings?.consultationTemplates || INITIAL_GENERAL_SETTINGS.consultationTemplates,
-      documentTemplates: settings?.documentTemplates || INITIAL_GENERAL_SETTINGS.documentTemplates,
+      documentTemplates: normalizedDocumentTemplates.map((template, index) => ({
+        ...template,
+        isDefault: hasDefaultDocumentTemplate ? Boolean(template.isDefault) : index === 0
+      })),
       automatedMessages: settings?.automatedMessages || INITIAL_GENERAL_SETTINGS.automatedMessages,
       units: settings?.units || INITIAL_GENERAL_SETTINGS.units,
       clinicalReminders: settings?.clinicalReminders || INITIAL_GENERAL_SETTINGS.clinicalReminders
@@ -760,6 +771,37 @@ class MockDatabaseService {
 
     this.auditLogs = [entry, ...this.auditLogs].filter(log => new Date(log.createdAt) >= retentionStart);
     this.save('vet_audit_logs', this.auditLogs);
+  }
+
+  private getSettingsAuditSnapshot(settings: GeneralSettings) {
+    return {
+      appearance: settings.appearance,
+      regional: settings.regional,
+      documents: {
+        selectedModel: settings.documents.selectedModel,
+        logoPosition: settings.documents.logoPosition,
+        header: settings.documents.header,
+        footer: settings.documents.footer,
+        fontFamily: settings.documents.fontFamily,
+        fontSize: settings.documents.fontSize
+      },
+      clinic: {
+        fantasyName: settings.clinic.fantasyName,
+        legalName: settings.clinic.legalName,
+        city: settings.clinic.city,
+        state: settings.clinic.state,
+        hasLogo: Boolean(settings.clinic.logo),
+        hasDocumentLogo: Boolean(settings.clinic.documentLogo)
+      }
+    };
+  }
+
+  private shouldCreateDailyBackup() {
+    const latestAutomaticBackup = this.backups.find(snapshot => snapshot.label === 'Backup automatico diario');
+    if (!latestAutomaticBackup) return true;
+
+    const today = new Date().toISOString().slice(0, 10);
+    return latestAutomaticBackup.createdAt.slice(0, 10) !== today;
   }
 
   private ensureRBACSeed() {
@@ -899,9 +941,15 @@ class MockDatabaseService {
     this.settings = this.normalizeSettings(settings);
     this.save('vet_general_settings', this.settings);
     this.applyAppearanceSettings();
-    this.logAudit('update', 'settings', 'general_settings', previousSettings, this.settings);
+    this.logAudit(
+      'update',
+      'settings',
+      'general_settings',
+      this.getSettingsAuditSnapshot(previousSettings),
+      this.getSettingsAuditSnapshot(this.settings)
+    );
 
-    if (this.settings.security.dailyAutoBackup) {
+    if (this.settings.security.dailyAutoBackup && this.shouldCreateDailyBackup()) {
       this.createBackup('Backup automatico diario');
     }
 

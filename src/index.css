@@ -5,8 +5,10 @@
 @layer base {
   :root {
     --clinic-primary: #0B2C4D;
+    --clinic-primary-rgb: 11, 44, 77;
     --clinic-primary-foreground: #FFFFFF;
     --clinic-button: #00BFA5;
+    --clinic-button-rgb: 0, 191, 165;
     --clinic-button-foreground: #FFFFFF;
     --clinic-sidebar: #0B2C4D;
 
@@ -61,5 +63,108 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-blue-600,
+  .text-blue-700,
+  .text-blue-800,
+  .text-blue-900,
+  .text-sky-600,
+  .text-sky-700 {
+    color: var(--clinic-primary) !important;
+  }
+
+  .bg-blue-50,
+  .bg-blue-100,
+  .bg-sky-50 {
+    background-color: rgba(var(--clinic-primary-rgb), 0.08) !important;
+  }
+
+  .border-blue-100,
+  .border-blue-200,
+  .border-blue-300,
+  .border-blue-500,
+  .border-blue-600,
+  .border-sky-200 {
+    border-color: rgba(var(--clinic-primary-rgb), 0.28) !important;
+  }
+
+  .bg-blue-600,
+  .bg-blue-700,
+  .bg-blue-800,
+  .bg-sky-600,
+  .bg-sky-700 {
+    background-color: var(--clinic-primary) !important;
+    color: var(--clinic-primary-foreground) !important;
+  }
+
+  .ring-blue-500,
+  .focus\:ring-blue-500:focus {
+    --tw-ring-color: rgba(var(--clinic-primary-rgb), 0.45) !important;
+  }
+
+  .hover\:bg-blue-50:hover,
+  .hover\:bg-sky-50:hover {
+    background-color: rgba(var(--clinic-primary-rgb), 0.12) !important;
+  }
+
+  .hover\:bg-blue-600:hover,
+  .hover\:bg-blue-700:hover,
+  .hover\:bg-sky-600:hover {
+    background-color: rgba(var(--clinic-primary-rgb), 0.88) !important;
+    color: var(--clinic-primary-foreground) !important;
+  }
+
+  .hover\:text-blue-600:hover,
+  .hover\:text-blue-700:hover,
+  .hover\:text-sky-600:hover {
+    color: var(--clinic-primary) !important;
+  }
+
+  .text-teal-600,
+  .text-teal-700,
+  .text-emerald-600,
+  .text-emerald-700 {
+    color: var(--clinic-button) !important;
+  }
+
+  .bg-teal-50,
+  .bg-teal-100,
+  .bg-emerald-50 {
+    background-color: rgba(var(--clinic-button-rgb), 0.08) !important;
+  }
+
+  .border-teal-100,
+  .border-teal-200,
+  .border-teal-300,
+  .border-emerald-200 {
+    border-color: rgba(var(--clinic-button-rgb), 0.28) !important;
+  }
+
+  .bg-teal-600,
+  .bg-teal-700,
+  .bg-emerald-600,
+  .bg-emerald-700 {
+    background-color: var(--clinic-button) !important;
+    color: var(--clinic-button-foreground) !important;
+  }
+
+  .hover\:bg-teal-50:hover,
+  .hover\:bg-emerald-50:hover {
+    background-color: rgba(var(--clinic-button-rgb), 0.12) !important;
+  }
+
+  .hover\:bg-teal-600:hover,
+  .hover\:bg-teal-700:hover,
+  .hover\:bg-emerald-600:hover {
+    background-color: rgba(var(--clinic-button-rgb), 0.88) !important;
+    color: var(--clinic-button-foreground) !important;
+  }
+
+  .hover\:text-teal-600:hover,
+  .hover\:text-emerald-600:hover {
+    color: var(--clinic-button) !important;
   }
 }

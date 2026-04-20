@@ -23,6 +23,11 @@ const hexToRgb = (hex, fallback) => {
   }
 }
 
+const rgbChannels = (hex, fallback) => {
+  const { r, g, b } = hexToRgb(hex, fallback)
+  return `${r}, ${g}, ${b}`
+}
+
 const hexToHslChannels = (hex, fallback) => {
   const { r, g, b } = hexToRgb(hex, fallback)
   const red = r / 255
@@ -77,6 +82,8 @@ export default function ThemeInjector() {
         root.style.setProperty('--clinic-primary', primaryColor)
         root.style.setProperty('--clinic-button', buttonColor)
         root.style.setProperty('--clinic-sidebar', sidebarColor)
+        root.style.setProperty('--clinic-primary-rgb', rgbChannels(primaryColor, '#0B2C4D'))
+        root.style.setProperty('--clinic-button-rgb', rgbChannels(buttonColor, '#00BFA5'))
         root.style.setProperty('--clinic-primary-foreground', getReadableForeground(primaryColor, '#0B2C4D'))
         root.style.setProperty('--clinic-button-foreground', getReadableForeground(buttonColor, '#00BFA5'))
         root.style.setProperty('--primary', hexToHslChannels(primaryColor, '#0B2C4D'))
