@@ -11,7 +11,7 @@ import {
   Paperclip,
   TrendingUp,
   FileText,
-  File spreadshet,
+  FileSpreadsheet,
   File as FileIcon,
   MoreHorizontal,
   Bell,
