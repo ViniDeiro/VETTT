@@ -12,6 +12,8 @@ import {
   Filter,
   Package,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Autocomplete } from '../../shared/Autocomplete'
