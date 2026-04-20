@@ -20,6 +20,21 @@ import {
 import { useAuth } from '../modules/auth/AuthContext'
 import { mockDB } from '../services/mockDatabase'
 
+const LABELS = {
+  'Home': { 'pt-BR': 'Home', 'en-US': 'Home', 'es-ES': 'Inicio' },
+  'Pacientes': { 'pt-BR': 'Pacientes', 'en-US': 'Patients', 'es-ES': 'Pacientes' },
+  'Atendimento': { 'pt-BR': 'Atendimento', 'en-US': 'Attendance', 'es-ES': 'Atencion' },
+  'Agendamento': { 'pt-BR': 'Agendamento', 'en-US': 'Scheduling', 'es-ES': 'Agenda' },
+  'Estoque': { 'pt-BR': 'Estoque', 'en-US': 'Inventory', 'es-ES': 'Inventario' },
+  'Financeiro': { 'pt-BR': 'Financeiro', 'en-US': 'Finance', 'es-ES': 'Finanzas' },
+  'A Receber': { 'pt-BR': 'A Receber', 'en-US': 'Receivables', 'es-ES': 'Por Cobrar' },
+  'Receitas': { 'pt-BR': 'Receitas', 'en-US': 'Revenue', 'es-ES': 'Ingresos' },
+  'Custos': { 'pt-BR': 'Custos', 'en-US': 'Costs', 'es-ES': 'Costos' },
+  'Relatórios': { 'pt-BR': 'Relatórios', 'en-US': 'Reports', 'es-ES': 'Reportes' },
+  'Configurações': { 'pt-BR': 'Configurações', 'en-US': 'Settings', 'es-ES': 'Configuracion' },
+  'IA': { 'pt-BR': 'IA', 'en-US': 'AI', 'es-ES': 'IA' }
+}
+
 const navigation = [
   { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Pacientes', href: '/clients', icon: Users, moduleKey: 'patients' },
@@ -48,6 +63,7 @@ export default function Sidebar() {
   const [patientsOpen, setPatientsOpen] = useState(false)
   const [clinicName, setClinicName] = useState('VETTOOTH')
   const [sidebarColor, setSidebarColor] = useState('var(--clinic-primary)')
+  const [uiLanguage, setUiLanguage] = useState('pt-BR')
   const location = useLocation()
   const { logout, canAccess } = useAuth()
 
@@ -59,6 +75,9 @@ export default function Sidebar() {
       }
       if (settings?.appearance?.sidebarColor) {
         setSidebarColor(settings.appearance.sidebarColor)
+      }
+      if (settings?.regional?.language) {
+        setUiLanguage(settings.regional.language)
       }
     }
 
@@ -148,7 +167,7 @@ export default function Sidebar() {
                     >
                       <div className="flex items-center">
                         <item.icon className={cn("mr-3 h-5 w-5", isActive ? "text-blue-300" : "text-blue-200")} />
-                        {item.name}
+                        {LABELS[item.name]?.[uiLanguage] || item.name}
                       </div>
                       {isSubmenuOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
@@ -174,7 +193,7 @@ export default function Sidebar() {
                              >
                                {/* Bullet point for submenu items */}
                                <div className={cn("w-1.5 h-1.5 rounded-full mr-2", isSubActive ? "bg-blue-300" : "bg-blue-200/50")}></div>
-                               {subItem.name}
+                               {LABELS[subItem.name]?.[uiLanguage] || subItem.name}
                              </Link>
                            )
                         })}
@@ -197,7 +216,7 @@ export default function Sidebar() {
                   )}
                 >
                   <item.icon className={cn("mr-3 h-5 w-5", isActive ? "text-blue-300" : "text-blue-200")} />
-                  {item.name}
+                  {LABELS[item.name]?.[uiLanguage] || item.name}
                 </Link>
               )
             })}

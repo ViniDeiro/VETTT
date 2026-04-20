@@ -9,10 +9,12 @@ import {
   Download,
   Eye,
   FileText,
+  Loader2,
   MessageSquare,
   Palette,
   Plus,
   Save,
+  Search,
   Settings as SettingsIcon,
   Shield,
   Trash2,
@@ -58,6 +60,19 @@ const DASHBOARD_INDICATORS = [
   ['numero_atendimentos', 'Número de atendimentos'],
   ['retorno', 'Retorno'],
   ['estoque_critico', 'Estoque crítico']
+]
+
+const PDF_FONT_OPTIONS = [
+  ['helvetica', 'Helvetica'],
+  ['times', 'Times'],
+  ['courier', 'Courier'],
+  ['arial', 'Arial'],
+  ['times-new-roman', 'Times New Roman'],
+  ['courier-new', 'Courier New'],
+  ['verdana', 'Verdana'],
+  ['georgia', 'Georgia'],
+  ['tahoma', 'Tahoma'],
+  ['trebuchet-ms', 'Trebuchet MS']
 ]
 
 const EMPTY_PROCEDURE_FORM = {
@@ -150,6 +165,16 @@ const EMPTY_SEDATION_FORM = {
 const formatCurrency = value => `R$ ${Number(value || 0).toFixed(2)}`
 const formatDateTime = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca'
 
+const formatRegionalPartsPreview = (parts, decimalSeparator) => {
+  const groupSeparator = decimalSeparator === ',' ? '.' : ','
+
+  return parts.map(part => {
+    if (part.type === 'decimal') return decimalSeparator
+    if (part.type === 'group') return groupSeparator
+    return part.value
+  }).join('')
+}
+
 // Mask Utilities
 const maskCNPJ = (value) => {
   const digits = value.replace(/\D/g, '').slice(0, 14)
@@ -229,6 +254,46 @@ export default function Settings() {
   ])
   const [newSedation, setNewSedation] = useState(EMPTY_SEDATION_FORM)
   const [previewModel, setPreviewModel] = useState(null)
+  const [isFetchingCep, setIsFetchingCep] = useState(false)
+  const [cepStatusMessage, setCepStatusMessage] = useState('')
+
+  const actionButtonLabel = isSaving ? 'Salvando...' : 'Salvar Configurações'
+  const regionalPreview = useMemo(() => {
+    const sampleDate = new Date('2026-04-20T14:35:00')
+    const date = settings.regional.dateFormat === 'MM/DD/YYYY'
+      ? `${String(sampleDate.getMonth() + 1).padStart(2, '0')}/${String(sampleDate.getDate()).padStart(2, '0')}/${sampleDate.getFullYear()}`
+      : `${String(sampleDate.getDate()).padStart(2, '0')}/${String(sampleDate.getMonth() + 1).padStart(2, '0')}/${sampleDate.getFullYear()}`
+
+    const time = sampleDate.toLocaleTimeString(settings.regional.language, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: settings.regional.timeFormat === '12h'
+    })
+
+    const number = formatRegionalPartsPreview(
+      new Intl.NumberFormat(settings.regional.language, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).formatToParts(12345.67),
+      settings.regional.decimalSeparator
+    )
+
+    const currency = formatRegionalPartsPreview(
+      new Intl.NumberFormat(settings.regional.language, {
+        style: 'currency',
+        currency: settings.regional.currency
+      }).formatToParts(12345.67),
+      settings.regional.decimalSeparator
+    )
+
+    return { date, time, number, currency }
+  }, [
+    settings.regional.currency,
+    settings.regional.dateFormat,
+    settings.regional.decimalSeparator,
+    settings.regional.language,
+    settings.regional.timeFormat
+  ])
 
   useEffect(() => {
     mockDB.ensureMockProcedures()
@@ -281,7 +346,10 @@ export default function Settings() {
     let finalValue = value
     if (field === 'cnpj') finalValue = maskCNPJ(value)
     if (field === 'phone') finalValue = maskPhone(value)
-    if (field === 'zipCode') finalValue = maskCEP(value)
+    if (field === 'zipCode') {
+      finalValue = maskCEP(value)
+      setCepStatusMessage('')
+    }
 
     setSettings(prev => ({
       ...prev,
@@ -290,6 +358,52 @@ export default function Settings() {
         [field]: finalValue
       }
     }))
+  }
+
+  const fetchAddressByZipCode = async (rawZipCode = settings.clinic.zipCode) => {
+    const zipCodeDigits = String(rawZipCode || '').replace(/\D/g, '').slice(0, 8)
+
+    if (zipCodeDigits.length !== 8) {
+      setCepStatusMessage('Informe um CEP com 8 dígitos para buscar o endereço.')
+      return
+    }
+
+    setIsFetchingCep(true)
+    setCepStatusMessage('')
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${zipCodeDigits}/json/`)
+
+      if (!response.ok) {
+        throw new Error('Falha ao consultar CEP')
+      }
+
+      const data = await response.json()
+
+      if (data.erro) {
+        setCepStatusMessage('CEP não encontrado.')
+        return
+      }
+
+      setSettings(prev => ({
+        ...prev,
+        clinic: {
+          ...prev.clinic,
+          zipCode: maskCEP(zipCodeDigits),
+          address: data.logradouro || prev.clinic.address || '',
+          neighborhood: data.bairro || prev.clinic.neighborhood || '',
+          city: data.localidade || prev.clinic.city || '',
+          state: data.uf || prev.clinic.state || '',
+          complement: data.complemento || prev.clinic.complement || ''
+        }
+      }))
+
+      setCepStatusMessage('Endereço preenchido automaticamente pelo CEP.')
+    } catch (error) {
+      setCepStatusMessage('Não foi possível consultar o CEP agora. Tente novamente.')
+    } finally {
+      setIsFetchingCep(false)
+    }
   }
 
   const handleImageUpload = (group, field) => (event) => {
@@ -850,22 +964,24 @@ export default function Settings() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Configurações Gerais</h1>
-            <p className="text-sm text-gray-500">
-              Parametrize clínica, permissões, documentos, equipe, mensagens automáticas e integrações.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={exportData} className="gap-2">
-              <Download className="h-4 w-4" />
-              Exportar Dados
-            </Button>
-            <Button onClick={handleSaveSettings} disabled={isSaving} className="gap-2">
-              <Save className="h-4 w-4" />
-              {isSaving ? 'Salvando...' : 'Salvar Configurações'}
-            </Button>
+        <div className="sticky top-0 z-20 -mx-4 lg:-mx-8 border-b border-gray-200 bg-gray-50/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 lg:px-8">
+          <div className="mx-auto flex max-w-[1920px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Configurações Gerais</h1>
+              <p className="text-sm text-gray-500">
+                Parametrize clínica, permissões, documentos, equipe, mensagens automáticas e integrações.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={exportData} className="gap-2">
+                <Download className="h-4 w-4" />
+                Exportar Dados
+              </Button>
+              <Button onClick={handleSaveSettings} disabled={isSaving} className="gap-2">
+                <Save className="h-4 w-4" />
+                {actionButtonLabel}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -909,10 +1025,63 @@ export default function Settings() {
                 </div>
               </div>
               <div>
-                <Label>Endereço completo</Label>
-                <Input value={settings.clinic.address} onChange={event => updateSettingsGroup('clinic', 'address', event.target.value)} />
+                <Label>Logradouro</Label>
+                <Input
+                  value={settings.clinic.address}
+                  onChange={event => updateSettingsGroup('clinic', 'address', event.target.value)}
+                  placeholder="Rua, avenida, alameda..."
+                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>Número</Label>
+                  <Input
+                    value={settings.clinic.number || ''}
+                    onChange={event => updateSettingsGroup('clinic', 'number', event.target.value)}
+                    placeholder="123"
+                  />
+                </div>
+                <div>
+                  <Label>Complemento</Label>
+                  <Input
+                    value={settings.clinic.complement || ''}
+                    onChange={event => updateSettingsGroup('clinic', 'complement', event.target.value)}
+                    placeholder="Sala, bloco, conjunto..."
+                  />
+                </div>
+                <div>
+                  <Label>Bairro</Label>
+                  <Input
+                    value={settings.clinic.neighborhood || ''}
+                    onChange={event => updateSettingsGroup('clinic', 'neighborhood', event.target.value)}
+                    placeholder="Centro"
+                  />
+                </div>
+                <div>
+                  <Label>CEP</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={settings.clinic.zipCode}
+                      onChange={event => updateSettingsGroup('clinic', 'zipCode', event.target.value)}
+                      onBlur={() => fetchAddressByZipCode()}
+                      placeholder="00000-000"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => fetchAddressByZipCode()}
+                      disabled={isFetchingCep}
+                    >
+                      {isFetchingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {cepStatusMessage && (
+                    <p className="mt-1 text-xs text-gray-500">{cepStatusMessage}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>Cidade</Label>
                   <Input value={settings.clinic.city} onChange={event => updateSettingsGroup('clinic', 'city', event.target.value)} />
@@ -920,10 +1089,6 @@ export default function Settings() {
                 <div>
                   <Label>Estado</Label>
                   <Input value={settings.clinic.state} onChange={event => updateSettingsGroup('clinic', 'state', event.target.value)} />
-                </div>
-                <div>
-                  <Label>CEP</Label>
-                  <Input value={settings.clinic.zipCode} onChange={event => updateSettingsGroup('clinic', 'zipCode', event.target.value)} />
                 </div>
                 <div>
                   <Label>Redes sociais</Label>
@@ -986,8 +1151,25 @@ export default function Settings() {
                   </select>
                 </div>
                 <div>
-                  <Label>Ícone do app (URL)</Label>
-                  <Input value={settings.appearance.appIcon || ''} onChange={event => updateSettingsGroup('appearance', 'appIcon', event.target.value)} placeholder="https://..." />
+                  <Label>Ícone do app</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={settings.appearance.appIcon || ''}
+                      onChange={event => updateSettingsGroup('appearance', 'appIcon', event.target.value)}
+                      placeholder="URL ou upload do ícone da clínica"
+                      className="flex-1"
+                    />
+                    <Button variant="outline" size="icon" className="shrink-0" onClick={() => document.getElementById('app-icon-upload').click()}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <input type="file" id="app-icon-upload" className="hidden" accept="image/*" onChange={handleImageUpload('appearance', 'appIcon')} />
+                  </div>
+                  {settings.appearance.appIcon && (
+                    <div className="mt-2 flex items-center gap-3 rounded-lg border border-gray-200 p-2">
+                      <img src={settings.appearance.appIcon} alt="Prévia do ícone do app" className="h-8 w-8 rounded object-cover" />
+                      <span className="text-xs text-gray-500">Esse ícone será aplicado como favicon do sistema após salvar.</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1029,13 +1211,55 @@ export default function Settings() {
                   <option value="EUR">EUR</option>
                 </select>
               </div>
-              <div className="rounded-lg border p-4" style={{ backgroundColor: `${settings.appearance.sidebarColor}15` }}>
-                <p className="text-sm font-semibold text-gray-900">Pré-visualização da marca</p>
-                <div className="mt-3 flex items-center justify-between rounded-lg p-4 text-white" style={{ backgroundColor: 'var(--clinic-sidebar)' }}>
-                  <span className="font-bold">{settings.clinic.fantasyName}</span>
-                  <button type="button" className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--clinic-button)' }}>
-                    Botão
-                  </button>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-lg border p-4" style={{ backgroundColor: `${settings.appearance.sidebarColor}15` }}>
+                  <p className="text-sm font-semibold text-gray-900">Pré-visualização visual</p>
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: settings.appearance.primaryColor }}>Cor principal aplicada</p>
+                        <p className="text-xs text-gray-500">Títulos, destaques e links seguem essa cor.</p>
+                      </div>
+                      <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: `${settings.appearance.primaryColor}20`, color: settings.appearance.primaryColor }}>
+                        Destaque
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between rounded-lg p-4 text-white" style={{ backgroundColor: settings.appearance.sidebarColor }}>
+                      <span className="font-bold">{settings.clinic.fantasyName}</span>
+                      <button type="button" className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: settings.appearance.buttonColor }}>
+                        Botão global
+                      </button>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <Button type="button">Botão padrão</Button>
+                      <Button type="button" variant="outline">Outline</Button>
+                      <button type="button" className="text-sm font-medium" style={{ color: settings.appearance.primaryColor }}>
+                        Link principal
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-gray-900">Pré-visualização regional</p>
+                  <p className="mt-1 text-xs text-gray-500">A prévia abaixo muda em tempo real conforme idioma, data, hora, moeda e separador decimal.</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-md border bg-white p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Data</p>
+                      <p className="mt-1 font-semibold text-gray-900">{regionalPreview.date}</p>
+                    </div>
+                    <div className="rounded-md border bg-white p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Hora</p>
+                      <p className="mt-1 font-semibold text-gray-900">{regionalPreview.time}</p>
+                    </div>
+                    <div className="rounded-md border bg-white p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Número</p>
+                      <p className="mt-1 font-semibold text-gray-900">{regionalPreview.number}</p>
+                    </div>
+                    <div className="rounded-md border bg-white p-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Moeda</p>
+                      <p className="mt-1 font-semibold text-gray-900">{regionalPreview.currency}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1635,7 +1859,14 @@ export default function Settings() {
                 </div>
                 <div>
                   <Label>Fonte</Label>
-                  <Input value={settings.documents.fontFamily} onChange={event => updateSettingsGroup('documents', 'fontFamily', event.target.value)} />
+                  <select className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background" value={settings.documents.fontFamily} onChange={event => updateSettingsGroup('documents', 'fontFamily', event.target.value)}>
+                    {PDF_FONT_OPTIONS.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    As opções acima são compatibilizadas com geração de PDF.
+                  </p>
                 </div>
                 <div>
                   <Label>Tamanho do texto</Label>
@@ -2041,6 +2272,16 @@ export default function Settings() {
             </div>
           </Modal>
         )}
+        <div className="fixed bottom-4 right-4 z-30 flex gap-2 lg:hidden">
+          <Button variant="outline" onClick={exportData} className="gap-2 bg-white shadow-lg">
+            <Download className="h-4 w-4" />
+            Exportar
+          </Button>
+          <Button onClick={handleSaveSettings} disabled={isSaving} className="gap-2 shadow-lg">
+            <Save className="h-4 w-4" />
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </div>
       </div>
     </Layout>
   )

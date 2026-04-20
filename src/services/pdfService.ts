@@ -1,8 +1,43 @@
 import jsPDF from 'jspdf';
-import { Patient, Attendance, Receivable, Owner, Prescription, ExamRequest } from '../domain/types';
+import { Patient, Attendance, Receivable, Owner, Prescription, ExamRequest, GeneralSettings } from '../domain/types';
 import { mockDB } from './mockDatabase';
 
 class PdfService {
+  private formatClinicAddress(settings: GeneralSettings) {
+    const clinic = settings.clinic;
+    return [
+      clinic.address,
+      clinic.number ? `nº ${clinic.number}` : null,
+      clinic.complement || null,
+      clinic.neighborhood || null,
+      clinic.city ? `${clinic.city}/${clinic.state}` : clinic.state || null,
+      clinic.zipCode ? `CEP: ${clinic.zipCode}` : null
+    ].filter(Boolean).join(', ');
+  }
+
+  private getPdfFontFamily() {
+    const selectedFont = (mockDB.getSettings().documents.fontFamily || 'helvetica').toLowerCase();
+
+    const fontAliases: Record<string, string> = {
+      helvetica: 'helvetica',
+      arial: 'helvetica',
+      verdana: 'helvetica',
+      tahoma: 'helvetica',
+      'trebuchet-ms': 'helvetica',
+      times: 'times',
+      'times-new-roman': 'times',
+      georgia: 'times',
+      courier: 'courier',
+      'courier-new': 'courier'
+    };
+
+    return fontAliases[selectedFont] || 'helvetica';
+  }
+
+  private setPdfFont(doc: jsPDF, style: 'normal' | 'bold' | 'italic' | 'bolditalic' = 'normal') {
+    doc.setFont(this.getPdfFontFamily(), style);
+  }
+
   private hexToRgb(hex: string) {
     const sanitized = hex.replace('#', '');
     const value = sanitized.length === 3
@@ -46,11 +81,11 @@ class PdfService {
 
       doc.setTextColor(primary.r, primary.g, primary.b);
       doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', logoPos === 'center' ? 105 : 20, logoUrl ? 58 : 30, { align: logoPos === 'center' ? 'center' : 'left' });
       
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       doc.text(settings.documents.header || settings.clinic.legalName || '', logoPos === 'center' ? 105 : 20, logoUrl ? 63 : 35, { align: logoPos === 'center' ? 'center' : 'left' });
 
       doc.setTextColor(0, 0, 0);
@@ -69,11 +104,11 @@ class PdfService {
 
       doc.setTextColor(50, 50, 50);
       doc.setFontSize(24);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', 105, logoUrl ? 55 : 30, { align: 'center' });
       
       doc.setFontSize(11);
-      doc.setFont('helvetica', 'italic');
+      this.setPdfFont(doc, 'italic');
       doc.text(settings.documents.header || settings.clinic.legalName || '', 105, logoUrl ? 62 : 37, { align: 'center' });
 
       doc.setDrawColor(primary.r, primary.g, primary.b);
@@ -82,7 +117,7 @@ class PdfService {
 
       doc.setTextColor(primary.r, primary.g, primary.b);
       doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(title.toUpperCase(), 105, 85, { align: 'center' });
     } else {
       // Classic Model: (Current) Solid header
@@ -99,18 +134,18 @@ class PdfService {
 
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(22);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       
       const textX = logoPos === 'left' && logoUrl ? 50 : 20;
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', textX, 25);
       
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       doc.text(settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada', textX, 32);
       
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(title, 105, 55, { align: 'center' });
     }
   }
@@ -148,7 +183,7 @@ class PdfService {
     doc.setTextColor(150);
     const footerParts = [
       settings.documents.footer,
-      settings.documents.showAddress ? settings.clinic.address : null,
+      settings.documents.showAddress ? this.formatClinicAddress(settings) : null,
       settings.clinic.phone || null,
       settings.fiscal.includeCnpjOnAllDocuments || settings.documents.autoCnpj ? `CNPJ: ${settings.clinic.cnpj}` : null
     ].filter(Boolean);
@@ -176,13 +211,13 @@ class PdfService {
     prescription.items.forEach((item, index) => {
       // Item Title
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       const title = `${index + 1}. ${item.name} ${item.concentration ? item.concentration : ''}`;
       doc.text(title, 20, y);
       
       // Type Badge (Text representation)
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       doc.setTextColor(100);
       const typeLabel = item.type === 'industrialized' ? '[Industrializado]' : '[Manipulado]';
       doc.text(typeLabel, 160, y, { align: 'right' });
@@ -206,7 +241,7 @@ class PdfService {
 
       if (item.instructions) {
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'italic');
+        this.setPdfFont(doc, 'italic');
         const notes = `Obs: ${item.instructions}`;
         const splitNotes = doc.splitTextToSize(notes, 160);
         doc.text(splitNotes, 25, y);
@@ -219,7 +254,7 @@ class PdfService {
       doc.setFontSize(8);
       doc.text('Quantidade:', 162, y - 16);
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(item.quantity, 175, y - 9, { align: 'center' });
 
       y += 10; // Spacing between items
@@ -259,10 +294,10 @@ class PdfService {
     if (request.clinicalIndication) {
       doc.setFontSize(12);
       doc.setTextColor(0);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('Suspeita Clínica / Motivo:', 20, y);
       y += 7;
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       doc.setFontSize(11);
       const splitIndication = doc.splitTextToSize(request.clinicalIndication, 170);
       doc.text(splitIndication, 20, y);
@@ -275,14 +310,14 @@ class PdfService {
       doc.rect(160, 65, 30, 10, 'F');
       doc.setTextColor(200, 0, 0);
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('URGENTE', 175, 71, { align: 'center' });
     }
 
     // Items Header
     doc.setTextColor(0);
     doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
+    this.setPdfFont(doc, 'bold');
     doc.text('Exames Solicitados:', 20, y);
     y += 10;
 
@@ -294,12 +329,12 @@ class PdfService {
       doc.rect(20, y - 5, 170, 15 + (item.instructions ? 10 : 0), 'F'); // Background box
 
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text(`• ${item.name}`, 25, y);
 
       // Type Badge
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       doc.setTextColor(100);
       const typeLabel = item.type === 'laboratory' ? '[Laboratorial]' : 
                         item.type === 'imaging' ? '[Imagem]' : 
@@ -309,7 +344,7 @@ class PdfService {
       if (item.instructions) {
         y += 6;
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'italic');
+        this.setPdfFont(doc, 'italic');
         doc.setTextColor(80);
         const notes = `Preparo: ${item.instructions}`;
         doc.text(notes, 30, y);
@@ -340,7 +375,7 @@ class PdfService {
     const date = new Date().toLocaleDateString('pt-BR');
 
     doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
+    this.setPdfFont(doc, 'normal');
     doc.setTextColor(0);
 
     doc.text(`Eu, ${ownerName}, responsável pelo paciente ${patient.name}, declaro...`, 20, y);
@@ -386,11 +421,11 @@ class PdfService {
 
     // Patient Info
     doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
+    this.setPdfFont(doc, 'bold');
     doc.text('Dados do Paciente', 20, y);
     y += 10;
     
-    doc.setFont('helvetica', 'normal');
+    this.setPdfFont(doc, 'normal');
     doc.text(`Nome: ${patient.name}`, 20, y);
     doc.text(`Espécie: ${patient.species}`, 120, y);
     y += 8;
@@ -405,30 +440,30 @@ class PdfService {
     y += 15;
 
     // Attendance Info
-    doc.setFont('helvetica', 'bold');
+    this.setPdfFont(doc, 'bold');
     doc.text('Detalhes do Atendimento', 20, y);
     y += 10;
 
-    doc.setFont('helvetica', 'normal');
+    this.setPdfFont(doc, 'normal');
     doc.text(`Data: ${attendance.date}`, 20, y);
     doc.text(`Motivo: ${attendance.reason}`, 120, y);
     y += 15;
 
     if (attendance.anamnesis) {
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('Anamnese:', 20, y);
       y += 7;
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       const splitAnamnesis = doc.splitTextToSize(attendance.anamnesis, 170);
       doc.text(splitAnamnesis, 20, y);
       y += (splitAnamnesis.length * 7) + 5;
     }
 
     if (attendance.diagnosis) {
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('Diagnóstico / Procedimentos:', 20, y);
       y += 7;
-      doc.setFont('helvetica', 'normal');
+      this.setPdfFont(doc, 'normal');
       const splitDiagnosis = doc.splitTextToSize(attendance.diagnosis, 170);
       doc.text(splitDiagnosis, 20, y);
       y += (splitDiagnosis.length * 7) + 5;
@@ -437,13 +472,13 @@ class PdfService {
     // Prescriptions (if any)
     if (attendance.prescriptions && attendance.prescriptions.length > 0) {
       y += 10;
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('Prescrições Emitidas:', 20, y);
       y += 7;
       
       attendance.prescriptions.forEach(p => {
          p.items.forEach(item => {
-             doc.setFont('helvetica', 'normal');
+             this.setPdfFont(doc, 'normal');
              const line = `- ${item.name} ${item.concentration || ''} (${item.dosage}, ${item.frequency})`;
              const splitLine = doc.splitTextToSize(line, 170);
              doc.text(splitLine, 20, y);
@@ -455,13 +490,13 @@ class PdfService {
     // Exam Requests (if any)
     if (attendance.examRequests && attendance.examRequests.length > 0) {
       y += 10;
-      doc.setFont('helvetica', 'bold');
+      this.setPdfFont(doc, 'bold');
       doc.text('Exames Solicitados:', 20, y);
       y += 7;
       
       attendance.examRequests.forEach(req => {
          req.items.forEach(item => {
-             doc.setFont('helvetica', 'normal');
+             this.setPdfFont(doc, 'normal');
              const line = `- ${item.name} (${item.type})`;
              const splitLine = doc.splitTextToSize(line, 170);
              doc.text(splitLine, 20, y);
@@ -600,3 +635,4 @@ class PdfService {
 }
 
 export const pdfService = new PdfService();
+
