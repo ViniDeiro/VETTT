@@ -293,7 +293,8 @@ const INITIAL_USERS: User[] = [
     status: 'active',
     createdAt: '2026-01-03T09:00:00.000Z',
     lastAccessAt: '2026-04-16T08:30:00.000Z',
-    teamMemberId: 'team-admin'
+    teamMemberId: 'team-admin',
+    password: '123'
   },
   {
     id: 'user-vet',
@@ -307,7 +308,8 @@ const INITIAL_USERS: User[] = [
     status: 'active',
     createdAt: '2026-01-04T10:00:00.000Z',
     lastAccessAt: '2026-04-16T09:00:00.000Z',
-    teamMemberId: 'team-vet'
+    teamMemberId: 'team-vet',
+    password: '123'
   },
   {
     id: 'user-secretary',
@@ -321,7 +323,8 @@ const INITIAL_USERS: User[] = [
     status: 'active',
     createdAt: '2026-01-05T11:00:00.000Z',
     lastAccessAt: '2026-04-16T09:15:00.000Z',
-    teamMemberId: 'team-secretary'
+    teamMemberId: 'team-secretary',
+    password: '123'
   }
 ];
 
@@ -1109,6 +1112,26 @@ class MockDatabaseService {
     }
   }
 
+  login(email: string, password?: string) {
+    // Basic validation in mockDB
+    const matchedUser = this.users.find(user => 
+      user.email === email && 
+      (password ? user.password === password : true) && 
+      user.status !== 'inactive'
+    );
+    
+    if (!matchedUser) return null;
+
+    const updatedUser = {
+      ...matchedUser,
+      lastAccessAt: new Date().toISOString()
+    };
+    this.users = this.users.map(user => user.id === matchedUser.id ? updatedUser : user);
+    this.save('vet_users', this.users);
+    this.setCurrentUser(updatedUser.id);
+    return updatedUser;
+  }
+
   loginByRole(role: User['role']) {
     const matchedUser = this.users.find(user => user.role === role && user.status !== 'inactive');
     if (!matchedUser) return null;
@@ -1656,6 +1679,7 @@ class MockDatabaseService {
           ownerName: rec.ownerName,
           professionalName: rec.professionalName,
           description: `Recebimento: ${rec.description} (${details.method})`,
+          paymentMethod: details.method,
           referenceId: rec.id
       };
       this.cashFlow.push(entry);
@@ -1693,6 +1717,11 @@ class MockDatabaseService {
       this.cashFlow.push(newEntry);
       this.save('vet_cashflow', this.cashFlow);
       return newEntry;
+  }
+
+  deleteCashFlowEntry(id: string) {
+    this.cashFlow = this.cashFlow.filter(e => e.id !== id);
+    this.save('vet_cashflow', this.cashFlow);
   }
 
   getFinancialRecords() {

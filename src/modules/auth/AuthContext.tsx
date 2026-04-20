@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   profile: AccessProfile | null;
   teamMember: TeamMember | null;
-  login: (role: Role) => void;
+  login: (email: string, password?: string) => boolean;
   logout: () => void;
   canAccess: (moduleKey: AppModuleKey, action?: keyof ModulePermission) => boolean;
 }
@@ -26,8 +26,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user ? mockDB.getLinkedTeamMember(user) : null
   ), [user]);
 
-  const login = (role: Role) => {
-    setUser(mockDB.loginByRole(role));
+  const login = (email: string, password?: string) => {
+    const matchedUser = mockDB.login(email, password);
+    if (matchedUser) {
+      setUser(matchedUser);
+      return true;
+    }
+    return false;
   };
 
   const logout = () => {

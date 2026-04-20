@@ -181,13 +181,14 @@ export const AttendancePage: React.FC = () => {
 
   // Consultation Type State
   const [showConsultationTypes, setShowConsultationTypes] = useState(false);
-  const consultationTypes = [
-    { id: 'clinica', label: 'Clínica Geral', icon: Activity },
-    { id: 'odonto', label: 'Odontológica', icon: Plus }, // Icon placeholder
-    { id: 'dermato', label: 'Dermatológica', icon: Search },
-    { id: 'retorno', label: 'Retorno', icon: Clock },
-    { id: 'outras', label: 'Outras', icon: FileText }
-  ];
+  const settings = mockDB.getSettings();
+  const consultationTypes = settings.consultationTemplates.map(template => ({
+    id: template.id,
+    label: template.name,
+    icon: template.name.toLowerCase().includes('odonto') ? Plus : 
+          template.name.toLowerCase().includes('cirurgia') ? Scissors : Activity,
+    template: template
+  }));
 
   const handleStartAttendanceCheck = () => {
     setShowConsultationTypes(true);
@@ -208,9 +209,10 @@ export const AttendancePage: React.FC = () => {
   const handleSelectConsultationType = (typeId: string, label: string) => {
     setShowConsultationTypes(false);
     if (selectedPatient) {
-      const isRetorno = typeId === 'retorno';
+      const typeData = consultationTypes.find(t => t.id === typeId);
+      const template = typeData?.template;
+      const isRetorno = label.toLowerCase().includes('retorno');
       
-      // Ensure we have the actual owner name dynamically, falling back to what's on the patient, or 'Desconhecido'
       const actualOwner = mockDB.getOwners().find(o => o.id === selectedPatient.ownerId);
       const ownerName = actualOwner ? actualOwner.name : (selectedPatient.ownerName || 'Desconhecido');
       
@@ -220,20 +222,26 @@ export const AttendancePage: React.FC = () => {
         ownerName,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
-        reason: isRetorno ? 'Retorno' : '', // Pre-fill Retorno, otherwise empty
+        reason: label,
         consultationType: typeId,
         consumedItems: [],
         vitals: {}
       });
+
       setCurrentAttendance(newAttendance);
       setConsumedItems([]);
       setVaccines([]);
       resetProcedureForm();
-      if (isRetorno) {
-          setServiceFee(0); // Retorno is free by default
+      
+      // Auto-fill from template
+      if (template) {
+        setAnamnesis(template.anamnesisText || '');
+        setServiceFee(template.defaultValue || 0);
       } else {
-          setServiceFee(150); // Default fee for other types
+        setAnamnesis('');
+        setServiceFee(isRetorno ? 0 : 150);
       }
+      
       setActiveTab('attendance_active');
     }
   };
@@ -730,7 +738,12 @@ export const AttendancePage: React.FC = () => {
                   <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                   <span>Raça: {selectedPatient.breed}</span>
                   <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                  <span>Sexo: {selectedPatient.gender}</span>
+                  <span>
+                    Sexo: {selectedPatient.species === 'Equine' 
+                        ? (selectedPatient.gender === 'F' ? 'Égua' : (selectedPatient.neutered ? 'Castrado' : 'Garanhão'))
+                        : (selectedPatient.gender === 'M' ? 'Macho' : 'Fêmea')
+                    }
+                  </span>
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -835,9 +848,12 @@ export const AttendancePage: React.FC = () => {
                                         <p className="text-xs text-gray-500 uppercase font-semibold">Status / Características</p>
                                         <div className="flex flex-wrap gap-2 mt-1">
                                             <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold border">
-                                                {selectedPatient.gender === 'M' ? 'Macho' : 'Fêmea'}
+                                                {selectedPatient.species === 'Equine' 
+                                                    ? (selectedPatient.gender === 'F' ? 'Égua' : (selectedPatient.neutered ? 'Castrado' : 'Garanhão'))
+                                                    : (selectedPatient.gender === 'M' ? 'Macho' : 'Fêmea')
+                                                }
                                             </span>
-                                            {selectedPatient.neutered && (
+                                            {selectedPatient.neutered && selectedPatient.species !== 'Equine' && (
                                                 <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200">
                                                     Castrado
                                                 </span>
@@ -1663,7 +1679,7 @@ export const AttendancePage: React.FC = () => {
                       <Button 
                         type="button"
                         onClick={handleStartAttendanceCheck}
-                        className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white border-none justify-center h-12 text-base font-semibold shadow-lg shadow-teal-900/20"
+                        className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white border-none justify-center h-12 text-base font-semibold shadow-lg shadow-teal-900/20"
                       >
                         Nova Consulta / Procedimento
                       </Button>

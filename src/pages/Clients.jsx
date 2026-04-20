@@ -281,7 +281,7 @@ export default function Clients() {
              </div>
 
             <Button
-              className="flex items-center gap-2 bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white rounded-full px-6"
+              className="flex items-center gap-2 bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white rounded-full px-6"
               onClick={() => navigate('/register')}
             >
               <Plus className="h-4 w-4" />

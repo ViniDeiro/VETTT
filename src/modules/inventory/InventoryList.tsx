@@ -11,11 +11,10 @@ import {
   Minus,
   Filter,
   Package,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Autocomplete } from '../../shared/Autocomplete'
 import { mockDB } from '../../services/mockDatabase'
 import { InventoryItem } from '../../domain/types'
 
@@ -96,6 +95,15 @@ export const InventoryList: React.FC = () => {
     }
     return costPrice
   }, [formData.costPrice, formData.packageQuantity])
+
+  const supplierOptions = useMemo(() => {
+    const suppliers = items
+      .map(item => item.supplier)
+      .filter((s): s is string => !!s)
+    
+    const uniqueSuppliers = Array.from(new Set(suppliers))
+    return uniqueSuppliers.map(s => ({ id: s, label: s }))
+  }, [items])
 
   const formatCurrency = (value?: number) => `R$ ${Number(value || 0).toFixed(2)}`
 
@@ -233,7 +241,7 @@ export const InventoryList: React.FC = () => {
               <div className="flex gap-3">
                 <Button 
                   onClick={() => handleOpenModal('entry')}
-                  className="bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white gap-2"
+                  className="bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white gap-2"
                 >
                   <Plus className="h-4 w-4" /> Entrada
                 </Button>
@@ -246,7 +254,7 @@ export const InventoryList: React.FC = () => {
                 <Button 
                   onClick={() => handleOpenModal('create')}
                   variant="outline" 
-                  className="text-[#00BFA5] border-[#00BFA5] hover:bg-teal-50"
+                  className="text-[var(--clinic-button)] border-[var(--clinic-button)] hover:bg-teal-50"
                 >
                   Cadastrar item
                 </Button>
@@ -290,7 +298,7 @@ export const InventoryList: React.FC = () => {
                     key={item.id} 
                     className={cn(
                       "hover:bg-gray-50 cursor-pointer transition-colors",
-                      selectedItem?.id === item.id && "bg-blue-50/50 border-l-4 border-[#00BFA5]"
+                      selectedItem?.id === item.id && "bg-blue-50/50 border-l-4 border-[var(--clinic-button)]"
                     )}
                     onClick={() => setSelectedItem(item)}
                   >
@@ -445,7 +453,7 @@ export const InventoryList: React.FC = () => {
 
                 <Button 
                   onClick={handleQuickEditSave}
-                  className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white mt-2"
+                  className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white mt-2"
                 >
                   Salvar Alterações
                 </Button>
@@ -546,26 +554,31 @@ export const InventoryList: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Fornecedor</Label>
-                  <Input
+                  <Autocomplete
+                    options={supplierOptions}
+                    onSelect={(item) => setFormData({ ...formData, supplier: item.label })}
+                    placeholder="Nome do fornecedor..."
                     value={formData.supplier || ''}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    onInputChange={(val) => setFormData({ ...formData, supplier: val })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Valor de compra do lote (R$)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.costPrice || ''}
-                    onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
-                    placeholder="0,00"
-                  />
+                  <Label>Valor de compra do lote</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="pl-9"
+                      value={formData.costPrice || ''}
+                      onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
+                      placeholder="0,00"
+                    />
+                  </div>
                 </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

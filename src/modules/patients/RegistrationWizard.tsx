@@ -374,36 +374,96 @@ export const RegistrationWizard: React.FC = () => {
                         <span className="text-gray-500">anos</span>
                     </div>
                 )}
-            </div>
+                 {newPatient.species === 'Equine' ? (
+                <>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Categoria (Sexo/Condição)</label>
+                        <select 
+                            className="border p-2 rounded w-full"
+                            value={newPatient.gender === 'F' ? 'F' : (newPatient.neutered ? 'M-C' : 'M-I')}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'F') {
+                                    setNewPatient({...newPatient, gender: 'F', neutered: false});
+                                } else if (val === 'M-C') {
+                                    setNewPatient({...newPatient, gender: 'M', neutered: true});
+                                } else {
+                                    setNewPatient({...newPatient, gender: 'M', neutered: false});
+                                }
+                            }}
+                        >
+                            <option value="M-I">Garanhão (Macho Inteiro)</option>
+                            <option value="M-C">Castrado (Macho Castrado)</option>
+                            <option value="F">Égua (Fêmea)</option>
+                        </select>
+                    </div>
 
-            <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
-                 <select 
-                    className="border p-2 rounded w-full"
-                    value={newPatient.gender || ''}
-                    onChange={e => setNewPatient({...newPatient, gender: e.target.value as any})}
-                >
-                    <option value="">Selecione</option>
-                    <option value="M">Macho</option>
-                    <option value="F">Fêmea</option>
-                </select>
-            </div>
+                    {newPatient.gender === 'F' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Reprodutivo</label>
+                            <label className="flex items-center gap-2 border p-2 rounded w-full cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={newPatient.pregnant || false}
+                                    onChange={e => setNewPatient({
+                                        ...newPatient,
+                                        pregnant: e.target.checked
+                                    })}
+                                />
+                                <span>Prenha?</span>
+                            </label>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
+                        <select 
+                            className="border p-2 rounded w-full"
+                            value={newPatient.gender || ''}
+                            onChange={e => setNewPatient({...newPatient, gender: e.target.value as any})}
+                        >
+                            <option value="">Selecione</option>
+                            <option value="M">Macho</option>
+                            <option value="F">Fêmea</option>
+                        </select>
+                    </div>
 
-            <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Condição Reprodutiva</label>
-                 <label className="flex items-center gap-2 border p-2 rounded w-full cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={newPatient.neutered || false}
-                        onChange={e => setNewPatient({
-                            ...newPatient,
-                            neutered: e.target.checked,
-                            pregnant: e.target.checked ? false : newPatient.pregnant
-                        })}
-                    />
-                    <span>Castrado?</span>
-                 </label>
-            </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Condição Reprodutiva</label>
+                        <label className="flex items-center gap-2 border p-2 rounded w-full cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={newPatient.neutered || false}
+                                onChange={e => setNewPatient({
+                                    ...newPatient,
+                                    neutered: e.target.checked,
+                                    pregnant: e.target.checked ? false : newPatient.pregnant
+                                })}
+                            />
+                            <span>Castrado?</span>
+                        </label>
+                    </div>
+
+                    {newPatient.gender === 'F' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">&nbsp;</label>
+                            <label className="flex items-center gap-2 border p-2 rounded w-full cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={newPatient.pregnant || false}
+                                    onChange={e => setNewPatient({
+                                        ...newPatient,
+                                        pregnant: e.target.checked
+                                    })}
+                                />
+                                <span>Prenha?</span>
+                            </label>
+                        </div>
+                    )}
+                </>
+            )}            </div>
 
             <div>
                  <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>

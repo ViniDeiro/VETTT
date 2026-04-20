@@ -407,37 +407,60 @@ export const PatientWizard: React.FC = () => {
                             })()}
                         </div>
                         <div className="col-span-1">
-                            <Label>Sexo</Label>
-                            <Select 
-                                value={patientData.gender} 
-                                onChange={e => setPatientData({...patientData, gender: e.target.value as any})}
-                            >
-                                <option value="M">Macho</option>
-                                <option value="F">Fêmea</option>
-                            </Select>
+                            <Label>Sexo / Categoria</Label>
+                            {patientData.species === 'Equine' ? (
+                                <Select 
+                                    value={patientData.gender === 'F' ? 'F' : (patientData.neutered ? 'M-C' : 'M-I')}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === 'F') {
+                                            setPatientData(prev => ({...prev, gender: 'F', neutered: false}));
+                                        } else if (val === 'M-C') {
+                                            setPatientData(prev => ({...prev, gender: 'M', neutered: true}));
+                                        } else {
+                                            setPatientData(prev => ({...prev, gender: 'M', neutered: false}));
+                                        }
+                                    }}
+                                    className="font-medium"
+                                >
+                                    <option value="M-I">Garanhão (Macho Inteiro)</option>
+                                    <option value="M-C">Castrado (Macho Castrado)</option>
+                                    <option value="F">Égua (Fêmea)</option>
+                                </Select>
+                            ) : (
+                                <Select 
+                                    value={patientData.gender} 
+                                    onChange={e => setPatientData({...patientData, gender: e.target.value as any})}
+                                >
+                                    <option value="M">Macho</option>
+                                    <option value="F">Fêmea</option>
+                                </Select>
+                            )}
                         </div>
                         <div className="col-span-1 flex flex-col gap-2 pt-6">
-                            <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
-                                <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.neutered ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300")}>
-                                    {patientData.neutered && <CheckCircle className="w-3.5 h-3.5" />}
-                                </div>
-                                <input 
-                                    type="checkbox" 
-                                    className="hidden"
-                                    checked={patientData.neutered || false}
-                                    onChange={e => {
-                                        const isNeutered = e.target.checked;
-                                        setPatientData(prev => ({
-                                            ...prev, 
-                                            neutered: isNeutered,
-                                            pregnant: isNeutered ? false : prev.pregnant
-                                        }));
-                                    }}
-                                />
-                                <span className="font-medium text-gray-700">Castrado?</span>
-                            </label>
+                            {patientData.species !== 'Equine' && (
+                                <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
+                                    <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.neutered ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300")}>
+                                        {patientData.neutered && <CheckCircle className="w-3.5 h-3.5" />}
+                                    </div>
+                                    <input 
+                                        type="checkbox" 
+                                        className="hidden"
+                                        checked={patientData.neutered || false}
+                                        onChange={e => {
+                                            const isNeutered = e.target.checked;
+                                            setPatientData(prev => ({
+                                                ...prev, 
+                                                neutered: isNeutered,
+                                                pregnant: isNeutered ? false : prev.pregnant
+                                            }));
+                                        }}
+                                    />
+                                    <span className="font-medium text-gray-700">Castrado?</span>
+                                </label>
+                            )}
                             
-                            {patientData.gender === 'F' && patientData.species !== 'Equine' && !patientData.neutered && (
+                            {patientData.gender === 'F' && !patientData.neutered && (
                                 <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg w-full border border-transparent hover:border-gray-200 transition-colors">
                                     <div className={cn("w-5 h-5 rounded border flex items-center justify-center", patientData.pregnant ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300")}>
                                         {patientData.pregnant && <CheckCircle className="w-3.5 h-3.5" />}

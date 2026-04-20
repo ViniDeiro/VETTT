@@ -454,7 +454,12 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                 </div>
                 <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{patient.gender === 'M' ? 'Macho' : 'Fêmea'}</span>
+                    <span className="font-medium">
+                        {patient.species === 'Equine' 
+                            ? (patient.gender === 'F' ? 'Égua' : (patient.neutered ? 'Castrado' : 'Garanhão'))
+                            : (patient.gender === 'M' ? 'Macho' : 'Fêmea')
+                        }
+                    </span>
                     <span>, {formatPatientAge(patient)}</span>
                   </div>
                   {patient.rg && (
@@ -598,7 +603,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                         Risco: {patient.anestheticRisk}
                     </span>
                 )}
-                {patient.neutered && (
+                {patient.neutered && patient.species !== 'Equine' && (
                      <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
                         Castrado
                     </span>
@@ -1347,15 +1352,32 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                           )}
                       </div>
                       <div>
-                          <label className="text-sm font-medium">Sexo</label>
-                          <select 
-                            className="w-full border rounded p-2"
-                            value={editFormData.gender || 'M'} 
-                            onChange={e => setEditFormData({...editFormData, gender: e.target.value})} 
-                          >
-                              <option value="M">Macho</option>
-                              <option value="F">Fêmea</option>
-                          </select>
+                          <label className="text-sm font-medium">Sexo / Categoria</label>
+                          {editFormData.species === 'Equine' ? (
+                              <select 
+                                className="w-full border rounded p-2"
+                                value={editFormData.gender === 'F' ? 'F' : (editFormData.neutered ? 'M-C' : 'M-I')}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if(val === 'F') setEditFormData({...editFormData, gender: 'F', neutered: false});
+                                    else if(val === 'M-C') setEditFormData({...editFormData, gender: 'M', neutered: true});
+                                    else setEditFormData({...editFormData, gender: 'M', neutered: false});
+                                }}
+                              >
+                                  <option value="M-I">Garanhão (Macho Inteiro)</option>
+                                  <option value="M-C">Castrado (Macho Castrado)</option>
+                                  <option value="F">Égua (Fêmea)</option>
+                              </select>
+                          ) : (
+                              <select 
+                                className="w-full border rounded p-2"
+                                value={editFormData.gender || 'M'} 
+                                onChange={e => setEditFormData({...editFormData, gender: e.target.value})} 
+                              >
+                                  <option value="M">Macho</option>
+                                  <option value="F">Fêmea</option>
+                              </select>
+                          )}
                       </div>
                       <div>
                           <label className="text-sm font-medium">Pelagem/Cor</label>
@@ -1381,19 +1403,21 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                         </div>
                       )}
                        <div className="flex items-center pt-6 gap-4">
-                           <label className="flex items-center gap-2 cursor-pointer">
-                               <input 
-                                  type="checkbox"
-                                  checked={editFormData.neutered || false}
-                                  disabled={patient.neutered} // If already neutered, cannot un-neuter
-                                  onChange={e => {
-                                      const isNeutered = e.target.checked;
-                                      setEditFormData({...editFormData, neutered: isNeutered, pregnant: isNeutered ? false : editFormData.pregnant})
-                                  }}
-                               />
-                               <span className={cn("text-sm font-medium", patient.neutered ? "text-gray-400" : "")}>Castrado?</span>
-                           </label>
-                           {editFormData.gender === 'F' && editFormData.species !== 'Equine' && !editFormData.neutered && (
+                           {editFormData.species !== 'Equine' && (
+                               <label className="flex items-center gap-2 cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={editFormData.neutered || false}
+                                      disabled={patient.neutered} // If already neutered, cannot un-neuter
+                                      onChange={e => {
+                                          const isNeutered = e.target.checked;
+                                          setEditFormData({...editFormData, neutered: isNeutered, pregnant: isNeutered ? false : editFormData.pregnant})
+                                      }}
+                                   />
+                                   <span className={cn("text-sm font-medium", patient.neutered ? "text-gray-400" : "")}>Castrado?</span>
+                               </label>
+                           )}
+                           {editFormData.gender === 'F' && !editFormData.neutered && (
                                <label className="flex items-center gap-2 cursor-pointer">
                                    <input 
                                       type="checkbox"

@@ -215,10 +215,10 @@ export default function Attendance() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left: Schedule */}
             <div className="lg:col-span-2 space-y-6">
-                <Card className="border-t-4 border-t-[#00BFA5] shadow-sm">
+                <Card className="border-t-4 border-t-[var(--clinic-button)] shadow-sm">
                     <CardContent className="p-6">
                         <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-[#00BFA5]" />
+                            <Calendar className="h-5 w-5 text-[var(--clinic-button)]" />
                             Pré-agendados de Hoje
                         </h2>
 

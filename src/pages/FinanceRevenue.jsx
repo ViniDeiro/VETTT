@@ -77,10 +77,7 @@ export default function FinanceRevenue() {
 
   const handleValueChange = (event) => {
     const digits = event.target.value.replace(/\D/g, '')
-    const formatted = (Number(digits || 0) / 100).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    })
+    const formatted = formatCurrency(Number(digits || 0) / 100)
     setFormData((prev) => ({ ...prev, value: formatted }))
   }
 
@@ -312,7 +309,7 @@ export default function FinanceRevenue() {
 
                   <Button
                     onClick={handleSaveRevenue}
-                    className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white font-bold h-12 mt-2"
+                    className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white font-bold h-12 mt-2"
                   >
                     <Plus className="mr-2 h-5 w-5" />
                     Salvar receita
@@ -328,7 +325,7 @@ export default function FinanceRevenue() {
                   <div className="rounded-xl bg-white/10 p-4">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-sm font-semibold">Top categorias</p>
-                      <TrendingUp className="h-4 w-4 text-[#00BFA5]" />
+                      <TrendingUp className="h-4 w-4 text-[var(--clinic-button)]" />
                     </div>
                     <div className="space-y-3">
                       {currentMonthSummary.categories.map((item) => (
@@ -339,7 +336,7 @@ export default function FinanceRevenue() {
                           </div>
                           <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                             <div
-                              className="h-full bg-[#00BFA5]"
+                              className="h-full bg-[var(--clinic-button)]"
                               style={{
                                 width: `${currentMonthSummary.total ? (item.value / currentMonthSummary.total) * 100 : 0}%`,
                               }}
@@ -355,7 +352,7 @@ export default function FinanceRevenue() {
 
                   <div className="rounded-xl bg-white/10 p-4">
                     <div className="flex items-center gap-2 text-sm font-semibold mb-2">
-                      <Wallet className="h-4 w-4 text-[#00BFA5]" />
+                      <Wallet className="h-4 w-4 text-[var(--clinic-button)]" />
                       Automatico x manual
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
@@ -410,6 +407,7 @@ export default function FinanceRevenue() {
                       <th className="pb-3">Descricao</th>
                       <th className="pb-3">Origem</th>
                       <th className="pb-3">Valor</th>
+                      <th className="pb-3 text-center">Forma</th>
                       <th className="pb-3 text-center">Status</th>
                     </tr>
                   </thead>
@@ -421,6 +419,9 @@ export default function FinanceRevenue() {
                         <td className="py-4 text-gray-500">{item.description}</td>
                         <td className="py-4 text-gray-500">{item.attendanceId ? 'Atendimento' : 'Manual'}</td>
                         <td className="py-4 text-gray-900 font-bold">{formatCurrency(item.amount)}</td>
+                        <td className="py-4 text-center text-gray-500 font-medium">
+                          {paymentMethodLabel[item.paymentMethod] || item.paymentMethod || '-'}
+                        </td>
                         <td className="py-4 text-center">
                           <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-700">
                             {item.paymentStatus === 'paid' ? 'Recebido' : 'Pendente'}
@@ -446,7 +447,7 @@ export default function FinanceRevenue() {
           <div className="bg-[#0B2C4D] rounded-xl p-6 text-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-lg">Alertas</h3>
-              <Bell className="h-5 w-5 text-[#00BFA5]" />
+              <Bell className="h-5 w-5 text-[var(--clinic-button)]" />
             </div>
             <div className="space-y-3">
               {alerts.map((item) => (
@@ -454,7 +455,7 @@ export default function FinanceRevenue() {
                   key={item.id}
                   className={cn(
                     'bg-white text-[#0B2C4D] p-3 rounded-lg text-sm font-medium border-l-4 shadow-sm',
-                    item.status === 'overdue' ? 'border-red-500' : 'border-[#00BFA5]'
+                    item.status === 'overdue' ? 'border-red-500' : 'border-[var(--clinic-button)]'
                   )}
                 >
                   <p className="font-bold mb-1">
@@ -473,7 +474,7 @@ export default function FinanceRevenue() {
             </div>
           </div>
 
-          <div className="bg-[#00BFA5] rounded-xl p-6 text-white">
+          <div className="bg-[var(--clinic-button)] rounded-xl p-6 text-white">
             <h3 className="font-bold text-lg mb-4">Exportar</h3>
             <div className="flex gap-4">
               <button

@@ -374,7 +374,7 @@ export default function FinanceReports() {
                   <div key={item.label} className="flex-1 flex items-end gap-1 h-full">
                     <div className="flex-1 flex flex-col justify-end items-center gap-2 h-full">
                       <div
-                        className="w-full bg-[#00BFA5] rounded-t-sm opacity-80"
+                        className="w-full bg-[var(--clinic-button)] rounded-t-sm opacity-80"
                         style={{ height: `${(item.revenue / maxChartValue) * 100}%` }}
                       />
                     </div>
@@ -397,7 +397,7 @@ export default function FinanceReports() {
 
               <div className="flex items-center justify-center gap-6 mt-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-[#00BFA5] rounded-full" />
+                  <div className="w-3 h-3 bg-[var(--clinic-button)] rounded-full" />
                   <span className="text-sm text-gray-600">Receita</span>
                 </div>
                 <div className="flex items-center gap-2">

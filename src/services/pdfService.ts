@@ -28,27 +28,106 @@ class PdfService {
 
   private addHeader(doc: jsPDF, title: string) {
     const { settings, primary } = this.getDocumentContext();
+    const model = settings.documents.selectedModel || 'classic';
+    const logoUrl = settings.clinic.logoUrl;
+    const logoPos = settings.documents.logoPosition || 'left';
 
-    doc.setFillColor(primary.r, primary.g, primary.b);
-    doc.rect(0, 0, 210, 40, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.text(settings.clinic.fantasyName || 'Vet Tooth', 20, 25);
-    
-    doc.setFontSize(12);
-    doc.text(settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada', 20, 32);
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(18);
-    doc.text(title, 105, 55, { align: 'center' });
+    if (model === 'minimal') {
+      // Minimal Model: Clean top with colored bar below
+      if (logoUrl) {
+          try {
+              const xPos = logoPos === 'left' ? 20 : logoPos === 'right' ? 160 : 90;
+              doc.addImage(logoUrl, 'PNG', xPos, 15, 30, 30, undefined, 'FAST');
+          } catch (e) { console.error('Error adding logo to PDF', e); }
+      }
+
+      doc.setFillColor(primary.r, primary.g, primary.b);
+      doc.rect(20, 50, 170, 1, 'F'); // Thin decorative line
+
+      doc.setTextColor(primary.r, primary.g, primary.b);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(settings.clinic.fantasyName || 'Vet Tooth', logoPos === 'center' ? 105 : 20, logoUrl ? 58 : 30, { align: logoPos === 'center' ? 'center' : 'left' });
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(settings.documents.header || settings.clinic.legalName || '', logoPos === 'center' ? 105 : 20, logoUrl ? 63 : 35, { align: logoPos === 'center' ? 'center' : 'left' });
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(16);
+      doc.text(title, 105, 80, { align: 'center' });
+    } else if (model === 'premium') {
+      // Premium Model: Elegant centered layout with soft background
+      doc.setFillColor(primary.r, primary.g, primary.b);
+      doc.rect(0, 0, 210, 8, 'F'); // Top colored strip
+
+      if (logoUrl) {
+          try {
+              doc.addImage(logoUrl, 'PNG', 90, 15, 30, 30, undefined, 'FAST');
+          } catch (e) { console.error('Error adding logo to PDF', e); }
+      }
+
+      doc.setTextColor(50, 50, 50);
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text(settings.clinic.fantasyName || 'Vet Tooth', 105, logoUrl ? 55 : 30, { align: 'center' });
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'italic');
+      doc.text(settings.documents.header || settings.clinic.legalName || '', 105, logoUrl ? 62 : 37, { align: 'center' });
+
+      doc.setDrawColor(primary.r, primary.g, primary.b);
+      doc.setLineWidth(0.5);
+      doc.line(60, logoUrl ? 68 : 42, 150, logoUrl ? 68 : 42);
+
+      doc.setTextColor(primary.r, primary.g, primary.b);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title.toUpperCase(), 105, 85, { align: 'center' });
+    } else {
+      // Classic Model: (Current) Solid header
+      doc.setFillColor(primary.r, primary.g, primary.b);
+      doc.rect(0, 0, 210, 40, 'F');
+      
+      if (logoUrl) {
+          try {
+              const xPos = logoPos === 'left' ? 15 : logoPos === 'right' ? 165 : 90;
+              // If center, we might need to adjust text to not overlap
+              doc.addImage(logoUrl, 'PNG', xPos, 5, 30, 30, undefined, 'FAST');
+          } catch (e) { console.error('Error adding logo to PDF', e); }
+      }
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      
+      const textX = logoPos === 'left' && logoUrl ? 50 : 20;
+      doc.text(settings.clinic.fantasyName || 'Vet Tooth', textX, 25);
+      
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada', textX, 32);
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, 105, 55, { align: 'center' });
+    }
   }
 
   private addFooter(doc: jsPDF, signature: boolean = false) {
     const { settings, teamMember } = this.getDocumentContext();
     const pageHeight = doc.internal.pageSize.height;
+    const qrCodeUrl = settings.documents.showQrCode ? settings.clinic.qrCodeUrl : null;
+
+    if (qrCodeUrl) {
+        try {
+            doc.addImage(qrCodeUrl, 'PNG', 180, pageHeight - 40, 20, 20, undefined, 'FAST');
+        } catch (e) { console.error('Error adding QR code to PDF', e); }
+    }
     
     if (signature) {
+      doc.setDrawColor(150);
       doc.line(70, pageHeight - 40, 140, pageHeight - 40);
       doc.setFontSize(10);
       doc.setTextColor(50);

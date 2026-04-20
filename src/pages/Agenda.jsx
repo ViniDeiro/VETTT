@@ -68,7 +68,7 @@ const getAppointmentColor = (type) => {
   const normalizedType = getSpeciesLabel(type)
 
   if (normalizedType === 'Equino') return 'bg-[#1E3A8A] border-[#1E3A8A] text-white'
-  if (normalizedType === 'Canino') return 'bg-[#00BFA5] border-[#00BFA5] text-white'
+  if (normalizedType === 'Canino') return 'bg-[var(--clinic-button)] border-[var(--clinic-button)] text-white'
   if (normalizedType === 'Felino') return 'bg-[#60A5FA] border-[#60A5FA] text-white'
 
   return 'bg-violet-500 border-violet-500 text-white'
@@ -174,6 +174,10 @@ export default function Agenda() {
   const [appointmentActionMode, setAppointmentActionMode] = useState(null)
   const [hasAppliedInitialSchedule, setHasAppliedInitialSchedule] = useState(false)
 
+  // Dynamic Data from Settings
+  const [vets, setVets] = useState([])
+  const [locations, setLocations] = useState([])
+
   const resetAppointmentForm = () => {
     setNewAppointment(createEmptyAppointment())
     setEditingAppointmentId(null)
@@ -205,6 +209,7 @@ export default function Agenda() {
       ownerData,
       propertyData,
       serviceLocation: appointment.serviceLocation || '',
+      serviceLocationAddress: sources.settings?.units?.find(u => u.name === appointment.serviceLocation)?.address || '',
       patientData: patientData
         ? {
             ...patientData,
@@ -217,30 +222,44 @@ export default function Agenda() {
   }
 
   const handleAppointmentClick = (appointment) => {
-    const enriched = buildAppointmentDetails(appointment)
+    const enriched = buildAppointmentDetails(appointment, {
+      settings: mockDB.getSettings()
+    })
     setSelectedAppointment(enriched)
     setIsDetailsOpen(true)
   }
 
   useEffect(() => {
-    // Load from mockDB on mount
-    const loadedPatients = mockDB.getPatients()
-    const loadedOwners = mockDB.getOwners()
-    const loadedProperties = mockDB.getAllProperties()
-    const loadedAppointments = mockDB.getAppointments()
+    const loadData = () => {
+      const loadedPatients = mockDB.getPatients()
+      const loadedOwners = mockDB.getOwners()
+      const loadedProperties = mockDB.getAllProperties()
+      const loadedAppointments = mockDB.getAppointments()
+      const loadedTeam = mockDB.getTeamMembers()
+      const loadedSettings = mockDB.getSettings()
 
-    setPatients(loadedPatients)
-    setOwners(loadedOwners)
-    setProperties(loadedProperties)
-    setAppointments(
-      loadedAppointments.map(appointment =>
-        buildAppointmentDetails(appointment, {
-          patients: loadedPatients,
-          owners: loadedOwners,
-          properties: loadedProperties
-        })
+      setPatients(loadedPatients)
+      setOwners(loadedOwners)
+      setProperties(loadedProperties)
+      setVets(loadedTeam.filter(m => m.functionTitle?.toLowerCase().includes('veterinario') || m.functionTitle?.toLowerCase().includes('veterinário')))
+      setLocations(loadedSettings.units || [])
+      
+      setAppointments(
+        loadedAppointments.map(appointment =>
+          buildAppointmentDetails(appointment, {
+            patients: loadedPatients,
+            owners: loadedOwners,
+            properties: loadedProperties,
+            settings: loadedSettings
+          })
+        )
       )
-    )
+    }
+
+    loadData()
+
+    window.addEventListener('vet-settings-updated', loadData)
+    return () => window.removeEventListener('vet-settings-updated', loadData)
   }, [])
 
   useEffect(() => {
@@ -636,7 +655,7 @@ export default function Agenda() {
                       onClick={() => setSelectedDate(date)}
                       className={cn(
                         "h-7 w-7 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors",
-                        isSelected && "bg-[#00BFA5] text-white hover:bg-[#00BFA5]",
+                        isSelected && "bg-[var(--clinic-button)] text-white hover:bg-[var(--clinic-button)]",
                         isToday && !isSelected && "bg-blue-100 text-blue-700"
                       )}
                     >
@@ -705,7 +724,7 @@ export default function Agenda() {
 
             <Button 
               onClick={() => setIsModalOpen(true)}
-              className="bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white gap-2 rounded-full px-6"
+              className="bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white gap-2 rounded-full px-6"
             >
               <span>+</span> Novo
             </Button>
@@ -765,10 +784,10 @@ export default function Agenda() {
                   return (
                     <div key={date.toString()} className={cn(
                       "p-4 text-center text-sm font-semibold border-r border-gray-50 last:border-r-0 flex flex-col items-center justify-center capitalize",
-                      isToday ? "text-[#00BFA5]" : "text-gray-700"
+                      isToday ? "text-[var(--clinic-button)]" : "text-gray-700"
                     )}>
                       <span>{dayName}</span>
-                      <span className={cn("text-lg font-bold mt-1 w-8 h-8 flex items-center justify-center rounded-full", isToday ? "bg-[#00BFA5] text-white" : "")}>{date.getDate()}</span>
+                      <span className={cn("text-lg font-bold mt-1 w-8 h-8 flex items-center justify-center rounded-full", isToday ? "bg-[var(--clinic-button)] text-white" : "")}>{date.getDate()}</span>
                     </div>
                   )
                 })}
@@ -933,17 +952,23 @@ export default function Agenda() {
               <Input value={newAppointment.type} readOnly className="bg-gray-50" />
             </div>
             )}
-             <div className="space-y-2">
               <Label>Veterinário</Label>
               <Select
                 name="doctor"
                 value={newAppointment.doctor}
                 onChange={handleInputChange}
               >
-                <option value="Dr. Silva">Dr. Silva</option>
-                <option value="Dra. Santos">Dra. Santos</option>
+                {vets.length > 0 ? (
+                  vets.map(vet => (
+                    <option key={vet.id} value={vet.name}>{vet.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Dr. Silva">Dr. Silva</option>
+                    <option value="Dra. Santos">Dra. Santos</option>
+                  </>
+                )}
               </Select>
-            </div>
           </div>
 
           {newAppointment.appointmentMode === 'patient' && (
@@ -960,12 +985,18 @@ export default function Agenda() {
 
               <div className="space-y-2">
                 <Label>Local do atendimento</Label>
-                <Input
+                <Select
                   name="serviceLocation"
                   value={newAppointment.serviceLocation}
                   onChange={handleInputChange}
-                  placeholder="Ex: Clínica, domicílio, propriedade"
-                />
+                >
+                  <option value="">Selecione um local...</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.name}>{loc.name}</option>
+                  ))}
+                  <option value="Domicílio/Propriedade">Domicílio/Propriedade</option>
+                  <option value="Outro">Outro</option>
+                </Select>
               </div>
             </>
           )}
@@ -1050,7 +1081,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                     icon={CalendarIcon}
                     color="bg-blue-50 text-blue-600"
                     label="Data e Horário"
-                    value={`${new Date(appointment.start).toLocaleDateString('pt-BR')} - ${new Date(appointment.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${new Date(appointment.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                    value={`${formatDate(appointment.start)} - ${formatTime(appointment.start)} às ${formatTime(appointment.end)}`}
                   />
                   <InfoItem
                     icon={CheckCircle}
@@ -1078,15 +1109,22 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                       icon={MapPin}
                       color="bg-orange-50 text-orange-600"
                       label="Local do Atendimento"
-                      value={appointment.serviceLocation}
+                      value={
+                        <div>
+                          <p className="font-bold">{appointment.serviceLocation}</p>
+                          {appointment.serviceLocationAddress && (
+                            <p className="text-xs text-orange-600/80 mt-0.5">{appointment.serviceLocationAddress}</p>
+                          )}
+                        </div>
+                      }
                     />
                   )}
                 </div>
 
                 {appointment.notes && (
                   <div className="rounded-xl border border-gray-200 p-4">
-                    <p className="text-sm font-bold text-gray-900 mb-1">Observações do Agendamento</p>
-                    <p className="text-sm text-gray-600">{appointment.notes}</p>
+                    <p className="text-sm font-bold text-blue-900 mb-1">{formatTime(appointment.start)}</p>
+                    <p className="text-xs text-blue-600 font-medium">{formatDate(appointment.start)}</p>
                   </div>
                 )}
 
@@ -1196,7 +1234,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 </Button>
                 <Button 
                     onClick={onMessage}
-                    className="w-full bg-[#00BFA5] hover:bg-[#00BFA5]/90 text-white rounded-full h-12 text-base"
+                    className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white rounded-full h-12 text-base"
                 >
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Enviar mensagem

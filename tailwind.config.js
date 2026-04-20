@@ -40,6 +40,11 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        clinic: {
+          primary: "var(--clinic-primary)",
+          button: "var(--clinic-button)",
+          sidebar: "var(--clinic-sidebar)",
+        }
       },
       borderRadius: {
         lg: "var(--radius)",

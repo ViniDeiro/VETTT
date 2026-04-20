@@ -47,7 +47,7 @@ export default function Sidebar() {
   const [financeOpen, setFinanceOpen] = useState(false)
   const [patientsOpen, setPatientsOpen] = useState(false)
   const [clinicName, setClinicName] = useState('VETTOOTH')
-  const [sidebarColor, setSidebarColor] = useState('#0B2C4D')
+  const [sidebarColor, setSidebarColor] = useState('var(--clinic-primary)')
   const location = useLocation()
   const { logout, canAccess } = useAuth()
 
@@ -108,8 +108,12 @@ export default function Sidebar() {
           <div className="flex items-center h-20 px-6 border-b border-white/10">
             <div className="flex items-center gap-2">
               {/* Simple Logo Placeholder */}
-              <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-[#0B2C4D] font-bold">
-                V
+              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[var(--clinic-primary)] font-bold overflow-hidden shrink-0">
+                {mockDB.getSettings().clinic.logo ? (
+                  <img src={mockDB.getSettings().clinic.logo} alt="Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{clinicName.charAt(0)}</span>
+                )}
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight uppercase truncate max-w-[160px]">{clinicName}</h1>

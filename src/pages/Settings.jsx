@@ -76,7 +76,8 @@ const EMPTY_USER_FORM = {
   functionTitle: '',
   role: 'secretary',
   accessProfileId: '',
-  status: 'active'
+  status: 'active',
+  password: ''
 }
 
 const EMPTY_TEAM_FORM = {
@@ -147,6 +148,41 @@ const EMPTY_SEDATION_FORM = {
 const formatCurrency = value => `R$ ${Number(value || 0).toFixed(2)}`
 const formatDateTime = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca'
 
+// Mask Utilities
+const maskCNPJ = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 14)
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
+const maskCPF = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+}
+
+const maskPhone = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 10) {
+    return digits
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2')
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+}
+
+const maskCEP = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  return digits.replace(/^(\d{5})(\d)/, '$1-$2')
+}
+
 const createBlankPermissions = () => (
   MODULES.reduce((acc, [moduleKey]) => {
     acc[moduleKey] = {
@@ -190,6 +226,7 @@ export default function Settings() {
     { id: 3, name: 'Acepromazina', dosage: '0.03-0.1 mg/kg IM', notes: 'Tranquilização' }
   ])
   const [newSedation, setNewSedation] = useState(EMPTY_SEDATION_FORM)
+  const [previewModel, setPreviewModel] = useState(null)
 
   useEffect(() => {
     mockDB.ensureMockProcedures()
@@ -239,13 +276,37 @@ export default function Settings() {
   }, [procedureChargePrice, procedureOperationalCost])
 
   const updateSettingsGroup = (group, field, value) => {
+    let finalValue = value
+    if (field === 'cnpj') finalValue = maskCNPJ(value)
+    if (field === 'phone') finalValue = maskPhone(value)
+    if (field === 'zipCode') finalValue = maskCEP(value)
+
     setSettings(prev => ({
       ...prev,
       [group]: {
         ...prev[group],
-        [field]: value
+        [field]: finalValue
       }
     }))
+  }
+
+  const handleImageUpload = (group, field) => (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const base64 = e.target?.result
+      if (base64) {
+        updateSettingsGroup(group, field, base64)
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
   const updateProfileState = updatedProfile => {
@@ -582,6 +643,44 @@ export default function Settings() {
     })
   }
 
+  const setAllPermissions = (value) => {
+    if (!selectedProfile) return
+    const newPermissions = {}
+    MODULES.forEach(([moduleKey]) => {
+      newPermissions[moduleKey] = {}
+      ACTIONS.forEach(([actionKey]) => {
+        newPermissions[moduleKey][actionKey] = value
+      })
+    })
+    updateProfileState({ ...selectedProfile, permissions: newPermissions })
+  }
+
+  const setModuleAll = (moduleKey, value) => {
+    if (!selectedProfile) return
+    updateProfileState({
+      ...selectedProfile,
+      permissions: {
+        ...selectedProfile.permissions,
+        [moduleKey]: ACTIONS.reduce((acc, [actionKey]) => {
+          acc[actionKey] = value
+          return acc
+        }, {})
+      }
+    })
+  }
+
+  const setActionAll = (actionKey, value) => {
+    if (!selectedProfile) return
+    const newPermissions = { ...selectedProfile.permissions }
+    MODULES.forEach(([moduleKey]) => {
+      newPermissions[moduleKey] = {
+        ...(newPermissions[moduleKey] || {}),
+        [actionKey]: value
+      }
+    })
+    updateProfileState({ ...selectedProfile, permissions: newPermissions })
+  }
+
   const removeProfile = profileId => {
     const removed = mockDB.deleteProfile(profileId)
     if (!removed) {
@@ -830,13 +929,25 @@ export default function Settings() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Logo da clínica (URL)</Label>
-                  <Input value={settings.clinic.logo || ''} onChange={event => updateSettingsGroup('clinic', 'logo', event.target.value)} placeholder="https://..." />
+                <div className="space-y-2">
+                  <Label>Logo da clínica</Label>
+                  <div className="flex gap-2">
+                    <Input value={settings.clinic.logo || ''} onChange={event => updateSettingsGroup('clinic', 'logo', event.target.value)} placeholder="URL do logo..." className="flex-1" />
+                    <Button variant="outline" size="icon" className="shrink-0" onClick={() => document.getElementById('logo-upload').click()}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <input type="file" id="logo-upload" className="hidden" accept="image/*" onChange={handleImageUpload('clinic', 'logo')} />
+                  </div>
                 </div>
-                <div>
-                  <Label>Logo dos documentos (URL)</Label>
-                  <Input value={settings.clinic.documentLogo || ''} onChange={event => updateSettingsGroup('clinic', 'documentLogo', event.target.value)} placeholder="https://..." />
+                <div className="space-y-2">
+                  <Label>Logo dos documentos</Label>
+                  <div className="flex gap-2">
+                    <Input value={settings.clinic.documentLogo || ''} onChange={event => updateSettingsGroup('clinic', 'documentLogo', event.target.value)} placeholder="URL do logo..." className="flex-1" />
+                    <Button variant="outline" size="icon" className="shrink-0" onClick={() => document.getElementById('doc-logo-upload').click()}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <input type="file" id="doc-logo-upload" className="hidden" accept="image/*" onChange={handleImageUpload('clinic', 'documentLogo')} />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -918,9 +1029,9 @@ export default function Settings() {
               </div>
               <div className="rounded-lg border p-4" style={{ backgroundColor: `${settings.appearance.sidebarColor}15` }}>
                 <p className="text-sm font-semibold text-gray-900">Pré-visualização da marca</p>
-                <div className="mt-3 flex items-center justify-between rounded-lg p-4 text-white" style={{ backgroundColor: settings.appearance.sidebarColor }}>
+                <div className="mt-3 flex items-center justify-between rounded-lg p-4 text-white" style={{ backgroundColor: 'var(--clinic-sidebar)' }}>
                   <span className="font-bold">{settings.clinic.fantasyName}</span>
-                  <button type="button" className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: settings.appearance.buttonColor }}>
+                  <button type="button" className="rounded-md px-4 py-2 text-sm font-medium" style={{ backgroundColor: 'var(--clinic-button)' }}>
                     Botão
                   </button>
                 </div>
@@ -1260,20 +1371,48 @@ export default function Settings() {
                       </div>
                     </div>
 
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-900">Permissões por módulo</p>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setAllPermissions(true)}>Marcar tudo</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setAllPermissions(false)}>Limpar tudo</Button>
+                      </div>
+                    </div>
+
                     <div className="overflow-x-auto rounded-lg border">
                       <table className="w-full border-collapse text-sm">
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="p-3 text-left">Módulo</th>
-                            {ACTIONS.map(([, label]) => (
-                              <th key={label} className="p-3 text-center whitespace-nowrap">{label}</th>
+                            {ACTIONS.map(([actionKey, label]) => (
+                               <th key={label} className="p-3 text-center whitespace-nowrap">
+                                 <div className="flex flex-col items-center gap-1">
+                                   <span>{label}</span>
+                                   <input 
+                                     type="checkbox" 
+                                     className="h-3 w-3"
+                                     title={`Selecionar ${label} para todos`}
+                                     onChange={(e) => setActionAll(actionKey, e.target.checked)}
+                                   />
+                                 </div>
+                               </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {MODULES.map(([moduleKey, label]) => (
-                            <tr key={moduleKey} className="border-t">
-                              <td className="p-3 font-medium text-gray-900">{label}</td>
+                            <tr key={moduleKey} className="border-t hover:bg-gray-50">
+                              <td className="p-3 font-medium text-gray-900">
+                                <div className="flex items-center gap-2">
+                                  <span>{label}</span>
+                                  <input 
+                                    type="checkbox" 
+                                    className="h-3 w-3" 
+                                    title={`Selecionar tudo em ${label}`}
+                                    onChange={(e) => setModuleAll(moduleKey, e.target.checked)}
+                                  />
+                                </div>
+                              </td>
                               {ACTIONS.map(([actionKey]) => (
                                 <td key={`${moduleKey}-${actionKey}`} className="p-3 text-center">
                                   <input
@@ -1301,15 +1440,18 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <Input placeholder="Nome completo" value={userForm.name} onChange={event => setUserForm(prev => ({ ...prev, name: event.target.value }))} />
                 <Input placeholder="E-mail" value={userForm.email} onChange={event => setUserForm(prev => ({ ...prev, email: event.target.value }))} />
-                <Input placeholder="Telefone" value={userForm.phone} onChange={event => setUserForm(prev => ({ ...prev, phone: event.target.value }))} />
+                <Input placeholder="Telefone" value={userForm.phone} onChange={event => setUserForm(prev => ({ ...prev, phone: maskPhone(event.target.value) }))} />
                 <Input placeholder="Função" value={userForm.functionTitle} onChange={event => setUserForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
+                <Input placeholder="Senha" type="password" value={userForm.password} onChange={event => setUserForm(prev => ({ ...prev, password: event.target.value }))} />
                 <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.accessProfileId} onChange={event => setUserForm(prev => ({ ...prev, accessProfileId: event.target.value }))}>
                   {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                 </select>
-                <Button type="button" onClick={addUser} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Adicionar
-                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" onClick={addUser} className="flex-1 gap-2">
+                    <Plus className="h-4 w-4" />
+                    Adicionar
+                  </Button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
@@ -1374,13 +1516,32 @@ export default function Settings() {
               <Input placeholder="Função" value={teamForm.functionTitle} onChange={event => setTeamForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
               <Input placeholder="Especialidade" value={teamForm.specialty} onChange={event => setTeamForm(prev => ({ ...prev, specialty: event.target.value }))} />
               <Input placeholder="CRMV" value={teamForm.crmv} onChange={event => setTeamForm(prev => ({ ...prev, crmv: event.target.value }))} />
-              <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: event.target.value }))} />
+              <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: maskCPF(event.target.value) }))} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-              <Input placeholder="Telefone" value={teamForm.phone} onChange={event => setTeamForm(prev => ({ ...prev, phone: event.target.value }))} />
+              <Input placeholder="Telefone" value={teamForm.phone} onChange={event => setTeamForm(prev => ({ ...prev, phone: maskPhone(event.target.value) }))} />
               <Input placeholder="E-mail" value={teamForm.email} onChange={event => setTeamForm(prev => ({ ...prev, email: event.target.value }))} />
               <Input placeholder="Assinatura" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} />
-              <Input placeholder="Foto (URL)" value={teamForm.photo} onChange={event => setTeamForm(prev => ({ ...prev, photo: event.target.value }))} />
+              <div className="flex gap-1">
+                <Input placeholder="Foto URL" value={teamForm.photo} onChange={event => setTeamForm(prev => ({ ...prev, photo: event.target.value }))} className="flex-1" />
+                <Button variant="outline" size="icon" onClick={() => document.getElementById('team-photo-upload').click()}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <input 
+                  type="file" 
+                  id="team-photo-upload" 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onload = (re) => setTeamForm(prev => ({ ...prev, photo: re.target?.result }))
+                      reader.readAsDataURL(file)
+                    }
+                  }} 
+                />
+              </div>
               <Button type="button" onClick={addTeamMember} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Adicionar membro
@@ -1431,15 +1592,24 @@ export default function Settings() {
                   ['minimal', 'Modelo 2', 'Clínico minimalista'],
                   ['premium', 'Modelo 3', 'Premium / personalizado']
                 ].map(([value, title, description]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => updateSettingsGroup('documents', 'selectedModel', value)}
-                    className={`rounded-lg border p-4 text-left ${settings.documents.selectedModel === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                  >
-                    <p className="font-semibold text-gray-900">{title}</p>
-                    <p className="text-xs text-gray-500">{description}</p>
-                  </button>
+                  <div key={value} className="relative group">
+                    <button
+                      type="button"
+                      onClick={() => updateSettingsGroup('documents', 'selectedModel', value)}
+                      className={`w-full rounded-lg border p-4 text-left transition-all ${settings.documents.selectedModel === value ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <p className="font-semibold text-gray-900">{title}</p>
+                      <p className="text-xs text-gray-500">{description}</p>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setPreviewModel(value)}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-white border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50"
+                      title="Ver prévia visual"
+                    >
+                      <Eye size={14} className="text-blue-600" />
+                    </button>
+                  </div>
                 ))}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1782,6 +1952,93 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Document Preview Modal */}
+        {previewModel && (
+          <Modal isOpen={!!previewModel} onClose={() => setPreviewModel(null)} title={`Prévia do ${previewModel === 'classic' ? 'Modelo Clássico' : previewModel === 'minimal' ? 'Modelo Minimalista' : 'Modelo Premium'}`}>
+            <div className="p-8 bg-gray-250 min-h-[600px] flex justify-center overflow-auto rounded-lg">
+              <div className="w-[450px] bg-white shadow-2xl min-h-[580px] p-6 relative flex flex-col font-sans">
+                
+                {/* Header Rendering */}
+                {previewModel === 'classic' && (
+                  <div className="mb-6">
+                    <div className="h-24 bg-[#0B2C4D] -mx-6 -mt-6 p-6 text-white flex items-center justify-between">
+                      <div>
+                          <div className="text-lg font-bold">Vet Tooth</div>
+                          <div className="text-[10px] opacity-80">Odontologia Veterinária Especializada</div>
+                      </div>
+                      <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-[10px]">LOGO</div>
+                    </div>
+                    <div className="mt-6 text-center">
+                      <div className="text-sm font-bold border-b-2 inline-block px-4 pb-1">RECEITUÁRIO</div>
+                    </div>
+                  </div>
+                )}
+
+                {previewModel === 'minimal' && (
+                  <div className="mb-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-12 h-12 bg-gray-100 flex items-center justify-center text-[10px] border">LOGO</div>
+                      <div className="text-right">
+                         <div className="text-sm font-bold text-[#0B2C4D]">Vet Tooth</div>
+                         <div className="text-[9px] text-gray-500">Clínica Geral</div>
+                      </div>
+                    </div>
+                    <div className="h-[2px] bg-[#0B2C4D] w-full mb-8"></div>
+                    <div className="text-center font-bold text-lg mb-8 tracking-tight">Prescrição Médica</div>
+                  </div>
+                )}
+
+                {previewModel === 'premium' && (
+                  <div className="mb-6">
+                     <div className="h-1.5 bg-[#0B2C4D] -mx-6 -mt-6"></div>
+                     <div className="flex flex-col items-center mt-4">
+                        <div className="w-16 h-16 bg-gray-50 rounded-full border flex items-center justify-center text-[9px] mb-2">LOGO</div>
+                        <div className="text-xl font-bold uppercase tracking-widest text-slate-800">Vet Tooth</div>
+                        <div className="w-24 h-[1px] bg-[#0B2C4D] my-2"></div>
+                        <div className="text-[10px] italic text-slate-500 mb-8 underline underline-offset-4">Relatório Clínico Premium</div>
+                     </div>
+                  </div>
+                )}
+
+                {/* Mock Content */}
+                <div className="flex-1 space-y-4">
+                   <div className="p-3 bg-gray-50 rounded border border-dashed text-[10px] text-gray-400">
+                      Dados do paciente e do tutor...
+                   </div>
+                   <div className="space-y-2">
+                      <div className="h-3 w-1/3 bg-gray-100"></div>
+                      <div className="h-20 w-full bg-gray-50 border rounded p-2 text-[9px] text-gray-400">Prescrição e orientações detalhadas aqui...</div>
+                   </div>
+                   <div className="space-y-2">
+                      <div className="h-3 w-1/3 bg-gray-100"></div>
+                      <div className="h-12 w-full bg-gray-50 border rounded p-2 text-[9px] text-gray-400">Observações legais configuradas.</div>
+                   </div>
+                </div>
+
+                {/* Footer Rendering */}
+                <div className="mt-8 pt-4 border-t border-gray-100 flex justify-between items-end">
+                   <div className="space-y-1">
+                      <div className="w-32 h-[1px] bg-gray-400 mb-1"></div>
+                      <div className="text-[8px] font-bold">Dr. Lucas Ferreira</div>
+                      <div className="text-[7px] text-gray-500">CRMV-SP 12345</div>
+                   </div>
+                   <div className="flex flex-col items-end gap-1">
+                      <div className="text-[7px] text-gray-400 max-w-[120px] text-right">Rua das Flores, 123 - Centro, Sorocaba/SP</div>
+                      <div className="w-8 h-8 bg-gray-100 border text-[6px] flex items-center justify-center">QR</div>
+                   </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => {
+                  updateSettingsGroup('documents', 'selectedModel', previewModel)
+                  setPreviewModel(null)
+                  alert(`Modelo ${previewModel === 'classic' ? 'Clássico' : previewModel === 'minimal' ? 'Minimalista' : 'Premium'} selecionado. Clique em "Salvar Alterações" no topo para aplicar.`)
+              }} className="bg-blue-600 text-white">Usar este modelo</Button>
+            </div>
+          </Modal>
+        )}
       </div>
     </Layout>
   )

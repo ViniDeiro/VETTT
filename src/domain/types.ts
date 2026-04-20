@@ -68,6 +68,7 @@ export interface User {
   createdAt?: string;
   lastAccessAt?: string;
   teamMemberId?: string;
+  password?: string;
 }
 
 export interface TeamMember {
@@ -489,6 +490,7 @@ export interface CashFlowEntry {
   ownerName?: string;
   professionalName?: string;
   description: string;
+  paymentMethod?: string;
   referenceId?: string; // e.g., receivableId or purchaseId
 }
 
