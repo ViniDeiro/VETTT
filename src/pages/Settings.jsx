@@ -7,6 +7,7 @@ import { Label } from '../components/ui/Label'
 import {
   Building,
   Download,
+  Eye,
   FileText,
   MessageSquare,
   Palette,
@@ -18,6 +19,7 @@ import {
   Users,
   Workflow
 } from 'lucide-react'
+import { Modal } from '../components/ui/Modal'
 import { mockDB } from '../services/mockDatabase'
 import { pdfService } from '../services/pdfService'
 
