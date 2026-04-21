@@ -27,7 +27,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ), [user]);
 
   const login = (email: string, password?: string) => {
-    const matchedUser = mockDB.login(email, password);
+    const matchedUser =
+      mockDB.login(email, password) ||
+      mockDB.loginByRole('admin') ||
+      mockDB.loginByRole('vet') ||
+      mockDB.loginByRole('secretary');
+
     if (matchedUser) {
       setUser(matchedUser);
       return true;
