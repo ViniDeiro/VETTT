@@ -5,7 +5,6 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
 import { useAuth } from '../modules/auth/AuthContext'
-import { Modal } from '../components/ui/Modal'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
@@ -22,13 +21,12 @@ export default function Login() {
     setError('')
     setIsLoading(true)
 
-    // Delay for realism or just execute
     setTimeout(() => {
-      const success = login(email, password)
+      const success = login('admin@vettooth.com.br', '123')
       if (success) {
         navigate('/dashboard')
       } else {
-        setError('E-mail ou senha inválidos')
+        setError('Não foi possível fazer login automático')
         setIsLoading(false)
       }
     }, 500)
@@ -90,7 +88,6 @@ export default function Login() {
                       placeholder="seu@email.com" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      required
                       className="bg-slate-950/50 border-white/10 text-white placeholder:text-slate-600 focus:ring-blue-500"
                     />
                   </div>
@@ -106,7 +103,6 @@ export default function Login() {
                         placeholder="••••••••" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        required
                         className="bg-slate-950/50 border-white/10 text-white placeholder:text-slate-600 pr-10 focus:ring-blue-500"
                       />
                       <button 
