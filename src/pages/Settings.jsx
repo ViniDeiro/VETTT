@@ -18,7 +18,6 @@ import {
   Settings as SettingsIcon,
   Shield,
   Trash2,
-  Users,
   Workflow
 } from 'lucide-react'
 import { Modal } from '../components/ui/Modal'
@@ -239,6 +238,7 @@ export default function Settings() {
   const [selectedInventoryQuantity, setSelectedInventoryQuantity] = useState('1')
   const [newProcedure, setNewProcedure] = useState(EMPTY_PROCEDURE_FORM)
   const [editingProcedureId, setEditingProcedureId] = useState(null)
+  const [editingSystemUserId, setEditingSystemUserId] = useState(null)
   const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
   const [teamForm, setTeamForm] = useState(EMPTY_TEAM_FORM)
   const [consultationForm, setConsultationForm] = useState(EMPTY_CONSULTATION_FORM)
@@ -341,6 +341,12 @@ export default function Settings() {
     () => profiles.find(profile => profile.id === selectedProfileId) || null,
     [profiles, selectedProfileId]
   )
+  const usersWithTeamData = useMemo(() => (
+    users.map(user => ({
+      ...user,
+      teamMember: teamMembers.find(member => member.id === user.teamMemberId || member.userId === user.id) || null
+    }))
+  ), [users, teamMembers])
 
   const procedureOperationalCost = useMemo(() => (
     Number(newProcedure.items.reduce((total, item) => total + ((item.costUnit || 0) * item.quantity), 0).toFixed(2))
@@ -622,66 +628,162 @@ export default function Settings() {
     setProcedures(prev => prev.filter(item => item.id !== id))
   }
 
-  const addUser = () => {
+  const resetSystemUserForm = () => {
+    const defaultProfile = profiles.find(profile => profile.baseRole === 'secretary') || profiles[0]
+    setUserForm({
+      ...EMPTY_USER_FORM,
+      accessProfileId: defaultProfile?.id || ''
+    })
+    setTeamForm(EMPTY_TEAM_FORM)
+    setEditingSystemUserId(null)
+  }
+
+  const startSystemUserEdit = userId => {
+    const user = users.find(item => item.id === userId)
+    if (!user) return
+    const linkedTeamMember = teamMembers.find(member => member.id === user.teamMemberId || member.userId === user.id)
+
+    setEditingSystemUserId(user.id)
+    setUserForm({
+      name: user.fullName || user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      functionTitle: user.functionTitle || '',
+      role: user.role || 'secretary',
+      accessProfileId: user.accessProfileId || '',
+      status: user.status || 'active',
+      password: ''
+    })
+    setTeamForm({
+      ...EMPTY_TEAM_FORM,
+      name: linkedTeamMember?.name || user.fullName || user.name || '',
+      functionTitle: linkedTeamMember?.functionTitle || user.functionTitle || '',
+      specialty: linkedTeamMember?.specialty || '',
+      crmv: linkedTeamMember?.crmv || '',
+      cpf: linkedTeamMember?.cpf || '',
+      phone: linkedTeamMember?.phone || user.phone || '',
+      email: linkedTeamMember?.email || user.email || '',
+      signature: linkedTeamMember?.signature || '',
+      photo: linkedTeamMember?.photo || '',
+      status: linkedTeamMember?.status || user.status || 'active'
+    })
+  }
+
+  const saveSystemUser = () => {
     if (!userForm.name || !userForm.email || !userForm.phone || !userForm.functionTitle || !userForm.accessProfileId) {
       alert('Preencha nome, email, telefone, funcao e perfil.')
       return
     }
+    if (!editingSystemUserId && !userForm.password) {
+      alert('Informe a senha inicial para o usuário.')
+      return
+    }
 
-    const newUser = mockDB.createUser({
-      ...userForm,
-      name: userForm.name,
-      fullName: userForm.name
-    })
+    const selectedAccessProfile = profiles.find(profile => profile.id === userForm.accessProfileId)
+    const resolvedRole = selectedAccessProfile?.baseRole || userForm.role || 'secretary'
+    const normalizedName = userForm.name.trim()
 
-    setUsers(prev => [...prev, newUser])
+    if (editingSystemUserId) {
+      const existingUser = users.find(item => item.id === editingSystemUserId)
+      if (!existingUser) {
+        alert('Usuário não encontrado para edição.')
+        return
+      }
+
+      const userUpdates = {
+        name: normalizedName,
+        fullName: normalizedName,
+        role: resolvedRole,
+        email: userForm.email,
+        phone: userForm.phone,
+        functionTitle: userForm.functionTitle,
+        accessProfileId: userForm.accessProfileId,
+        status: userForm.status,
+        ...(userForm.password ? { password: userForm.password } : {})
+      }
+      const updatedUser = mockDB.updateUser(existingUser.id, userUpdates)
+      if (!updatedUser) {
+        alert('Nao foi possivel atualizar o usuário.')
+        return
+      }
+
+      const linkedTeamMember = teamMembers.find(member => member.id === existingUser.teamMemberId || member.userId === existingUser.id)
+      if (linkedTeamMember) {
+        mockDB.updateTeamMember(linkedTeamMember.id, {
+          name: normalizedName,
+          functionTitle: userForm.functionTitle,
+          phone: userForm.phone,
+          email: userForm.email,
+          status: userForm.status,
+          specialty: teamForm.specialty,
+          crmv: teamForm.crmv,
+          cpf: teamForm.cpf,
+          signature: teamForm.signature,
+          photo: teamForm.photo
+        })
+      } else {
+        const newMember = mockDB.createTeamMember({
+          name: normalizedName,
+          functionTitle: userForm.functionTitle,
+          specialty: teamForm.specialty,
+          crmv: teamForm.crmv,
+          cpf: teamForm.cpf,
+          phone: userForm.phone,
+          email: userForm.email,
+          signature: teamForm.signature,
+          photo: teamForm.photo,
+          status: userForm.status,
+          userId: existingUser.id
+        })
+        mockDB.updateUser(existingUser.id, { teamMemberId: newMember.id })
+      }
+    } else {
+      const newMember = mockDB.createTeamMember({
+        name: normalizedName,
+        functionTitle: userForm.functionTitle,
+        specialty: teamForm.specialty,
+        crmv: teamForm.crmv,
+        cpf: teamForm.cpf,
+        phone: userForm.phone,
+        email: userForm.email,
+        signature: teamForm.signature,
+        photo: teamForm.photo,
+        status: userForm.status
+      })
+
+      const newUser = mockDB.createUser({
+        name: normalizedName,
+        fullName: normalizedName,
+        role: resolvedRole,
+        email: userForm.email,
+        phone: userForm.phone,
+        functionTitle: userForm.functionTitle,
+        accessProfileId: userForm.accessProfileId,
+        status: userForm.status,
+        password: userForm.password,
+        teamMemberId: newMember.id
+      })
+      mockDB.updateTeamMember(newMember.id, { userId: newUser.id })
+    }
+
+    setUsers([...mockDB.getUsers()])
+    setTeamMembers([...mockDB.getTeamMembers()])
     setAuditLogs([...mockDB.getAuditLogs()])
-    setUserForm({
-      ...EMPTY_USER_FORM,
-      accessProfileId: userForm.accessProfileId
-    })
+    resetSystemUserForm()
   }
 
-  const updateUserField = (userId, field, value) => {
-    const updated = mockDB.updateUser(userId, { [field]: value })
-    if (!updated) return
-    setUsers(prev => prev.map(user => user.id === userId ? updated : user))
-    setAuditLogs([...mockDB.getAuditLogs()])
-  }
-
-  const removeUser = userId => {
+  const removeSystemUser = userId => {
+    const linkedTeamMember = teamMembers.find(member => member.id === users.find(user => user.id === userId)?.teamMemberId || member.userId === userId)
     mockDB.deleteUser(userId)
-    setUsers(prev => prev.filter(user => user.id !== userId))
-    setAuditLogs([...mockDB.getAuditLogs()])
-  }
-
-  const addTeamMember = () => {
-    if (!teamForm.name || !teamForm.functionTitle || !teamForm.phone) {
-      alert('Preencha nome, funcao e telefone.')
-      return
+    if (linkedTeamMember) {
+      mockDB.deleteTeamMember(linkedTeamMember.id)
     }
-
-    const newMember = mockDB.createTeamMember(teamForm)
-    setTeamMembers(prev => [...prev, newMember])
+    setUsers([...mockDB.getUsers()])
+    setTeamMembers([...mockDB.getTeamMembers()])
     setAuditLogs([...mockDB.getAuditLogs()])
-    setTeamForm(EMPTY_TEAM_FORM)
-  }
-
-  const updateTeamMemberField = (memberId, field, value) => {
-    const updated = mockDB.updateTeamMember(memberId, { [field]: value })
-    if (!updated) return
-    setTeamMembers(prev => prev.map(member => member.id === memberId ? updated : member))
-    setAuditLogs([...mockDB.getAuditLogs()])
-  }
-
-  const removeTeamMember = memberId => {
-    const removed = mockDB.deleteTeamMember(memberId)
-    if (!removed) {
-      alert('Nao e possivel excluir um membro vinculado a usuario do sistema.')
-      return
+    if (editingSystemUserId === userId) {
+      resetSystemUserForm()
     }
-    setTeamMembers(prev => prev.filter(member => member.id !== memberId))
-    setAuditLogs([...mockDB.getAuditLogs()])
   }
 
   const addConsultationTemplate = () => {
@@ -1785,145 +1887,116 @@ export default function Settings() {
 
             <div className="rounded-lg border p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900">Usuários do sistema</p>
-                <span className="text-xs text-gray-500">Campos obrigatórios de acesso, status, cadastro e último acesso</span>
+                <div>
+                  <p className="font-semibold text-gray-900">Usuários do sistema + configuração da equipe</p>
+                  <p className="text-xs text-gray-500">Cadastro unificado de acesso, perfil, status, função, contato, CPF, especialidade, assinatura e foto.</p>
+                </div>
+                {editingSystemUserId && (
+                  <Button type="button" variant="outline" size="sm" onClick={resetSystemUserForm}>
+                    Cancelar edição
+                  </Button>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <Input placeholder="Nome completo" value={userForm.name} onChange={event => setUserForm(prev => ({ ...prev, name: event.target.value }))} />
                 <Input placeholder="E-mail" value={userForm.email} onChange={event => setUserForm(prev => ({ ...prev, email: event.target.value }))} />
                 <Input placeholder="Telefone" value={userForm.phone} onChange={event => setUserForm(prev => ({ ...prev, phone: maskPhone(event.target.value) }))} />
                 <Input placeholder="Função" value={userForm.functionTitle} onChange={event => setUserForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
-                <Input placeholder="Senha" type="password" value={userForm.password} onChange={event => setUserForm(prev => ({ ...prev, password: event.target.value }))} />
+                <Input placeholder={editingSystemUserId ? 'Nova senha (opcional)' : 'Senha'} type="password" value={userForm.password} onChange={event => setUserForm(prev => ({ ...prev, password: event.target.value }))} />
                 <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.accessProfileId} onChange={event => setUserForm(prev => ({ ...prev, accessProfileId: event.target.value }))}>
                   {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
                 </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                <Input placeholder="Especialidade" value={teamForm.specialty} onChange={event => setTeamForm(prev => ({ ...prev, specialty: event.target.value }))} />
+                <Input placeholder="CRMV" value={teamForm.crmv} onChange={event => setTeamForm(prev => ({ ...prev, crmv: event.target.value }))} />
+                <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: maskCPF(event.target.value) }))} />
+                <Input placeholder="Assinatura" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} />
+                <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.status} onChange={event => setUserForm(prev => ({ ...prev, status: event.target.value }))}>
+                  <option value="active">Ativo</option>
+                  <option value="inactive">Inativo</option>
+                </select>
                 <div className="flex gap-2">
-                  <Button type="button" onClick={addUser} className="flex-1 gap-2">
+                  <Input placeholder="Foto URL" value={teamForm.photo} onChange={event => setTeamForm(prev => ({ ...prev, photo: event.target.value }))} className="flex-1" />
+                  <Button type="button" variant="outline" size="icon" onClick={() => document.getElementById('system-user-photo-upload')?.click()}>
                     <Plus className="h-4 w-4" />
-                    Adicionar
                   </Button>
+                  <input
+                    type="file"
+                    id="system-user-photo-upload"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0]
+                      if (!file) return
+                      const reader = new FileReader()
+                      reader.onload = readEvent => setTeamForm(prev => ({ ...prev, photo: readEvent.target?.result }))
+                      reader.readAsDataURL(file)
+                    }}
+                  />
                 </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" onClick={saveSystemUser} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  {editingSystemUserId ? 'Salvar alterações' : 'Adicionar usuário'}
+                </Button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50">
-                      <th className="p-3 text-left">Nome</th>
-                      <th className="p-3 text-left">Contato</th>
-                      <th className="p-3 text-left">Função</th>
-                      <th className="p-3 text-left">Perfil</th>
-                      <th className="p-3 text-left">Status</th>
-                      <th className="p-3 text-left">Cadastro</th>
-                      <th className="p-3 text-left">Último acesso</th>
+                      <th className="p-3 text-left">Nome e contato</th>
+                      <th className="p-3 text-left">Função e especialidade</th>
+                      <th className="p-3 text-left">Documentação</th>
+                      <th className="p-3 text-left">Perfil e status</th>
+                      <th className="p-3 text-left">Cadastro e acesso</th>
                       <th className="p-3 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(user => (
-                      <tr key={user.id} className="border-b last:border-0">
-                        <td className="p-3">
-                          <div className="font-medium text-gray-900">{user.fullName || user.name}</div>
-                          <div className="text-xs text-gray-500">{user.email}</div>
-                        </td>
-                        <td className="p-3">{user.phone || '-'}</td>
-                        <td className="p-3">{user.functionTitle || '-'}</td>
-                        <td className="p-3">
-                          <select className="w-full px-2 py-2 rounded-md border border-input bg-background" value={user.accessProfileId || ''} onChange={event => updateUserField(user.id, 'accessProfileId', event.target.value)}>
-                            {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-                          </select>
-                        </td>
-                        <td className="p-3">
-                          <select className="w-full px-2 py-2 rounded-md border border-input bg-background" value={user.status || 'active'} onChange={event => updateUserField(user.id, 'status', event.target.value)}>
-                            <option value="active">Ativo</option>
-                            <option value="inactive">Inativo</option>
-                          </select>
-                        </td>
-                        <td className="p-3 text-xs text-gray-500">{formatDateTime(user.createdAt)}</td>
-                        <td className="p-3 text-xs text-gray-500">{formatDateTime(user.lastAccessAt)}</td>
-                        <td className="p-3 text-right">
-                          <Button type="button" variant="outline" size="sm" onClick={() => removeUser(user.id)} className="text-red-600">
-                            Remover
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                    {usersWithTeamData.map(user => {
+                      const profileName = profiles.find(profile => profile.id === user.accessProfileId)?.name || '-'
+                      return (
+                        <tr key={user.id} className="border-b last:border-0">
+                          <td className="p-3">
+                            <p className="font-medium text-gray-900">{user.fullName || user.name}</p>
+                            <p className="text-xs text-gray-500">{user.email || '-'}</p>
+                            <p className="text-xs text-gray-500">{user.phone || '-'}</p>
+                          </td>
+                          <td className="p-3">
+                            <p>{user.functionTitle || '-'}</p>
+                            <p className="text-xs text-gray-500">{user.teamMember?.specialty || 'Sem especialidade'}</p>
+                          </td>
+                          <td className="p-3">
+                            <p className="text-xs text-gray-600">CPF: {user.teamMember?.cpf || '-'}</p>
+                            <p className="text-xs text-gray-600">CRMV: {user.teamMember?.crmv || '-'}</p>
+                            <p className="text-xs text-gray-600">Assinatura: {user.teamMember?.signature || '-'}</p>
+                          </td>
+                          <td className="p-3">
+                            <p>{profileName}</p>
+                            <p className={`text-xs ${user.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>{user.status === 'active' ? 'Ativo' : 'Inativo'}</p>
+                          </td>
+                          <td className="p-3 text-xs text-gray-500">
+                            <p>Cadastro: {formatDateTime(user.createdAt)}</p>
+                            <p>Último acesso: {formatDateTime(user.lastAccessAt)}</p>
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={() => startSystemUserEdit(user.id)}>
+                                Editar
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => removeSystemUser(user.id)} className="text-red-600">
+                                Remover
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Configuração da Equipe
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-              <Input placeholder="Nome" value={teamForm.name} onChange={event => setTeamForm(prev => ({ ...prev, name: event.target.value }))} />
-              <Input placeholder="Função" value={teamForm.functionTitle} onChange={event => setTeamForm(prev => ({ ...prev, functionTitle: event.target.value }))} />
-              <Input placeholder="Especialidade" value={teamForm.specialty} onChange={event => setTeamForm(prev => ({ ...prev, specialty: event.target.value }))} />
-              <Input placeholder="CRMV" value={teamForm.crmv} onChange={event => setTeamForm(prev => ({ ...prev, crmv: event.target.value }))} />
-              <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: maskCPF(event.target.value) }))} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-              <Input placeholder="Telefone" value={teamForm.phone} onChange={event => setTeamForm(prev => ({ ...prev, phone: maskPhone(event.target.value) }))} />
-              <Input placeholder="E-mail" value={teamForm.email} onChange={event => setTeamForm(prev => ({ ...prev, email: event.target.value }))} />
-              <Input placeholder="Assinatura" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} />
-              <div className="flex gap-1">
-                <Input placeholder="Foto URL" value={teamForm.photo} onChange={event => setTeamForm(prev => ({ ...prev, photo: event.target.value }))} className="flex-1" />
-                <Button variant="outline" size="icon" onClick={() => document.getElementById('team-photo-upload').click()}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-                <input 
-                  type="file" 
-                  id="team-photo-upload" 
-                  className="hidden" 
-                  accept="image/*" 
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) {
-                      const reader = new FileReader()
-                      reader.onload = (re) => setTeamForm(prev => ({ ...prev, photo: re.target?.result }))
-                      reader.readAsDataURL(file)
-                    }
-                  }} 
-                />
-              </div>
-              <Button type="button" onClick={addTeamMember} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Adicionar membro
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {teamMembers.map(member => (
-                <div key={member.id} className="rounded-lg border p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-gray-900">{member.name}</p>
-                      <p className="text-sm text-gray-500">{member.functionTitle}</p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => removeTeamMember(member.id)} className="text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <Input value={member.specialty || ''} onChange={event => updateTeamMemberField(member.id, 'specialty', event.target.value)} placeholder="Especialidade" />
-                    <Input value={member.crmv || ''} onChange={event => updateTeamMemberField(member.id, 'crmv', event.target.value)} placeholder="CRMV" />
-                    <Input value={member.phone || ''} onChange={event => updateTeamMemberField(member.id, 'phone', event.target.value)} placeholder="Telefone" />
-                    <Input value={member.email || ''} onChange={event => updateTeamMemberField(member.id, 'email', event.target.value)} placeholder="E-mail" />
-                    <Input value={member.signature || ''} onChange={event => updateTeamMemberField(member.id, 'signature', event.target.value)} placeholder="Assinatura digital" />
-                    <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={member.status} onChange={event => updateTeamMemberField(member.id, 'status', event.target.value)}>
-                      <option value="active">Ativo</option>
-                      <option value="inactive">Inativo</option>
-                    </select>
-                  </div>
-                  <p className="text-xs text-gray-500">Cadastro: {formatDateTime(member.createdAt)}</p>
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>
