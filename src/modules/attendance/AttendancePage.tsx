@@ -79,7 +79,7 @@ export const AttendancePage: React.FC = () => {
   const [currentAttendance, setCurrentAttendance] = useState<Attendance | null>(null);
   const [anamnesis, setAnamnesis] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
-  const [serviceFee, setServiceFee] = useState(150);
+  const [serviceFee, setServiceFee] = useState(0);
   const [consumedItems, setConsumedItems] = useState<ConsumptionItem[]>([]);
   const [selectedItemToAdd, setSelectedItemToAdd] = useState<InventoryItem | null>(null);
   const [qtyToAdd, setQtyToAdd] = useState(0);
@@ -182,11 +182,19 @@ export const AttendancePage: React.FC = () => {
   // Consultation Type State
   const [showConsultationTypes, setShowConsultationTypes] = useState(false);
   const settings = mockDB.getSettings();
+  const resolveConsultationIcon = (template: { name?: string; icon?: string }) => {
+    if (template.icon) return template.icon;
+
+    const normalizedName = (template.name || '').toLowerCase();
+    if (normalizedName.includes('odonto')) return '🦷';
+    if (normalizedName.includes('cirurgia')) return '✂️';
+    if (normalizedName.includes('clinica')) return '🩺';
+    return '➕';
+  };
   const consultationTypes = settings.consultationTemplates.map(template => ({
     id: template.id,
     label: template.name,
-    icon: template.name.toLowerCase().includes('odonto') ? Plus : 
-          template.name.toLowerCase().includes('cirurgia') ? Scissors : Activity,
+    icon: resolveConsultationIcon(template),
     template: template
   }));
 
@@ -219,6 +227,7 @@ export const AttendancePage: React.FC = () => {
       const newAttendance = mockDB.createAttendance({
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
+        ownerId: selectedPatient.ownerId,
         ownerName,
         vetId: 'current-vet-id',
         date: new Date().toLocaleDateString('pt-BR'),
@@ -239,7 +248,7 @@ export const AttendancePage: React.FC = () => {
         setServiceFee(template.defaultValue || 0);
       } else {
         setAnamnesis('');
-        setServiceFee(isRetorno ? 0 : 150);
+        setServiceFee(0);
       }
       
       setActiveTab('attendance_active');
@@ -477,6 +486,7 @@ export const AttendancePage: React.FC = () => {
         setVitals({});
         setAnamnesis('');
         setDiagnosis('');
+        setServiceFee(0);
         setActiveTab('overview');
       } catch (e: any) {
         console.error('Erro ao finalizar:', e);
@@ -504,6 +514,7 @@ export const AttendancePage: React.FC = () => {
               setCurrentAttendance(activeAttendance);
               setConsumedItems([]);
               setVaccines([]);
+              setServiceFee(0);
               resetProcedureForm();
               setActiveTab('attendance_active');
           } else {
@@ -1514,6 +1525,7 @@ export const AttendancePage: React.FC = () => {
                                 if(confirm('Tem certeza que deseja cancelar? Dados não salvos serão perdidos.')) {
                                     setCurrentAttendance(null);
                                     setActiveTab('overview');
+                                    setServiceFee(0);
                                 }
                             }}
                         >
@@ -1737,7 +1749,7 @@ export const AttendancePage: React.FC = () => {
                     className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-all"
                     onClick={() => handleSelectConsultationType(type.id, type.label)}
                   >
-                    <type.icon className="h-8 w-8 text-blue-600" />
+                    <span className="text-3xl leading-none">{type.icon}</span>
                     <span className="font-medium text-gray-700">{type.label}</span>
                   </Button>
                 ))}

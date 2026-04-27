@@ -333,6 +333,7 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
     fantasyName: 'Clinica Veterinaria VetTooth',
     legalName: 'VetTooth Servicos Veterinarios LTDA',
     cnpj: '12.345.678/0001-99',
+    cpf: '',
     address: 'Rua das Flores',
     number: '123',
     complement: '',
@@ -382,8 +383,11 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       speciesFocus: 'Caes',
       defaultValue: 180,
       duration: '30 min',
+      icon: '🩺',
       anamnesisText: 'Queixa principal, alimentacao, uso de medicamentos e historico recente.',
       checklist: ['Peso', 'Temperatura', 'Avaliacao oral'],
+      physicalExamChecklist: ['Inspecao geral', 'Mucosas', 'Palpacao abdominal'],
+      diagnosisChecklist: ['Hipotese principal', 'Diferenciais', 'Plano inicial'],
       requiredFields: ['Queixa principal', 'Diagnostico']
     },
     {
@@ -392,8 +396,11 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       speciesFocus: 'Felinos',
       defaultValue: 260,
       duration: '50 min',
+      icon: '🦷',
       anamnesisText: 'Odor oral, sangramento gengival, dor, alimentacao e higiene oral.',
       checklist: ['Odontograma', 'Anestesia', 'Termo assinado'],
+      physicalExamChecklist: ['Avaliacao oral completa', 'Dor a palpacao', 'Sangramento gengival'],
+      diagnosisChecklist: ['Doenca periodontal', 'Fraturas dentarias', 'Plano odontologico'],
       requiredFields: ['Odontograma', 'Plano terapeutico']
     },
     {
@@ -402,8 +409,11 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       speciesFocus: 'Equinos',
       defaultValue: 500,
       duration: '90 min',
+      icon: '✂️',
       anamnesisText: 'Jejum, risco anestesico, hemograma e autorizacoes.',
       checklist: ['Hemograma', 'Assinatura', 'Checklist pre-operatorio'],
+      physicalExamChecklist: ['Avaliacao cardiaca', 'Avaliacao respiratoria', 'Acesso venoso'],
+      diagnosisChecklist: ['Indicacao cirurgica', 'Risco anestesico', 'Planejamento cirurgico'],
       requiredFields: ['Consentimento', 'Plano anestesico']
     }
   ],
@@ -413,19 +423,33 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       type: 'receita',
       title: 'Receita padrao',
       content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\nPrescricao: {conteudo}',
-      isDefault: true
+      isDefault: true,
+      useInAttendance: true,
+      includePatientName: true,
+      includeOwnerName: true,
+      includeVetName: true,
+      includeVetCrmv: true
     },
     {
       id: 'doc-2',
       type: 'atestado',
       title: 'Atestado clinico',
-      content: 'Atesto para os devidos fins que {nome_paciente} foi atendido em {data}.'
+      content: 'Atesto para os devidos fins que {nome_paciente} foi atendido em {data}.',
+      useInAttendance: true,
+      includePatientName: true,
+      includeOwnerName: true,
+      includeVetName: true,
+      includeVetCrmv: true
     },
     {
       id: 'doc-3',
       type: 'alta medica',
       title: 'Alta padrao',
-      content: 'Paciente liberado com orientacoes de retorno e observacao domiciliar.'
+      content: 'Paciente liberado com orientacoes de retorno e observacao domiciliar.',
+      useInAttendance: true,
+      includePatientName: true,
+      includeOwnerName: true,
+      includeVetName: true
     }
   ],
   automatedMessages: [
@@ -713,6 +737,14 @@ class MockDatabaseService {
       ...template,
       isDefault: Boolean(template.isDefault) || index === 0
     }));
+    const normalizedConsultationTemplates = (settings?.consultationTemplates || INITIAL_GENERAL_SETTINGS.consultationTemplates).map(template => ({
+      ...template,
+      icon: template.icon || '➕',
+      checklist: Array.isArray(template.checklist) ? template.checklist : [],
+      requiredFields: Array.isArray(template.requiredFields) ? template.requiredFields : [],
+      physicalExamChecklist: Array.isArray(template.physicalExamChecklist) ? template.physicalExamChecklist : [],
+      diagnosisChecklist: Array.isArray(template.diagnosisChecklist) ? template.diagnosisChecklist : []
+    }));
 
     const hasDefaultDocumentTemplate = normalizedDocumentTemplates.some(template => template.isDefault);
 
@@ -728,7 +760,7 @@ class MockDatabaseService {
       audit: { ...INITIAL_GENERAL_SETTINGS.audit, ...(settings?.audit || {}) },
       security: { ...INITIAL_GENERAL_SETTINGS.security, ...(settings?.security || {}) },
       dashboard: { ...INITIAL_GENERAL_SETTINGS.dashboard, ...(settings?.dashboard || {}) },
-      consultationTemplates: settings?.consultationTemplates || INITIAL_GENERAL_SETTINGS.consultationTemplates,
+      consultationTemplates: normalizedConsultationTemplates,
       documentTemplates: normalizedDocumentTemplates.map((template, index) => ({
         ...template,
         isDefault: hasDefaultDocumentTemplate ? Boolean(template.isDefault) : index === 0

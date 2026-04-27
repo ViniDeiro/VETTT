@@ -64,6 +64,20 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
     }
   }, [isOpen, patient.id]);
 
+  useEffect(() => {
+    const normalizedInput = vaccineNameInput.trim().toLowerCase();
+    if (!normalizedInput) return;
+
+    const stockMatch = inventory.find(item => item.name.trim().toLowerCase() === normalizedInput) || null;
+    if (!stockMatch) return;
+
+    setSelectedVaccineToAdd(stockMatch);
+    setVaccineManufacturer(current => current || stockMatch.manufacturer || stockMatch.supplier || '');
+    setVaccineBatch(current => current || stockMatch.batchNumber || '');
+    setVaccineManufacturingDate(current => current || stockMatch.manufacturingDate || '');
+    setVaccineExpiry(current => current || stockMatch.expiryDate || stockMatch.validity || '');
+  }, [vaccineNameInput, inventory]);
+
   const handleAddVaccine = () => {
       const finalName = selectedVaccineToAdd ? selectedVaccineToAdd.name : vaccineNameInput;
 
@@ -77,7 +91,7 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
               name: finalName,
               dose: vaccineDose,
               batch: vaccineBatch,
-              manufacturer: vaccineManufacturer || selectedVaccineToAdd?.supplier || 'Desconhecido',
+              manufacturer: vaccineManufacturer || selectedVaccineToAdd?.manufacturer || selectedVaccineToAdd?.supplier || 'Desconhecido',
               manufacturingDate: vaccineManufacturingDate,
               expiryDate: vaccineExpiry,
               applicationDate: new Date().toLocaleDateString('pt-BR'),
@@ -116,7 +130,9 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
           // Reset Form
           setSelectedVaccineToAdd(null);
           setVaccineNameInput('');
+          setVaccineManufacturer('');
           setVaccineBatch('');
+          setVaccineManufacturingDate('');
           setVaccineExpiry('');
           setVaccineNotes('');
           setNextDoseDate('');
@@ -233,6 +249,10 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
                                   onChange={e => {
                                       setVaccineNameInput(e.target.value);
                                       setSelectedVaccineToAdd(null);
+                                      setVaccineManufacturer('');
+                                      setVaccineBatch('');
+                                      setVaccineManufacturingDate('');
+                                      setVaccineExpiry('');
                                   }}
                                   placeholder="Ex: Rabisin, Lexton Gold..."
                                   list="vaccine-stock-list"
@@ -405,6 +425,7 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
                                                           <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium">{vac.dose}</span>
                                                       </div>
                                                       <p className="text-sm text-gray-600">Fabricante: {vac.manufacturer} | Lote: {vac.batch}</p>
+                                                      <p className="text-sm text-gray-600">Fabricação: {vac.manufacturingDate || '-'} | Validade: {vac.expiryDate || '-'}</p>
                                                       <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
                                                           <Calendar className="h-4 w-4" /> Aplicado em: {vac.applicationDate}
                                                       </p>

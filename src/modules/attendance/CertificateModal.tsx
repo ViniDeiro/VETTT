@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
-import { Patient, Attendance } from '../../domain/types';
+import { Patient, Attendance, DocumentTemplateDefinition, Owner, TeamMember } from '../../domain/types';
 import { pdfService } from '../../services/pdfService';
 import { FileText, Printer } from 'lucide-react';
+import { mockDB } from '../../services/mockDatabase';
 
 interface CertificateModalProps {
   isOpen: boolean;
@@ -16,15 +17,105 @@ interface CertificateModalProps {
 export const CertificateModal: React.FC<CertificateModalProps> = ({
   isOpen,
   onClose,
-  attendance,
+  attendance: _attendance,
   patient
 }) => {
   const [type, setType] = useState<'health' | 'surgery' | 'euthanasia' | 'travel'>('health');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [customText, setCustomText] = useState('');
+  const settings = mockDB.getSettings();
+  const currentUser = mockDB.getCurrentUser();
+  const vetMember = mockDB.getLinkedTeamMember(currentUser) || null;
+  const owner = mockDB.getOwners().find(item => item.id === patient.ownerId) || null;
+  const availableTemplates = useMemo(
+    () => settings.documentTemplates.filter(template => template.useInAttendance !== false),
+    [settings.documentTemplates]
+  );
+  const selectedTemplate = availableTemplates.find(template => template.id === selectedTemplateId) || null;
+
+  const mapTemplateTypeToCertificateType = (templateType?: string): 'health' | 'surgery' | 'euthanasia' | 'travel' => {
+    const normalizedType = String(templateType || '').toLowerCase();
+    if (normalizedType.includes('cirurg')) return 'surgery';
+    if (normalizedType.includes('eutanas')) return 'euthanasia';
+    if (normalizedType.includes('viagem')) return 'travel';
+    return 'health';
+  };
+
+  const buildTextFromTemplate = (
+    template: DocumentTemplateDefinition,
+    selectedPatient: Patient,
+    selectedOwner: Owner | null,
+    selectedVet: TeamMember | null,
+    freeText: string
+  ) => {
+    const now = new Date();
+    const ownerAddress = [
+      selectedOwner?.street || '',
+      selectedOwner?.number || '',
+      selectedOwner?.neighborhood || '',
+      selectedOwner?.city || '',
+      selectedOwner?.state || '',
+      selectedOwner?.zipCode || ''
+    ].filter(Boolean).join(', ');
+
+    const contentValue = freeText.trim() || 'Sem conteúdo adicional informado.';
+    const replacements: Record<string, string> = {
+      nome_paciente: selectedPatient.name || 'Não informado',
+      especie_paciente: selectedPatient.species || 'Não informado',
+      raca_paciente: selectedPatient.breed || 'Não informado',
+      nome_tutor: selectedOwner?.name || selectedPatient.ownerName || 'Não informado',
+      telefone_tutor: selectedOwner?.phone || 'Não informado',
+      endereco_tutor: ownerAddress || selectedOwner?.address || 'Não informado',
+      nome_vet: selectedVet?.name || currentUser?.fullName || currentUser?.name || 'Médico Veterinário',
+      crmv_vet: selectedVet?.crmv || 'Não informado',
+      cpf_vet: selectedVet?.cpf || 'Não informado',
+      assinatura_vet: selectedVet?.signature || '____________________________',
+      data: now.toLocaleDateString('pt-BR'),
+      conteudo: contentValue
+    };
+
+    let finalText = template.content || '';
+    Object.entries(replacements).forEach(([key, value]) => {
+      finalText = finalText.replaceAll(`{${key}}`, value);
+    });
+
+    const extraBlocks: string[] = [];
+    if (template.includePatientData) {
+      extraBlocks.push(`Dados do paciente: ${selectedPatient.name} - ${selectedPatient.species} - ${selectedPatient.breed}`);
+    }
+    if (template.includeOwnerAddress) {
+      extraBlocks.push(`Endereço do tutor: ${replacements.endereco_tutor}`);
+    }
+    if (template.includeVetName) {
+      extraBlocks.push(`Veterinário responsável: ${replacements.nome_vet}`);
+    }
+    if (template.includeVetCrmv) {
+      extraBlocks.push(`CRMV: ${replacements.crmv_vet}`);
+    }
+    if (template.includeVetCpf) {
+      extraBlocks.push(`CPF: ${replacements.cpf_vet}`);
+    }
+    if (template.includeVetSignature) {
+      extraBlocks.push(`Assinatura: ${replacements.assinatura_vet}`);
+    }
+
+    const cleanedText = finalText.trim();
+    const extras = extraBlocks.join('\n');
+    if (cleanedText && extras) return `${cleanedText}\n\n${extras}`;
+    return cleanedText || extras || contentValue;
+  };
 
   const handleGenerate = () => {
-    // We pass the actual owner details dynamically so the PDF can be accurate
-    const ownerName = patient.ownerName || 'Desconhecido';
+    const ownerName = owner?.name || patient.ownerName || 'Desconhecido';
+
+    if (selectedTemplate) {
+      const renderedText = buildTextFromTemplate(selectedTemplate, patient, owner, vetMember, customText);
+      const resolvedType = mapTemplateTypeToCertificateType(selectedTemplate.type);
+      pdfService.generateCertificatePdf(patient, ownerName, resolvedType, renderedText, selectedTemplate.title);
+      onClose();
+      return;
+    }
+
     pdfService.generateCertificatePdf(patient, ownerName, type, customText);
     onClose();
   };
@@ -58,7 +149,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                     className="w-full border rounded-md p-2 text-sm mt-1"
                     value={type}
                     onChange={e => {
-                        setType(e.target.value as any);
+                        setType(e.target.value as 'health' | 'surgery' | 'euthanasia' | 'travel');
+                        setSelectedTemplateId('');
                         setCustomText(''); // Reset custom text on change
                     }}
                 >
@@ -70,15 +162,46 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             </div>
 
             <div>
+                <Label>Modelo salvo em Configurações (opcional)</Label>
+                <p className="text-xs text-gray-500 mb-2">Se selecionar, este modelo passa a ser usado no lugar do padrão acima.</p>
+                <select
+                    className="w-full border rounded-md p-2 text-sm mt-1"
+                    value={selectedTemplateId}
+                    onChange={e => {
+                        setSelectedTemplateId(e.target.value);
+                        setCustomText('');
+                    }}
+                >
+                    <option value="">Usar documento padrão rápido</option>
+                    {availableTemplates.map(template => (
+                        <option key={template.id} value={template.id}>
+                            {template.title} ({template.type})
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div>
                 <Label>Texto Personalizado (Opcional)</Label>
-                <p className="text-xs text-gray-500 mb-2">Deixe em branco para usar o modelo padrão.</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  {selectedTemplate ? 'Digite para preencher o campo {conteudo} do modelo selecionado.' : 'Deixe em branco para usar o modelo padrão.'}
+                </p>
                 <textarea 
                     className="w-full border rounded-md p-2 text-sm min-h-[150px]"
                     value={customText}
                     onChange={e => setCustomText(e.target.value)}
-                    placeholder="Digite aqui para substituir o texto padrão..."
+                    placeholder={selectedTemplate ? 'Texto adicional para o modelo selecionado...' : 'Digite aqui para substituir o texto padrão...'}
                 />
             </div>
+
+            {selectedTemplate && (
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Prévia rápida do modelo selecionado</p>
+                <pre className="whitespace-pre-wrap text-xs text-gray-600 font-sans">
+                  {buildTextFromTemplate(selectedTemplate, patient, owner, vetMember, customText)}
+                </pre>
+              </div>
+            )}
 
             <Button onClick={handleGenerate} className="w-full bg-gray-800 hover:bg-gray-900 text-white h-12 text-lg">
                 <Printer className="h-4 w-4 mr-2" /> Gerar e Imprimir

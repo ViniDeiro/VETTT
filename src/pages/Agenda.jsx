@@ -151,6 +151,18 @@ const formatTimeForInput = (dateValue) => {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+const formatDate = (dateValue) => {
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return 'Data inválida'
+  return date.toLocaleDateString('pt-BR')
+}
+
+const formatTime = (dateValue) => {
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
 export default function Agenda() {
   const location = useLocation()
   const [view, setView] = useState('Semana') // Hoje, Semana, Mês

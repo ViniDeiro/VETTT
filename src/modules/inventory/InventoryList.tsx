@@ -54,6 +54,8 @@ const EMPTY_FORM: Partial<InventoryItem> = {
   batchNumber: '',
   validity: '',
   expiryDate: '',
+  manufacturingDate: '',
+  manufacturer: '',
   supplier: '',
   description: '',
   image: ''
@@ -143,6 +145,8 @@ export const InventoryList: React.FC = () => {
           batchNumber: formData.batchNumber,
           expiryDate: formData.expiryDate || formData.validity,
           validity: formData.validity || formData.expiryDate,
+          manufacturingDate: formData.manufacturingDate,
+          manufacturer: formData.manufacturer,
           description: formData.description,
           image: formData.image,
           supplier: formData.supplier
@@ -167,6 +171,8 @@ export const InventoryList: React.FC = () => {
           batchNumber: formData.batchNumber,
           expiryDate: formData.expiryDate || formData.validity,
           validity: formData.validity || formData.expiryDate,
+          manufacturingDate: formData.manufacturingDate,
+          manufacturer: formData.manufacturer,
           description: formData.description,
           image: formData.image,
           supplier: formData.supplier
@@ -203,6 +209,8 @@ export const InventoryList: React.FC = () => {
           minStock: Number(selectedItem.minStock) || 0,
           validity: selectedItem.validity || '',
           expiryDate: selectedItem.expiryDate || selectedItem.validity || '',
+          manufacturingDate: selectedItem.manufacturingDate || '',
+          manufacturer: selectedItem.manufacturer || '',
           batchNumber: selectedItem.batchNumber || '',
           supplier: selectedItem.supplier || ''
         })
@@ -289,6 +297,8 @@ export const InventoryList: React.FC = () => {
                   <th className="p-4">Estoque</th>
                   <th className="p-4">Mínimo</th>
                   <th className="p-4">Validade</th>
+                  <th className="p-4">Fabricação</th>
+                  <th className="p-4">Fabricante</th>
                   <th className="p-4">Fornecedor</th>
                   <th className="p-4">Custo</th>
                   <th className="p-4 rounded-tr-lg text-center">Status</th>
@@ -320,6 +330,8 @@ export const InventoryList: React.FC = () => {
                     <td className="p-4 font-medium text-gray-900">{item.quantity} {item.unit}</td>
                     <td className="p-4">{item.minStock} {item.unit}</td>
                     <td className="p-4">{item.validity || '-'}</td>
+                    <td className="p-4">{item.manufacturingDate || '-'}</td>
+                    <td className="p-4">{item.manufacturer || '-'}</td>
                     <td className="p-4">{item.supplier || '-'}</td>
                     <td className="p-4 font-medium text-gray-900">{formatCurrency(item.costPrice)}</td>
                     <td className="p-4 text-center">
@@ -391,8 +403,16 @@ export const InventoryList: React.FC = () => {
                   <span className="font-medium text-gray-900">{selectedItem.batchNumber || '-'}</span>
                 </div>
                 <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Fabricante</span>
+                  <span className="font-medium text-gray-900">{selectedItem.manufacturer || '-'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
                   <span className="text-gray-500">Validade</span>
                   <span className="font-medium text-gray-900">{selectedItem.validity || selectedItem.expiryDate || '-'}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Data fabricação</span>
+                  <span className="font-medium text-gray-900">{selectedItem.manufacturingDate || '-'}</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-gray-500">Fornecedor</span>
@@ -441,6 +461,25 @@ export const InventoryList: React.FC = () => {
                     value={selectedItem.validity || ''} 
                     onChange={(e) => handleQuickEditChange('validity', e.target.value)}
                     className="h-8 mt-1" 
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs text-gray-500">Fabricante</Label>
+                  <Input
+                    value={selectedItem.manufacturer || ''}
+                    onChange={(e) => handleQuickEditChange('manufacturer', e.target.value)}
+                    className="h-8 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs text-gray-500">Data de Fabricação</Label>
+                  <Input
+                    type="date"
+                    value={selectedItem.manufacturingDate || ''}
+                    onChange={(e) => handleQuickEditChange('manufacturingDate', e.target.value)}
+                    className="h-8 mt-1"
                   />
                 </div>
 
@@ -556,32 +595,6 @@ export const InventoryList: React.FC = () => {
                 </div>
               </div>
 
-                <div className="space-y-2">
-                  <Label>Fornecedor</Label>
-                  <Autocomplete
-                    options={supplierOptions}
-                    onSelect={(item) => setFormData({ ...formData, supplier: item.label })}
-                    placeholder="Nome do fornecedor..."
-                    value={formData.supplier || ''}
-                    onInputChange={(val) => setFormData({ ...formData, supplier: val })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Valor de compra do lote</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="pl-9"
-                      value={formData.costPrice || ''}
-                      onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
-                      placeholder="0,00"
-                    />
-                  </div>
-                </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Conteudo da embalagem</Label>
@@ -609,10 +622,55 @@ export const InventoryList: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label>Fabricante</Label>
+                  <Input
+                    value={formData.manufacturer || ''}
+                    onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                    placeholder="Ex: Pfizer, Zoetis..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Fornecedor</Label>
+                  <Autocomplete
+                    options={supplierOptions}
+                    onSelect={(item) => setFormData({ ...formData, supplier: item.label })}
+                    placeholder="Nome do fornecedor..."
+                    value={formData.supplier || ''}
+                    onInputChange={(val) => setFormData({ ...formData, supplier: val })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Valor de compra do lote</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-9"
+                    value={formData.costPrice || ''}
+                    onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
                   <Label>Lote</Label>
                   <Input
                     value={formData.batchNumber || ''}
                     onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data de Fabricação</Label>
+                  <Input
+                    type="date"
+                    value={formData.manufacturingDate || ''}
+                    onChange={(e) => setFormData({ ...formData, manufacturingDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">

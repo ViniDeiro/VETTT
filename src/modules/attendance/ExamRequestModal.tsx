@@ -101,7 +101,9 @@ export const ExamRequestModal: React.FC<ExamRequestModalProps> = ({
     onSave(updatedAttendance);
 
     if (print) {
-      pdfService.generateExamRequestPdf(patient, newRequest, 'Tutor (Demo)'); // Need owner name
+      const owner = mockDB.getOwners().find(item => item.id === patient.ownerId);
+      const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
+      pdfService.generateExamRequestPdf(patient, newRequest, ownerName);
     } else {
       alert('Solicitação de exames salva com sucesso!');
     }

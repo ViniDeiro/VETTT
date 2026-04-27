@@ -91,6 +91,7 @@ export interface ClinicInfo {
   fantasyName: string;
   legalName: string;
   cnpj: string;
+  cpf?: string;
   address: string;
   number: string;
   complement: string;
@@ -135,8 +136,11 @@ export interface ConsultationTemplate {
   speciesFocus: string;
   defaultValue: number;
   duration: string;
+  icon?: string;
   anamnesisText: string;
   checklist: string[];
+  physicalExamChecklist?: string[];
+  diagnosisChecklist?: string[];
   requiredFields: string[];
 }
 
@@ -146,6 +150,15 @@ export interface DocumentTemplateDefinition {
   title: string;
   content: string;
   isDefault?: boolean;
+  useInAttendance?: boolean;
+  includePatientName?: boolean;
+  includePatientData?: boolean;
+  includeOwnerName?: boolean;
+  includeOwnerAddress?: boolean;
+  includeVetName?: boolean;
+  includeVetSignature?: boolean;
+  includeVetCrmv?: boolean;
+  includeVetCpf?: boolean;
 }
 
 export interface RegionalSettings {
@@ -375,6 +388,8 @@ export interface InventoryItem {
   allowsFraction?: boolean;
   batchNumber?: string;
   expiryDate?: string;
+  manufacturingDate?: string;
+  manufacturer?: string;
   description?: string;
   image?: string; // Added for UI compatibility
   status?: 'ok' | 'low' | 'expired'; // Added for UI compatibility
@@ -585,6 +600,7 @@ export interface Prescription {
   date: string;
   items: PrescriptionItem[];
   digitalSignature?: boolean; // Placeholder for digital signature
+  controlledMedication?: boolean;
   signatureHash?: string; // Placeholder for future blockchain/crypto
 }
 

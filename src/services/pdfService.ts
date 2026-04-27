@@ -3,6 +3,139 @@ import { Patient, Attendance, Receivable, Owner, Prescription, ExamRequest, Gene
 import { mockDB } from './mockDatabase';
 
 class PdfService {
+  private readonly examRequestCatalog: Array<{ title: string; items: string[] }> = [
+    {
+      title: 'Histopatologia',
+      items: [
+        'Biopsia fragmento',
+        'Biopsia + margens cirurgicas',
+        'Histopatologico de necropsia',
+        'Necropsia - macroscopia',
+        'Necropsia + histopatologico',
+        'Necropsia cosmetica'
+      ]
+    },
+    {
+      title: 'Microbiologia',
+      items: [
+        'Cultura + antibiograma',
+        'Cultura fungica',
+        'Coprocultura + antibiograma',
+        'Hemocultura',
+        'Tricograma'
+      ]
+    },
+    {
+      title: 'Citologia',
+      items: [
+        'Citologia tecidos solidos',
+        'Citologia efusoes/fluidos/lavado traqueal',
+        'Citologia dermatologica',
+        'Citologia otologica',
+        'Citologia vaginal',
+        'Citologia vaginal seriada',
+        'Citologia de medula ossea'
+      ]
+    },
+    {
+      title: 'Urinalise',
+      items: [
+        'Urinalise completo',
+        'Densidade urinaria',
+        'Sedimentoscopia',
+        'Exame fisico-quimico',
+        'Qualificacao de calculos'
+      ]
+    },
+    {
+      title: 'Parasitologia',
+      items: [
+        'Coproparasitologico completo',
+        'Coproparasitologico seriado',
+        'Pesquisa de ovos em lavado traqueal e emeses',
+        'Pesquisa de sangue oculto nas fezes',
+        'Pesquisa de ectoparasitas',
+        'Pesquisa de microfilarias',
+        'Pesquisa de cryptosporidium e giardia',
+        'OPG',
+        'Pesquisa de fungos em raspado de pele',
+        'Identificacao de helmintos'
+      ]
+    },
+    {
+      title: 'Hematologia',
+      items: [
+        'Hemograma completo',
+        'Leucograma',
+        'Eritrograma',
+        'Contagem de eritrocitos',
+        'Contagem de leucocitos',
+        'Exame diferencial de leucocitos',
+        'Contagem de plaquetas',
+        'Contagem de reticulocitos',
+        'Hematocrito',
+        'Hemoglobina',
+        'Proteina total plasmatica',
+        'Fibrinogenio',
+        'Velocidade de hemosedimentacao',
+        'Tempo de coagulacao',
+        'Pesquisa de hemoparasitas'
+      ]
+    },
+    {
+      title: 'Perfis',
+      items: [
+        'Perfil rotina',
+        'Perfil hematologico',
+        'Perfil renal I',
+        'Perfil renal II',
+        'Perfil hepatico I',
+        'Perfil hepatico II',
+        'Perfil triagem',
+        'Perfil cirurgia',
+        'Perfil oncologico'
+      ]
+    },
+    {
+      title: 'Bioquimica',
+      items: [
+        'Acido urico',
+        'Albumina',
+        'ALT/TGP',
+        'Amilase',
+        'AST/TGO',
+        'Bilirrubina total e fracoes',
+        'CK',
+        'Calcio',
+        'Colesterol total',
+        'Creatinina',
+        'Ferro',
+        'Fosfatase alcalina',
+        'Fosforo',
+        'GGT',
+        'Glicose',
+        'Globulina',
+        'LDH',
+        'Lipase',
+        'Potassio',
+        'Proteina total',
+        'Sodio',
+        'Triglicerides',
+        'Ureia'
+      ]
+    },
+    {
+      title: 'Imagens',
+      items: [
+        'Eletrocardiograma',
+        'Ecocardiograma',
+        'Raio-X',
+        'Tomografia',
+        'Ressonancia Magnetica'
+      ]
+    }
+  ];
+
   private formatClinicAddress(settings: GeneralSettings) {
     const clinic = settings.clinic;
     return [
@@ -13,6 +146,81 @@ class PdfService {
       clinic.city ? `${clinic.city}/${clinic.state}` : clinic.state || null,
       clinic.zipCode ? `CEP: ${clinic.zipCode}` : null
     ].filter(Boolean).join(', ');
+  }
+
+  private formatOwnerAddress(owner?: Owner | null) {
+    if (!owner) return '';
+    return [
+      owner.street || owner.address,
+      owner.number || null,
+      owner.neighborhood || null,
+      owner.city ? `${owner.city}/${owner.state || ''}`.trim() : owner.state || null,
+      owner.zipCode ? `CEP: ${owner.zipCode}` : null
+    ].filter(Boolean).join(', ');
+  }
+
+  private formatSpeciesLabel(species: string) {
+    const labels: Record<string, string> = {
+      Equine: 'Equino',
+      Bovine: 'Bovino',
+      Canine: 'Canino',
+      Feline: 'Felino',
+      Other: 'Outro'
+    };
+
+    return labels[species] || species;
+  }
+
+  private resolveOwner(patient: Patient, ownerNameFallback?: string) {
+    const owner = mockDB.getOwners().find(item => item.id === patient.ownerId) || null;
+    return {
+      owner,
+      ownerName: owner?.name || ownerNameFallback || patient.ownerName || 'Tutor não informado'
+    };
+  }
+
+  private normalizeText(value?: string) {
+    return (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^\w\s/+.-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private addPatientOwnerBlock(doc: jsPDF, patient: Patient, ownerNameFallback?: string, startY: number = 70) {
+    const { owner, ownerName } = this.resolveOwner(patient, ownerNameFallback);
+    const ownerAddress = this.formatOwnerAddress(owner);
+    const ageLabel = patient.age ? `${patient.age} anos` : 'Não informado';
+    const weightLabel = patient.weight ? `${patient.weight} kg` : 'Não informado';
+
+    doc.setFontSize(11);
+    doc.setTextColor(60);
+    this.setPdfFont(doc, 'bold');
+    doc.text('Dados do Paciente', 20, startY);
+    this.setPdfFont(doc, 'normal');
+    doc.setFontSize(10);
+
+    const line1 = `Nome: ${patient.name} | Espécie: ${this.formatSpeciesLabel(patient.species)} | Raça: ${patient.breed || 'Não informado'}`;
+    const line2 = `Sexo: ${patient.gender || 'Não informado'} | Idade: ${ageLabel} | Peso: ${weightLabel}`;
+    const line3 = `Tutor: ${ownerName}`;
+    const line4 = ownerAddress ? `Endereço do tutor: ${ownerAddress}` : '';
+
+    doc.text(line1, 20, startY + 6);
+    doc.text(line2, 20, startY + 12);
+    doc.text(line3, 20, startY + 18);
+    if (line4) {
+      const splitOwnerAddress = doc.splitTextToSize(line4, 170);
+      doc.text(splitOwnerAddress, 20, startY + 24);
+      doc.setDrawColor(200);
+      doc.line(20, startY + 24 + (splitOwnerAddress.length * 5), 190, startY + 24 + (splitOwnerAddress.length * 5));
+      return startY + 24 + (splitOwnerAddress.length * 5) + 8;
+    }
+
+    doc.setDrawColor(200);
+    doc.line(20, startY + 24, 190, startY + 24);
+    return startY + 32;
   }
 
   private getPdfFontFamily() {
@@ -193,103 +401,123 @@ class PdfService {
       const credentialLine = [
         teamMember?.name,
         settings.documents.autoCrmv ? teamMember?.crmv : null,
-        settings.documents.autoCnpj ? settings.clinic.cnpj : null
+        settings.documents.autoCnpj ? (settings.clinic.cnpj || settings.clinic.cpf) : null
       ].filter(Boolean).join(' | ');
       doc.text(credentialLine || 'Responsavel tecnico', 105, pageHeight - 30, { align: 'center' });
     }
 
     doc.setFontSize(8);
     doc.setTextColor(150);
-    const footerParts = [
-      settings.documents.footer,
+    const line1 = settings.documents.footer || 'Gerado por Vet Tooth System';
+    const line2 = [
       settings.documents.showAddress ? this.formatClinicAddress(settings) : null,
-      settings.clinic.phone || null,
-      settings.fiscal.includeCnpjOnAllDocuments || settings.documents.autoCnpj ? `CNPJ: ${settings.clinic.cnpj}` : null
-    ].filter(Boolean);
-    doc.text(footerParts.join(' | ') || 'Gerado por Vet Tooth System', 105, pageHeight - 10, { align: 'center' });
+      settings.clinic.phone || null
+    ].filter(Boolean).join(' | ');
+    const clinicDocument = settings.clinic.cnpj || settings.clinic.cpf;
+    const line3 = [
+      settings.fiscal.includeCnpjOnAllDocuments || settings.documents.autoCnpj
+        ? `${settings.clinic.cnpj ? 'CNPJ' : 'CPF'}: ${clinicDocument || ''}`
+        : null,
+      settings.clinic.socialMedia || null
+    ].filter(Boolean).join(' | ');
+
+    doc.text(line1, 105, pageHeight - 18, { align: 'center' });
+    if (line2) doc.text(line2, 105, pageHeight - 13, { align: 'center' });
+    if (line3) doc.text(line3, 105, pageHeight - 8, { align: 'center' });
   }
 
   generatePrescriptionPdf(patient: Patient, prescription: Prescription, ownerName: string) {
     const doc = new jsPDF();
-    this.addHeader(doc, 'Receituário Médico Veterinário');
+    const renderPrescriptionPage = (copyLabel?: string) => {
+      const { settings, currentUser, teamMember } = this.getDocumentContext();
+      this.addHeader(doc, 'Receituário Médico Veterinário');
 
-    let y = 70;
+      let y = this.addPatientOwnerBlock(doc, patient, ownerName, 70);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Data: ${prescription.date}`, 160, y - 4);
 
-    // Patient Info Compact
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Paciente: ${patient.name} (${patient.species}) | Tutor: ${ownerName}`, 20, y);
-    doc.text(`Data: ${prescription.date}`, 160, y);
-    y += 5;
-    doc.setDrawColor(200);
-    doc.line(20, y, 190, y);
-    y += 15;
+      if (copyLabel) {
+        doc.setTextColor(160, 80, 0);
+        this.setPdfFont(doc, 'bold');
+        doc.text(copyLabel, 20, y - 4);
+      }
 
-    // Items
-    doc.setTextColor(0);
-    prescription.items.forEach((item, index) => {
-      // Item Title
-      doc.setFontSize(12);
-      this.setPdfFont(doc, 'bold');
-      const title = `${index + 1}. ${item.name} ${item.concentration ? item.concentration : ''}`;
-      doc.text(title, 20, y);
-      
-      // Type Badge (Text representation)
+      doc.setTextColor(0);
+      prescription.items.forEach((item, index) => {
+        doc.setFontSize(12);
+        this.setPdfFont(doc, 'bold');
+        const title = `${index + 1}. ${item.name} ${item.concentration ? item.concentration : ''}`;
+        doc.text(title, 20, y);
+
+        doc.setFontSize(9);
+        this.setPdfFont(doc, 'normal');
+        doc.setTextColor(100);
+        const typeLabel = item.type === 'industrialized' ? '[Industrializado]' : '[Manipulado]';
+        doc.text(typeLabel, 160, y, { align: 'right' });
+
+        y += 6;
+        doc.setTextColor(50);
+        doc.setFontSize(11);
+        doc.text(`Uso: ${item.route || 'Oral'} - ${item.dosage}`, 25, y);
+        y += 6;
+        doc.text(`Frequência: ${item.frequency}`, 25, y);
+        y += 6;
+        doc.text(`Duração: ${item.duration}`, 25, y);
+        y += 6;
+
+        if (item.instructions) {
+          doc.setFontSize(10);
+          this.setPdfFont(doc, 'italic');
+          const splitNotes = doc.splitTextToSize(`Obs: ${item.instructions}`, 160);
+          doc.text(splitNotes, 25, y);
+          y += (splitNotes.length * 5) + 2;
+        }
+
+        doc.setDrawColor(200);
+        doc.rect(160, y - 20, 30, 15);
+        doc.setFontSize(8);
+        doc.text('Quantidade:', 162, y - 16);
+        doc.setFontSize(10);
+        this.setPdfFont(doc, 'bold');
+        doc.text(item.quantity, 175, y - 9, { align: 'center' });
+        y += 10;
+      });
+
+      const professionalName = teamMember?.name || currentUser?.fullName || currentUser?.name || settings.clinic.legalName;
+      const professionalCredential = teamMember?.crmv ? `CRMV: ${teamMember.crmv}` : '';
+      const professionalAddress = this.formatClinicAddress(settings);
+
+      doc.setTextColor(80);
       doc.setFontSize(9);
       this.setPdfFont(doc, 'normal');
-      doc.setTextColor(100);
-      const typeLabel = item.type === 'industrialized' ? '[Industrializado]' : '[Manipulado]';
-      doc.text(typeLabel, 160, y, { align: 'right' });
-
-      y += 6;
-
-      // Instructions
-      doc.setTextColor(50);
-      doc.setFontSize(11);
-      const instruction = `Uso: ${item.route || 'Oral'} - ${item.dosage}`;
-      doc.text(instruction, 25, y);
-      y += 6;
-      
-      const frequency = `Frequência: ${item.frequency}`;
-      doc.text(frequency, 25, y);
-      y += 6;
-
-      const duration = `Duração: ${item.duration}`;
-      doc.text(duration, 25, y);
-      y += 6;
-
-      if (item.instructions) {
-        doc.setFontSize(10);
-        this.setPdfFont(doc, 'italic');
-        const notes = `Obs: ${item.instructions}`;
-        const splitNotes = doc.splitTextToSize(notes, 160);
-        doc.text(splitNotes, 25, y);
-        y += (splitNotes.length * 5) + 2;
+      const professionalLine = [
+        professionalName,
+        professionalCredential
+      ].filter(Boolean).join(' | ');
+      doc.text(professionalLine, 20, 250);
+      if (professionalAddress) {
+        const splitAddress = doc.splitTextToSize(`Endereço profissional: ${professionalAddress}`, 170);
+        doc.text(splitAddress, 20, 255);
       }
-      
-      // Quantity box
-      doc.setDrawColor(200);
-      doc.rect(160, y - 20, 30, 15);
-      doc.setFontSize(8);
-      doc.text('Quantidade:', 162, y - 16);
-      doc.setFontSize(10);
-      this.setPdfFont(doc, 'bold');
-      doc.text(item.quantity, 175, y - 9, { align: 'center' });
 
-      y += 10; // Spacing between items
-    });
+      if (prescription.digitalSignature) {
+        doc.setFillColor(240, 248, 255);
+        doc.rect(20, 262, 170, 14, 'F');
+        doc.setTextColor(0, 100, 0);
+        doc.setFontSize(10);
+        doc.text('Documento assinado digitalmente.', 105, 271, { align: 'center' });
+      }
 
-    // Digital Signature Placeholder
-    if (prescription.digitalSignature) {
-      y += 20;
-      doc.setFillColor(240, 248, 255);
-      doc.rect(20, y, 170, 20, 'F');
-      doc.setTextColor(0, 100, 0);
-      doc.setFontSize(10);
-      doc.text('Documento assinado digitalmente.', 105, y + 12, { align: 'center' });
+      this.addFooter(doc, true);
+    };
+
+    renderPrescriptionPage(prescription.controlledMedication ? '1ª via - Farmácia' : undefined);
+    if (prescription.controlledMedication) {
+      doc.addPage();
+      renderPrescriptionPage('2ª via - Tutor');
     }
 
-    this.addFooter(doc, true);
     doc.save(`receita_${patient.name}_${prescription.date.replace(/\//g, '-')}.pdf`);
   }
 
@@ -297,17 +525,17 @@ class PdfService {
     const doc = new jsPDF();
     this.addHeader(doc, 'Solicitação de Exames');
 
-    let y = 70;
-
-    // Patient Info Compact
+    let y = this.addPatientOwnerBlock(doc, patient, ownerName, 70);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Paciente: ${patient.name} (${patient.species}) | Tutor: ${ownerName}`, 20, y);
-    doc.text(`Data: ${request.date}`, 160, y);
-    y += 5;
-    doc.setDrawColor(200);
-    doc.line(20, y, 190, y);
-    y += 15;
+    doc.text(`Data: ${request.date}`, 160, y - 4);
+
+    const { teamMember } = this.getDocumentContext();
+    const vetName = teamMember?.name || 'Médico veterinário não informado';
+    doc.setFontSize(10);
+    doc.setTextColor(80);
+    doc.text(`Méd. veterinário requisitante: ${vetName}`, 20, y);
+    y += 8;
 
     // Clinical Indication
     if (request.clinicalIndication) {
@@ -333,53 +561,91 @@ class PdfService {
       doc.text('URGENTE', 175, 71, { align: 'center' });
     }
 
-    // Items Header
-    doc.setTextColor(0);
-    doc.setFontSize(14);
-    this.setPdfFont(doc, 'bold');
-    doc.text('Exames Solicitados:', 20, y);
-    y += 10;
+    const selectedExamSet = new Set(request.items.map(item => this.normalizeText(item.name)));
+    const catalogNameSet = new Set(
+      this.examRequestCatalog.flatMap(section => section.items.map(item => this.normalizeText(item)))
+    );
 
-    // Items List
-    request.items.forEach((item, index) => {
-      // Bullet point style
-      doc.setDrawColor(100);
-      doc.setFillColor(240, 240, 240);
-      doc.rect(20, y - 5, 170, 15 + (item.instructions ? 10 : 0), 'F'); // Background box
-
-      doc.setFontSize(12);
-      this.setPdfFont(doc, 'bold');
-      doc.text(`• ${item.name}`, 25, y);
-
-      // Type Badge
-      doc.setFontSize(9);
-      this.setPdfFont(doc, 'normal');
-      doc.setTextColor(100);
-      const typeLabel = item.type === 'laboratory' ? '[Laboratorial]' : 
-                        item.type === 'imaging' ? '[Imagem]' : 
-                        item.type === 'cardiology' ? '[Cardio]' : '[Outros]';
-      doc.text(typeLabel, 180, y, { align: 'right' });
-
-      if (item.instructions) {
-        y += 6;
-        doc.setFontSize(10);
-        this.setPdfFont(doc, 'italic');
-        doc.setTextColor(80);
-        const notes = `Preparo: ${item.instructions}`;
-        doc.text(notes, 30, y);
+    for (const section of this.examRequestCatalog) {
+      if (y > 260) {
+        doc.addPage();
+        this.addHeader(doc, 'Solicitação de Exames (continuação)');
+        y = 70;
       }
-      
-      y += 15 + (item.instructions ? 5 : 0);
-    });
 
-    // Signature Area
-    y = Math.max(y + 20, 240); // Push to bottom if space allows
+      this.setPdfFont(doc, 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.text(section.title.toUpperCase(), 20, y);
+      y += 6;
+
+      this.setPdfFont(doc, 'normal');
+      doc.setFontSize(10);
+      for (const sectionItem of section.items) {
+        if (y > 275) {
+          doc.addPage();
+          this.addHeader(doc, 'Solicitação de Exames (continuação)');
+          y = 70;
+          this.setPdfFont(doc, 'bold');
+          doc.setFontSize(11);
+          doc.text(section.title.toUpperCase(), 20, y);
+          y += 6;
+          this.setPdfFont(doc, 'normal');
+          doc.setFontSize(10);
+        }
+
+        const marker = selectedExamSet.has(this.normalizeText(sectionItem)) ? '☑' : '☐';
+        const itemLine = `${marker} ${sectionItem}`;
+        const splitItem = doc.splitTextToSize(itemLine, 170);
+        doc.text(splitItem, 24, y);
+        y += (splitItem.length * 4.6);
+      }
+
+      y += 4;
+    }
+
+    const otherRequested = request.items
+      .filter(item => !catalogNameSet.has(this.normalizeText(item.name)))
+      .map(item => item.instructions ? `${item.name} (Obs: ${item.instructions})` : item.name);
+
+    if (otherRequested.length > 0) {
+      if (y > 255) {
+        doc.addPage();
+        this.addHeader(doc, 'Solicitação de Exames (continuação)');
+        y = 70;
+      }
+      this.setPdfFont(doc, 'bold');
+      doc.setFontSize(11);
+      doc.text('OUTROS EXAMES SOLICITADOS', 20, y);
+      y += 6;
+      this.setPdfFont(doc, 'normal');
+      doc.setFontSize(10);
+      const splitOther = doc.splitTextToSize(otherRequested.join(' | '), 170);
+      doc.text(splitOther, 24, y);
+      y += (splitOther.length * 5) + 4;
+    }
+
+    if (y > 265) {
+      doc.addPage();
+      this.addHeader(doc, 'Solicitação de Exames (continuação)');
+      y = 70;
+    }
+    this.setPdfFont(doc, 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text('Assinatura do Méd. Vet. Requisitante: _______________________________________', 20, y + 8);
     
     this.addFooter(doc, true);
     doc.save(`exames_${patient.name}_${request.date.replace(/\//g, '-')}.pdf`);
   }
 
-  generateCertificatePdf(patient: Patient, ownerName: string, type: 'health' | 'surgery' | 'euthanasia' | 'travel', text?: string) {
+  generateCertificatePdf(
+    patient: Patient,
+    ownerName: string,
+    type: 'health' | 'surgery' | 'euthanasia' | 'travel',
+    text?: string,
+    titleOverride?: string
+  ) {
     const doc = new jsPDF();
     const { teamMember } = this.getDocumentContext();
     
@@ -387,6 +653,7 @@ class PdfService {
     if (type === 'surgery') title = 'Termo de Consentimento Cirúrgico';
     if (type === 'euthanasia') title = 'Termo de Consentimento para Eutanásia';
     if (type === 'travel') title = 'Atestado para Viagem';
+    if (titleOverride) title = titleOverride;
 
     this.addHeader(doc, title);
 
@@ -654,4 +921,3 @@ class PdfService {
 }
 
 export const pdfService = new PdfService();
-

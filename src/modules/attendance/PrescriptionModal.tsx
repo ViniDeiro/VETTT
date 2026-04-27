@@ -38,6 +38,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
   const [duration, setDuration] = useState('');
   const [route, setRoute] = useState('Oral');
   const [instructions, setInstructions] = useState('');
+  const [controlledMedication, setControlledMedication] = useState(false);
 
   // Load existing if editing? For now, we always create a new one or just append to list.
   // Requirement says "Reedição", so maybe we should list existing prescriptions too?
@@ -91,7 +92,8 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
       attendanceId: attendance.id,
       date: new Date().toLocaleDateString('pt-BR'),
       items: items,
-      digitalSignature: true // Auto-sign for now
+      digitalSignature: true, // Auto-sign for now
+      controlledMedication
     };
 
     // Update Attendance
@@ -108,13 +110,16 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
     onSave(updatedAttendance);
 
     if (print) {
-      pdfService.generatePrescriptionPdf(patient, newPrescription, 'Tutor (Demo)'); // Need owner name
+      const owner = mockDB.getOwners().find(item => item.id === patient.ownerId);
+      const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
+      pdfService.generatePrescriptionPdf(patient, newPrescription, ownerName);
     } else {
       alert('Prescrição salva com sucesso!');
     }
     
     // Clear and Close
     setItems([]);
+    setControlledMedication(false);
     onClose();
   };
 
@@ -251,6 +256,11 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                 placeholder="Ex: Dar junto com a comida..."
               />
             </div>
+
+            <label className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <input type="checkbox" checked={controlledMedication} onChange={event => setControlledMedication(event.target.checked)} />
+              Medicamento controlado (emitir em 2 vias com dados completos do veterinário)
+            </label>
 
             <Button onClick={handleAddItem} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
               <Plus className="h-4 w-4 mr-2" /> Adicionar à Receita

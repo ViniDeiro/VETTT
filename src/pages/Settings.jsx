@@ -74,6 +74,18 @@ const PDF_FONT_OPTIONS = [
   ['trebuchet-ms', 'Trebuchet MS']
 ]
 
+const PROCEDURE_CATEGORY_OPTIONS = [
+  'Vacinacao',
+  'Cirurgia',
+  'Tratamento odontologico',
+  'Consulta odontologica',
+  'Profilaxia',
+  'Exames',
+  'Emergencia',
+  'Internacao',
+  'Retorno'
+]
+
 const EMPTY_PROCEDURE_FORM = {
   name: '',
   category: '',
@@ -112,10 +124,13 @@ const EMPTY_TEAM_FORM = {
 const EMPTY_CONSULTATION_FORM = {
   name: '',
   speciesFocus: '',
+  icon: '🩺',
   defaultValue: '',
   duration: '',
   anamnesisText: '',
   checklist: '',
+  physicalExamChecklist: '',
+  diagnosisChecklist: '',
   requiredFields: ''
 }
 
@@ -123,8 +138,32 @@ const EMPTY_DOCUMENT_TEMPLATE = {
   type: '',
   title: '',
   content: '',
-  isDefault: false
+  isDefault: false,
+  useInAttendance: true,
+  includePatientName: true,
+  includePatientData: false,
+  includeOwnerName: true,
+  includeOwnerAddress: false,
+  includeVetName: true,
+  includeVetSignature: false,
+  includeVetCrmv: true,
+  includeVetCpf: false
 }
+
+const DOCUMENT_VARIABLE_OPTIONS = [
+  ['{nome_paciente}', 'Nome do paciente'],
+  ['{especie_paciente}', 'Espécie do paciente'],
+  ['{raca_paciente}', 'Raça do paciente'],
+  ['{nome_tutor}', 'Nome do tutor'],
+  ['{telefone_tutor}', 'Telefone do tutor'],
+  ['{endereco_tutor}', 'Endereço do tutor'],
+  ['{nome_vet}', 'Nome do veterinário'],
+  ['{crmv_vet}', 'CRMV do veterinário'],
+  ['{cpf_vet}', 'CPF do veterinário'],
+  ['{assinatura_vet}', 'Assinatura do veterinário'],
+  ['{data}', 'Data atual'],
+  ['{conteudo}', 'Texto livre do atendimento']
+]
 
 const EMPTY_MESSAGE_TEMPLATE = {
   type: '',
@@ -158,12 +197,44 @@ const EMPTY_REMINDER_FORM = {
 
 const EMPTY_SEDATION_FORM = {
   name: '',
-  dosage: '',
+  dosageValue: '',
+  dosageUnit: 'mg/kg',
+  route: 'iv',
+  routeCustom: '',
+  sedationLevel: 'leve',
   notes: ''
 }
 
-const formatCurrency = value => `R$ ${Number(value || 0).toFixed(2)}`
+const SEDATION_ROUTE_OPTIONS = [
+  ['iv', 'Intravenosa (IV)'],
+  ['im', 'Intramuscular (IM)'],
+  ['sc', 'Subcutânea (SC)'],
+  ['oral', 'Oral'],
+  ['other', 'Outra via']
+]
+
+const SEDATION_LEVEL_OPTIONS = [
+  ['leve', 'Leve'],
+  ['moderada', 'Moderada'],
+  ['profunda', 'Profunda']
+]
+
+const formatCurrency = (value, currency = 'BRL', locale = 'pt-BR') => (
+  new Intl.NumberFormat(locale, { style: 'currency', currency }).format(Number(value || 0))
+)
 const formatDateTime = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca'
+
+const CONSULTATION_DURATION_OPTIONS = [
+  '20 min',
+  '30 min',
+  '45 min',
+  '50 min',
+  '60 min',
+  '90 min',
+  '120 min'
+]
+
+const CONSULTATION_ICON_OPTIONS = ['🩺', '🦷', '✂️', '📋', '💉', '🧪', '❤️', '🧠', '🐶', '🐱', '➕']
 
 const formatRegionalPartsPreview = (parts, decimalSeparator) => {
   const groupSeparator = decimalSeparator === ',' ? '.' : ','
@@ -239,6 +310,7 @@ export default function Settings() {
   const [newProcedure, setNewProcedure] = useState(EMPTY_PROCEDURE_FORM)
   const [editingProcedureId, setEditingProcedureId] = useState(null)
   const [editingSystemUserId, setEditingSystemUserId] = useState(null)
+  const [editingConsultationTemplateId, setEditingConsultationTemplateId] = useState(null)
   const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
   const [teamForm, setTeamForm] = useState(EMPTY_TEAM_FORM)
   const [consultationForm, setConsultationForm] = useState(EMPTY_CONSULTATION_FORM)
@@ -251,9 +323,9 @@ export default function Settings() {
   const [selectedProfileId, setSelectedProfileId] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [sedationTypes, setSedationTypes] = useState([
-    { id: 1, name: 'Xilazina', dosage: '1.1 mg/kg IV', notes: 'Sedação leve a moderada' },
-    { id: 2, name: 'Detomidina', dosage: '0.01-0.02 mg/kg IV', notes: 'Sedação profunda' },
-    { id: 3, name: 'Acepromazina', dosage: '0.03-0.1 mg/kg IM', notes: 'Tranquilização' }
+    { id: 1, name: 'Xilazina', dosageValue: '1.1', dosageUnit: 'mg/kg', route: 'iv', sedationLevel: 'moderada', notes: 'Sedação leve a moderada' },
+    { id: 2, name: 'Detomidina', dosageValue: '0.02', dosageUnit: 'mg/kg', route: 'iv', sedationLevel: 'profunda', notes: 'Sedação profunda' },
+    { id: 3, name: 'Acepromazina', dosageValue: '0.05', dosageUnit: 'mg/kg', route: 'im', sedationLevel: 'leve', notes: 'Tranquilização' }
   ])
   const [newSedation, setNewSedation] = useState(EMPTY_SEDATION_FORM)
   const [previewModel, setPreviewModel] = useState(null)
@@ -312,6 +384,17 @@ export default function Settings() {
     settings.documents.header,
     settings.documents.footer
   ])
+  const logoPosition = settings.documents.logoPosition || 'left'
+  const logoJustifyClass = logoPosition === 'center'
+    ? 'justify-center'
+    : logoPosition === 'right'
+      ? 'justify-end'
+      : 'justify-start'
+  const logoTextAlignClass = logoPosition === 'center'
+    ? 'text-center'
+    : logoPosition === 'right'
+      ? 'text-right'
+      : 'text-left'
   const sortedDocumentTemplates = useMemo(() => (
     [...settings.documentTemplates].sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault)))
   ), [settings.documentTemplates])
@@ -462,10 +545,8 @@ export default function Settings() {
     setIsSaving(true)
 
     try {
-      mockDB.saveSettings(settings)
-      setSettings(mockDB.getSettings())
-      setAuditLogs([...mockDB.getAuditLogs()])
-      setBackups([...mockDB.getBackups()])
+      const savedSettings = mockDB.saveSettings(settings)
+      setSettings(savedSettings)
       localStorage.setItem('vet_settings', JSON.stringify({
         clinic: {
           name: settings.clinic.fantasyName
@@ -574,14 +655,12 @@ export default function Settings() {
     const hasRequiredFields = (
       newProcedure.name &&
       newProcedure.category &&
-      newProcedure.description &&
       newProcedure.duration &&
-      newProcedure.notes &&
       newProcedure.items.length > 0
     )
 
     if (!hasRequiredFields) {
-      alert('Preencha nome, categoria, descricao, tempo medio, observacoes e vincule ao menos um insumo.')
+      alert('Preencha nome, categoria, tempo medio e vincule ao menos um insumo.')
       return
     }
 
@@ -793,20 +872,56 @@ export default function Settings() {
     }
 
     const nextTemplate = {
-      id: `consult-${Date.now()}`,
+      id: editingConsultationTemplateId || `consult-${Date.now()}`,
       name: consultationForm.name,
       speciesFocus: consultationForm.speciesFocus || 'Geral',
+      icon: consultationForm.icon || '➕',
       defaultValue: Number(consultationForm.defaultValue || 0),
       duration: consultationForm.duration,
       anamnesisText: consultationForm.anamnesisText,
       checklist: consultationForm.checklist.split(',').map(item => item.trim()).filter(Boolean),
+      physicalExamChecklist: consultationForm.physicalExamChecklist.split(',').map(item => item.trim()).filter(Boolean),
+      diagnosisChecklist: consultationForm.diagnosisChecklist.split(',').map(item => item.trim()).filter(Boolean),
       requiredFields: consultationForm.requiredFields.split(',').map(item => item.trim()).filter(Boolean)
     }
 
-    setSettings(prev => ({
-      ...prev,
-      consultationTemplates: [...prev.consultationTemplates, nextTemplate]
-    }))
+    setSettings(prev => {
+      if (editingConsultationTemplateId) {
+        return {
+          ...prev,
+          consultationTemplates: prev.consultationTemplates.map(template => (
+            template.id === editingConsultationTemplateId ? nextTemplate : template
+          ))
+        }
+      }
+
+      return {
+        ...prev,
+        consultationTemplates: [...prev.consultationTemplates, nextTemplate]
+      }
+    })
+    setEditingConsultationTemplateId(null)
+    setConsultationForm(EMPTY_CONSULTATION_FORM)
+  }
+
+  const startConsultationTemplateEdit = template => {
+    setEditingConsultationTemplateId(template.id)
+    setConsultationForm({
+      name: template.name || '',
+      speciesFocus: template.speciesFocus || '',
+      icon: template.icon || '➕',
+      defaultValue: String(template.defaultValue ?? ''),
+      duration: template.duration || '',
+      anamnesisText: template.anamnesisText || '',
+      checklist: (template.checklist || []).join(', '),
+      physicalExamChecklist: (template.physicalExamChecklist || []).join(', '),
+      diagnosisChecklist: (template.diagnosisChecklist || []).join(', '),
+      requiredFields: (template.requiredFields || []).join(', ')
+    })
+  }
+
+  const cancelConsultationTemplateEdit = () => {
+    setEditingConsultationTemplateId(null)
     setConsultationForm(EMPTY_CONSULTATION_FORM)
   }
 
@@ -815,11 +930,21 @@ export default function Settings() {
       ...prev,
       consultationTemplates: prev.consultationTemplates.filter(template => template.id !== templateId)
     }))
+    if (editingConsultationTemplateId === templateId) {
+      cancelConsultationTemplateEdit()
+    }
   }
 
   const resetDocumentTemplateForm = () => {
     setDocumentTemplateForm(EMPTY_DOCUMENT_TEMPLATE)
     setEditingDocumentTemplateId(null)
+  }
+
+  const appendDocumentVariable = variable => {
+    setDocumentTemplateForm(prev => ({
+      ...prev,
+      content: prev.content ? `${prev.content} ${variable}` : variable
+    }))
   }
 
   const startDocumentTemplateEdit = template => {
@@ -828,7 +953,16 @@ export default function Settings() {
       type: template.type || '',
       title: template.title || '',
       content: template.content || '',
-      isDefault: Boolean(template.isDefault)
+      isDefault: Boolean(template.isDefault),
+      useInAttendance: template.useInAttendance !== false,
+      includePatientName: template.includePatientName !== false,
+      includePatientData: Boolean(template.includePatientData),
+      includeOwnerName: template.includeOwnerName !== false,
+      includeOwnerAddress: Boolean(template.includeOwnerAddress),
+      includeVetName: template.includeVetName !== false,
+      includeVetSignature: Boolean(template.includeVetSignature),
+      includeVetCrmv: template.includeVetCrmv !== false,
+      includeVetCpf: Boolean(template.includeVetCpf)
     })
   }
 
@@ -853,7 +987,16 @@ export default function Settings() {
       type: documentTemplateForm.type,
       title: documentTemplateForm.title,
       content: documentTemplateForm.content,
-      isDefault: Boolean(documentTemplateForm.isDefault)
+      isDefault: Boolean(documentTemplateForm.isDefault),
+      useInAttendance: documentTemplateForm.useInAttendance !== false,
+      includePatientName: documentTemplateForm.includePatientName !== false,
+      includePatientData: Boolean(documentTemplateForm.includePatientData),
+      includeOwnerName: documentTemplateForm.includeOwnerName !== false,
+      includeOwnerAddress: Boolean(documentTemplateForm.includeOwnerAddress),
+      includeVetName: documentTemplateForm.includeVetName !== false,
+      includeVetSignature: Boolean(documentTemplateForm.includeVetSignature),
+      includeVetCrmv: documentTemplateForm.includeVetCrmv !== false,
+      includeVetCpf: Boolean(documentTemplateForm.includeVetCpf)
     }
 
     setSettings(prev => ({
@@ -1165,8 +1308,16 @@ export default function Settings() {
   }
 
   const addSedation = () => {
-    if (!newSedation.name || !newSedation.dosage) return
-    setSedationTypes(prev => [...prev, { id: Date.now(), ...newSedation }])
+    const routeValue = newSedation.route === 'other' ? newSedation.routeCustom.trim() : newSedation.route
+    if (!newSedation.name || !newSedation.dosageValue || !routeValue) return
+    setSedationTypes(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        ...newSedation,
+        route: routeValue
+      }
+    ])
     setNewSedation(EMPTY_SEDATION_FORM)
   }
 
@@ -1223,9 +1374,16 @@ export default function Settings() {
                   <Input value={settings.clinic.cnpj} onChange={event => updateSettingsGroup('clinic', 'cnpj', event.target.value)} />
                 </div>
                 <div>
+                  <Label>CPF (autônomo)</Label>
+                  <Input value={settings.clinic.cpf || ''} onChange={event => updateSettingsGroup('clinic', 'cpf', maskCPF(event.target.value))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <Label>Telefone</Label>
                   <Input value={settings.clinic.phone} onChange={event => updateSettingsGroup('clinic', 'phone', event.target.value)} />
                 </div>
+                <div />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -2103,32 +2261,104 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Input placeholder="Tipo de consulta" value={consultationForm.name} onChange={event => setConsultationForm(prev => ({ ...prev, name: event.target.value }))} />
                 <Input placeholder="Espécie/foco" value={consultationForm.speciesFocus} onChange={event => setConsultationForm(prev => ({ ...prev, speciesFocus: event.target.value }))} />
-                <Input placeholder="Valor padrão" type="number" value={consultationForm.defaultValue} onChange={event => setConsultationForm(prev => ({ ...prev, defaultValue: event.target.value }))} />
-                <Input placeholder="Duração" value={consultationForm.duration} onChange={event => setConsultationForm(prev => ({ ...prev, duration: event.target.value }))} />
+                <div className="space-y-1">
+                  <Label>Ícone da consulta</Label>
+                  <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={consultationForm.icon} onChange={event => setConsultationForm(prev => ({ ...prev, icon: event.target.value }))}>
+                    {CONSULTATION_ICON_OPTIONS.map(icon => (
+                      <option key={icon} value={icon}>{icon}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Valor padrão ({settings.regional.currency})</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                      {formatCurrency(0, settings.regional.currency, settings.regional.language).replace(/[0.,\s]/g, '')}
+                    </span>
+                    <Input
+                      placeholder="0,00"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="pl-12"
+                      value={consultationForm.defaultValue}
+                      onChange={event => setConsultationForm(prev => ({ ...prev, defaultValue: event.target.value }))}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Prévia: {formatCurrency(consultationForm.defaultValue || 0, settings.regional.currency, settings.regional.language)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Duração</Label>
+                  <Input
+                    placeholder="Ex: 50 min, 1h, 1h30"
+                    list="consultation-duration-options"
+                    value={consultationForm.duration}
+                    onChange={event => setConsultationForm(prev => ({ ...prev, duration: event.target.value }))}
+                  />
+                  <datalist id="consultation-duration-options">
+                    {CONSULTATION_DURATION_OPTIONS.map(option => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
               <textarea className="w-full border rounded-md p-3 min-h-[90px]" placeholder="Texto padrão de anamnese" value={consultationForm.anamnesisText} onChange={event => setConsultationForm(prev => ({ ...prev, anamnesisText: event.target.value }))} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Input placeholder="Checklist prévio separado por vírgula" value={consultationForm.checklist} onChange={event => setConsultationForm(prev => ({ ...prev, checklist: event.target.value }))} />
-                <Input placeholder="Campos obrigatórios separados por vírgula" value={consultationForm.requiredFields} onChange={event => setConsultationForm(prev => ({ ...prev, requiredFields: event.target.value }))} />
+                <div className="space-y-1">
+                  <Label>Checklist pré-consulta</Label>
+                  <Input placeholder="Ex: Jejum 8h, Exame de sangue, Consentimento assinado" value={consultationForm.checklist} onChange={event => setConsultationForm(prev => ({ ...prev, checklist: event.target.value }))} />
+                  <p className="text-xs text-gray-500">Separe por vírgula.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Checklist de exame físico</Label>
+                  <Input placeholder="Ex: Mucosas, Temperatura, Linfonodos" value={consultationForm.physicalExamChecklist} onChange={event => setConsultationForm(prev => ({ ...prev, physicalExamChecklist: event.target.value }))} />
+                  <p className="text-xs text-gray-500">Separe por vírgula.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Checklist de diagnóstico</Label>
+                  <Input placeholder="Ex: Hipótese principal, Diferenciais, Plano terapêutico" value={consultationForm.diagnosisChecklist} onChange={event => setConsultationForm(prev => ({ ...prev, diagnosisChecklist: event.target.value }))} />
+                  <p className="text-xs text-gray-500">Separe por vírgula.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Campos obrigatórios</Label>
+                  <Input placeholder="Ex: Peso, Temperatura, Frequência cardíaca" value={consultationForm.requiredFields} onChange={event => setConsultationForm(prev => ({ ...prev, requiredFields: event.target.value }))} />
+                  <p className="text-xs text-gray-500">Separe por vírgula.</p>
+                </div>
               </div>
               <Button type="button" onClick={addConsultationTemplate} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Adicionar modelo
+                {editingConsultationTemplateId ? 'Salvar edição' : 'Adicionar modelo'}
               </Button>
+              {editingConsultationTemplateId && (
+                <Button type="button" variant="outline" onClick={cancelConsultationTemplateEdit}>
+                  Cancelar edição
+                </Button>
+              )}
               <div className="space-y-3">
                 {settings.consultationTemplates.map(template => (
                   <div key={template.id} className="rounded-lg border p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-gray-900">{template.name}</p>
-                        <p className="text-sm text-gray-500">{template.speciesFocus} • {template.duration} • {formatCurrency(template.defaultValue)}</p>
+                        <p className="font-semibold text-gray-900">{template.icon || '➕'} {template.name}</p>
+                        <p className="text-sm text-gray-500">{template.speciesFocus} • {template.duration} • {formatCurrency(template.defaultValue, settings.regional.currency, settings.regional.language)}</p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={() => removeConsultationTemplate(template.id)} className="text-red-600">
-                        Remover
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => startConsultationTemplateEdit(template)}>
+                          Editar
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => removeConsultationTemplate(template.id)} className="text-red-600">
+                          Remover
+                        </Button>
+                      </div>
                     </div>
                     <p className="mt-3 text-sm text-gray-600">{template.anamnesisText}</p>
                     <p className="mt-2 text-xs text-gray-500">Checklist: {template.checklist.join(', ') || 'Não informado'}</p>
+                    <p className="text-xs text-gray-500">Exame físico: {(template.physicalExamChecklist || []).join(', ') || 'Não informado'}</p>
+                    <p className="text-xs text-gray-500">Diagnóstico: {(template.diagnosisChecklist || []).join(', ') || 'Não informado'}</p>
                     <p className="text-xs text-gray-500">Obrigatórios: {template.requiredFields.join(', ') || 'Não informado'}</p>
                   </div>
                 ))}
@@ -2157,7 +2387,20 @@ export default function Settings() {
                 </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input placeholder="Nome do procedimento" value={newProcedure.name} onChange={event => handleProcedureFieldChange('name', event.target.value)} />
-                <Input placeholder="Categoria" value={newProcedure.category} onChange={event => handleProcedureFieldChange('category', event.target.value)} />
+                <div className="space-y-1">
+                  <Input
+                    placeholder="Categoria (digite ou escolha)"
+                    list="procedure-category-options"
+                    value={newProcedure.category}
+                    onChange={event => handleProcedureFieldChange('category', event.target.value)}
+                  />
+                  <datalist id="procedure-category-options">
+                    {PROCEDURE_CATEGORY_OPTIONS.map(category => (
+                      <option key={category} value={category} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-gray-500">Sugestoes prontas: Vacinacao, Cirurgia e Tratamento odontologico.</p>
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <textarea className="w-full border rounded-md p-3 min-h-[96px] bg-white" placeholder="Descrição" value={newProcedure.description} onChange={event => handleProcedureFieldChange('description', event.target.value)} />
@@ -2284,6 +2527,38 @@ export default function Settings() {
                 <Input placeholder="Tipo" value={documentTemplateForm.type} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, type: event.target.value }))} />
                 <Input placeholder="Título" value={documentTemplateForm.title} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, title: event.target.value }))} />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  ['useInAttendance', 'Mostrar em Atendimento'],
+                  ['includePatientName', 'Incluir nome do paciente'],
+                  ['includePatientData', 'Incluir dados do paciente'],
+                  ['includeOwnerName', 'Incluir nome do tutor'],
+                  ['includeOwnerAddress', 'Incluir endereço do tutor'],
+                  ['includeVetName', 'Incluir nome do veterinário'],
+                  ['includeVetSignature', 'Incluir assinatura do veterinário'],
+                  ['includeVetCrmv', 'Incluir CRMV'],
+                  ['includeVetCpf', 'Incluir CPF do veterinário']
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-md border p-3 text-sm bg-white">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(documentTemplateForm[key])}
+                      onChange={event => setDocumentTemplateForm(prev => ({ ...prev, [key]: event.target.checked }))}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="rounded-md border p-3 bg-white">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Campos automáticos (clique para inserir no texto)</p>
+                <div className="flex flex-wrap gap-2">
+                  {DOCUMENT_VARIABLE_OPTIONS.map(([token, label]) => (
+                    <Button key={token} type="button" variant="outline" size="sm" onClick={() => appendDocumentVariable(token)}>
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
               <textarea className="w-full border rounded-md p-3 min-h-[110px]" placeholder="Texto do modelo" value={documentTemplateForm.content} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, content: event.target.value }))} />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={documentTemplateForm.isDefault} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, isDefault: event.target.checked }))} />
@@ -2307,6 +2582,9 @@ export default function Settings() {
                           <p className="font-semibold text-gray-900">{template.title}</p>
                           {template.isDefault && (
                             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Padrão</span>
+                          )}
+                          {template.useInAttendance !== false && (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Atendimento</span>
                           )}
                         </div>
                         <p className="text-xs uppercase text-gray-500">{template.type}</p>
@@ -2413,18 +2691,48 @@ export default function Settings() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 rounded-lg border bg-gray-50 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 rounded-lg border bg-gray-50 p-4">
               <Input placeholder="Medicamento" value={newSedation.name} onChange={event => setNewSedation(prev => ({ ...prev, name: event.target.value }))} />
-              <Input placeholder="Dosagem" value={newSedation.dosage} onChange={event => setNewSedation(prev => ({ ...prev, dosage: event.target.value }))} />
+              <Input
+                type="number"
+                step="0.001"
+                placeholder="Dose"
+                value={newSedation.dosageValue}
+                onChange={event => setNewSedation(prev => ({ ...prev, dosageValue: event.target.value }))}
+              />
+              <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={newSedation.dosageUnit} onChange={event => setNewSedation(prev => ({ ...prev, dosageUnit: event.target.value }))}>
+                <option value="mg/kg">mg/kg</option>
+                <option value="ml/kg">ml/kg</option>
+                <option value="mcg/kg">mcg/kg</option>
+              </select>
+              <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={newSedation.route} onChange={event => setNewSedation(prev => ({ ...prev, route: event.target.value }))}>
+                {SEDATION_ROUTE_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={newSedation.sedationLevel} onChange={event => setNewSedation(prev => ({ ...prev, sedationLevel: event.target.value }))}>
+                {SEDATION_LEVEL_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
               <Input placeholder="Observações" value={newSedation.notes} onChange={event => setNewSedation(prev => ({ ...prev, notes: event.target.value }))} />
+              {newSedation.route === 'other' && (
+                <Input
+                  placeholder="Informe a via"
+                  value={newSedation.routeCustom}
+                  onChange={event => setNewSedation(prev => ({ ...prev, routeCustom: event.target.value }))}
+                />
+              )}
               <Button type="button" onClick={addSedation}>Adicionar</Button>
             </div>
             <div className="space-y-2">
               {sedationTypes.map(sedation => (
                 <div key={sedation.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="grid flex-1 grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid flex-1 grid-cols-1 md:grid-cols-5 gap-4">
                     <span className="font-medium">{sedation.name}</span>
-                    <span className="text-blue-600">{sedation.dosage}</span>
+                    <span className="text-blue-600">{sedation.dosageValue} {sedation.dosageUnit}</span>
+                    <span className="text-gray-700">{sedation.route}</span>
+                    <span className="text-gray-700 capitalize">{sedation.sedationLevel || '-'}</span>
                     <span className="text-gray-600">{sedation.notes}</span>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => removeSedation(sedation.id)} className="text-red-600">
@@ -2445,17 +2753,19 @@ export default function Settings() {
                 {/* Header Rendering */}
                 {previewModel === 'classic' && (
                   <div className="mb-6">
-                    <div className="h-24 -mx-6 -mt-6 p-6 text-white flex items-center justify-between" style={{ backgroundColor: settings.appearance.primaryColor }}>
-                      <div>
-                          <div className="text-lg font-bold">{documentPreview.clinicName}</div>
-                          <div className="text-[10px] opacity-80">{documentPreview.header}</div>
+                    <div className="h-24 -mx-6 -mt-6 p-6 text-white flex flex-col justify-center gap-2" style={{ backgroundColor: settings.appearance.primaryColor }}>
+                      <div className={logoTextAlignClass}>
+                        <div className="text-lg font-bold">{documentPreview.clinicName}</div>
+                        <div className="text-[10px] opacity-80">{documentPreview.header}</div>
                       </div>
-                      <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-[10px] overflow-hidden">
-                        {documentPreview.logo ? (
-                          <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
-                        ) : (
-                          'LOGO'
-                        )}
+                      <div className={`w-full flex ${logoJustifyClass}`}>
+                        <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-[10px] overflow-hidden">
+                          {documentPreview.logo ? (
+                            <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                          ) : (
+                            'LOGO'
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="mt-6 text-center">
@@ -2466,17 +2776,19 @@ export default function Settings() {
 
                 {previewModel === 'minimal' && (
                   <div className="mb-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 bg-gray-100 flex items-center justify-center text-[10px] border overflow-hidden">
-                        {documentPreview.logo ? (
-                          <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
-                        ) : (
-                          'LOGO'
-                        )}
+                    <div className="mb-4 space-y-2">
+                      <div className={`w-full flex ${logoJustifyClass}`}>
+                        <div className="w-12 h-12 bg-gray-100 flex items-center justify-center text-[10px] border overflow-hidden">
+                          {documentPreview.logo ? (
+                            <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                          ) : (
+                            'LOGO'
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                         <div className="text-sm font-bold" style={{ color: settings.appearance.primaryColor }}>{documentPreview.clinicName}</div>
-                         <div className="text-[9px] text-gray-500">{documentPreview.header}</div>
+                      <div className={logoTextAlignClass}>
+                        <div className="text-sm font-bold" style={{ color: settings.appearance.primaryColor }}>{documentPreview.clinicName}</div>
+                        <div className="text-[9px] text-gray-500">{documentPreview.header}</div>
                       </div>
                     </div>
                     <div className="h-[2px] w-full mb-8" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
@@ -2487,18 +2799,20 @@ export default function Settings() {
                 {previewModel === 'premium' && (
                   <div className="mb-6">
                      <div className="h-1.5 -mx-6 -mt-6" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
-                     <div className="flex flex-col items-center mt-4">
-                        <div className="w-16 h-16 bg-gray-50 rounded-full border flex items-center justify-center text-[9px] mb-2 overflow-hidden">
-                          {documentPreview.logo ? (
-                            <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
-                          ) : (
-                            'LOGO'
-                          )}
+                     <div className="mt-4">
+                        <div className={`w-full flex ${logoJustifyClass} mb-2`}>
+                          <div className="w-16 h-16 bg-gray-50 rounded-full border flex items-center justify-center text-[9px] overflow-hidden">
+                            {documentPreview.logo ? (
+                              <img src={documentPreview.logo} alt="Logo do documento" className="w-full h-full object-contain" />
+                            ) : (
+                              'LOGO'
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xl font-bold uppercase tracking-widest text-slate-800">{documentPreview.clinicName}</div>
+                        <div className={`text-xl font-bold uppercase tracking-widest text-slate-800 ${logoTextAlignClass}`}>{documentPreview.clinicName}</div>
                         <div className="w-24 h-[1px] my-2" style={{ backgroundColor: settings.appearance.primaryColor }}></div>
-                        <div className="text-[10px] italic text-slate-500 mb-8 underline underline-offset-4">{documentPreview.header}</div>
-                     </div>
+                        <div className={`text-[10px] italic text-slate-500 mb-8 underline underline-offset-4 ${logoTextAlignClass}`}>{documentPreview.header}</div>
+                      </div>
                   </div>
                 )}
 
