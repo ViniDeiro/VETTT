@@ -150,6 +150,57 @@ const EMPTY_DOCUMENT_TEMPLATE = {
   includeVetCpf: false
 }
 
+const DEFAULT_SYSTEM_DOCUMENT_TEMPLATES = [
+  {
+    id: 'doc-default-receita',
+    type: 'receita',
+    title: 'Receita padrão',
+    content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\nPrescrição: {conteudo}\nData: {data}',
+    isDefault: true,
+    useInAttendance: true,
+    includePatientName: true,
+    includePatientData: false,
+    includeOwnerName: true,
+    includeOwnerAddress: false,
+    includeVetName: true,
+    includeVetSignature: false,
+    includeVetCrmv: true,
+    includeVetCpf: false
+  },
+  {
+    id: 'doc-default-atestado',
+    type: 'atestado',
+    title: 'Atestado clínico',
+    content: 'Atesto para os devidos fins que {nome_paciente} foi atendido em {data}.',
+    isDefault: false,
+    useInAttendance: true,
+    includePatientName: true,
+    includePatientData: false,
+    includeOwnerName: true,
+    includeOwnerAddress: false,
+    includeVetName: true,
+    includeVetSignature: false,
+    includeVetCrmv: true,
+    includeVetCpf: false
+  },
+  {
+    id: 'doc-default-alta',
+    type: 'alta',
+    title: 'Alta médica',
+    content: 'Paciente liberado com orientações e retorno programado.\nResumo: {conteudo}',
+    isDefault: false,
+    useInAttendance: true,
+    includePatientName: true,
+    includePatientData: false,
+    includeOwnerName: true,
+    includeOwnerAddress: false,
+    includeVetName: true,
+    includeVetSignature: false,
+    includeVetCrmv: true,
+    includeVetCpf: false
+  }
+]
+
 const DOCUMENT_VARIABLE_OPTIONS = [
   ['{nome_paciente}', 'Nome do paciente'],
   ['{especie_paciente}', 'Espécie do paciente'],
@@ -217,6 +268,15 @@ const SEDATION_LEVEL_OPTIONS = [
   ['leve', 'Leve'],
   ['moderada', 'Moderada'],
   ['profunda', 'Profunda']
+]
+
+const PAYMENT_METHOD_OPTIONS = [
+  ['cash', 'Dinheiro'],
+  ['pix', 'PIX'],
+  ['debit', 'Cartao de debito'],
+  ['credit', 'Cartao de credito'],
+  ['bank_slip', 'Boleto'],
+  ['transfer', 'Transferencia bancaria']
 ]
 
 const formatCurrency = (value, currency = 'BRL', locale = 'pt-BR') => (
@@ -547,11 +607,6 @@ export default function Settings() {
     try {
       const savedSettings = mockDB.saveSettings(settings)
       setSettings(savedSettings)
-      localStorage.setItem('vet_settings', JSON.stringify({
-        clinic: {
-          name: settings.clinic.fantasyName
-        }
-      }))
       window.dispatchEvent(new Event('vet-settings-updated'))
       alert('Configurações salvas com sucesso.')
     } finally {
@@ -655,17 +710,11 @@ export default function Settings() {
     const hasRequiredFields = (
       newProcedure.name &&
       newProcedure.category &&
-      newProcedure.duration &&
-      newProcedure.items.length > 0
+      newProcedure.duration
     )
 
     if (!hasRequiredFields) {
-      alert('Preencha nome, categoria, tempo medio e vincule ao menos um insumo.')
-      return
-    }
-
-    if (procedureChargePrice <= 0) {
-      alert('Informe um valor de cobranca ou uma margem valida.')
+      alert('Preencha nome, categoria e tempo medio.')
       return
     }
 
@@ -1154,6 +1203,39 @@ export default function Settings() {
   }
 
   const removeProfile = profileId => {
+    const profile = profiles.find(item => item.id === profileId)
+    if (!profile) return
+
+    if (profile.type === 'standard') {
+      alert('Perfis padrao nao podem ser removidos.')
+      return
+    }
+
+    const linkedUsers = users.filter(user => user.accessProfileId === profileId)
+    if (linkedUsers.length > 0) {
+      const fallbackProfile = profiles.find(item => item.id !== profileId && item.baseRole === 'secretary')
+        || profiles.find(item => item.id !== profileId && item.baseRole === 'admin')
+        || profiles.find(item => item.id !== profileId)
+
+      if (!fallbackProfile) {
+        alert('Nao ha perfil de destino para realocar os usuarios vinculados.')
+        return
+      }
+
+      const shouldReassign = window.confirm(
+        `Este perfil esta vinculado a ${linkedUsers.length} usuario(s). Deseja mover esses usuarios para "${fallbackProfile.name}" e remover o perfil?`
+      )
+      if (!shouldReassign) return
+
+      linkedUsers.forEach(user => {
+        mockDB.updateUser(user.id, {
+          accessProfileId: fallbackProfile.id,
+          role: fallbackProfile.baseRole || user.role
+        })
+      })
+      setUsers([...mockDB.getUsers()])
+    }
+
     const removed = mockDB.deleteProfile(profileId)
     if (!removed) {
       alert('Perfis padrao ou vinculados a usuarios nao podem ser removidos.')
@@ -1226,6 +1308,16 @@ export default function Settings() {
       ...prev,
       clinicalReminders: prev.clinicalReminders.filter(reminder => reminder.id !== reminderId)
     }))
+  }
+
+  const restoreSystemDocumentTemplates = () => {
+    setSettings(prev => ({
+      ...prev,
+      documentTemplates: DEFAULT_SYSTEM_DOCUMENT_TEMPLATES
+    }))
+    setEditingDocumentTemplateId(null)
+    setDocumentTemplateForm(EMPTY_DOCUMENT_TEMPLATE)
+    alert('Modelos padrão restaurados. Clique em "Salvar Configurações" para persistir.')
   }
 
   const createManualBackup = () => {
@@ -1769,6 +1861,98 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SettingsIcon className="h-5 w-5" />
+                Configuracoes de Pagamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Tipos de pagamento aceitos</p>
+                <p className="text-xs text-gray-500">Selecione os meios que ficarao disponiveis no faturamento e recebimentos.</p>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {PAYMENT_METHOD_OPTIONS.map(([methodKey, label]) => (
+                    <label key={methodKey} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={settings.payment.enabledMethods.includes(methodKey)}
+                        onChange={event => {
+                          const enabledMethods = event.target.checked
+                            ? [...new Set([...settings.payment.enabledMethods, methodKey])]
+                            : settings.payment.enabledMethods.filter(method => method !== methodKey)
+                          updateSettingsGroup('payment', 'enabledMethods', enabledMethods)
+                        }}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+                <label className="flex items-center gap-2 rounded-md border bg-white p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.payment.allowInstallments)}
+                    onChange={event => updateSettingsGroup('payment', 'allowInstallments', event.target.checked)}
+                  />
+                  <span>Permitir parcelamento</span>
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <div>
+                    <Label>Numero maximo de parcelas</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={settings.payment.maxInstallments}
+                      disabled={!settings.payment.allowInstallments}
+                      onChange={event => {
+                        const parsed = Number(event.target.value)
+                        const value = Number.isFinite(parsed) ? Math.min(24, Math.max(1, parsed)) : 1
+                        updateSettingsGroup('payment', 'maxInstallments', value)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label>Juros por parcela (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={settings.payment.installmentInterestRate}
+                      disabled={!settings.payment.allowInstallments}
+                      onChange={event => {
+                        const parsed = Number(event.target.value)
+                        const value = Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+                        updateSettingsGroup('payment', 'installmentInterestRate', value)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label>Tipo de juros</Label>
+                    <select
+                      className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background"
+                      value={settings.payment.installmentInterestType}
+                      disabled={!settings.payment.allowInstallments}
+                      onChange={event => updateSettingsGroup('payment', 'installmentInterestType', event.target.value)}
+                    >
+                      <option value="simple">Simples</option>
+                      <option value="compound">Compostos</option>
+                    </select>
+                  </div>
+                  <div className="rounded-md border bg-white p-3 text-sm text-gray-600">
+                    {settings.payment.allowInstallments
+                      ? `Parcelamento ativo ate ${settings.payment.maxInstallments}x com juros de ${Number(settings.payment.installmentInterestRate || 0).toFixed(2)}%`
+                      : 'Parcelamento desativado'}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2164,10 +2348,13 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                Documentos e PDF
+                Documentos PDF
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <p className="text-xs text-gray-500">
+                Configuração do layout PDF e editor de modelos na seção "Editor de Documentos PDF" logo abaixo.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
                   ['classic', 'Modelo 1', 'Profissional clássico'],
@@ -2246,6 +2433,11 @@ export default function Settings() {
                     <span>{label}</span>
                   </label>
                 ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={restoreSystemDocumentTemplates}>
+                  Restaurar modelos padrão do sistema
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -2508,7 +2700,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                Modelos de Documentos
+                Editor de Documentos PDF
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">

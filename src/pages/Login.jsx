@@ -22,11 +22,11 @@ export default function Login() {
     setIsLoading(true)
 
     setTimeout(() => {
-      const success = login('admin@vettooth.com.br', '123')
+      const success = login(email.trim(), password)
       if (success) {
         navigate('/dashboard')
       } else {
-        setError('Não foi possível fazer login automático')
+        setError('Credenciais inválidas ou usuário inativo.')
         setIsLoading(false)
       }
     }, 500)

@@ -270,6 +270,7 @@ export interface GeneralSettings {
   appearance: ClinicAppearance;
   documents: DocumentLayoutSettings;
   regional: RegionalSettings;
+  payment: PaymentSettings;
   consultationTemplates: ConsultationTemplate[];
   documentTemplates: DocumentTemplateDefinition[];
   automatedMessages: AutomatedMessageTemplate[];
@@ -280,6 +281,14 @@ export interface GeneralSettings {
   dashboard: DashboardSettings;
   units: ClinicUnit[];
   clinicalReminders: ClinicalReminderTemplate[];
+}
+
+export interface PaymentSettings {
+  enabledMethods: Array<'cash' | 'pix' | 'debit' | 'credit' | 'bank_slip' | 'transfer'>;
+  allowInstallments: boolean;
+  maxInstallments: number;
+  installmentInterestRate: number;
+  installmentInterestType: 'simple' | 'compound';
 }
 
 export interface Owner {

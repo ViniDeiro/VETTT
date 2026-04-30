@@ -36,7 +36,7 @@ const createEmptyAppointment = () => ({
   patientName: '',
   appointmentMode: 'patient',
   type: 'Canino',
-  doctor: 'Dr. Silva',
+  doctor: '',
   date: getTodayISODate(),
   startTime: DEFAULT_START_TIME,
   endTime: DEFAULT_END_TIME,
@@ -151,16 +151,16 @@ const formatTimeForInput = (dateValue) => {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const formatDate = (dateValue) => {
+const formatDate = (dateValue, locale = 'pt-BR') => {
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) return 'Data inválida'
-  return date.toLocaleDateString('pt-BR')
+  return date.toLocaleDateString(locale)
 }
 
-const formatTime = (dateValue) => {
+const formatTime = (dateValue, locale = 'pt-BR') => {
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) return '--:--'
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Agenda() {
@@ -189,6 +189,7 @@ export default function Agenda() {
   // Dynamic Data from Settings
   const [vets, setVets] = useState([])
   const [locations, setLocations] = useState([])
+  const [uiLanguage, setUiLanguage] = useState(mockDB.getSettings()?.regional?.language || 'pt-BR')
 
   const resetAppointmentForm = () => {
     setNewAppointment(createEmptyAppointment())
@@ -248,13 +249,30 @@ export default function Agenda() {
       const loadedProperties = mockDB.getAllProperties()
       const loadedAppointments = mockDB.getAppointments()
       const loadedTeam = mockDB.getTeamMembers()
+      const loadedUsers = mockDB.getUsers()
       const loadedSettings = mockDB.getSettings()
 
       setPatients(loadedPatients)
       setOwners(loadedOwners)
       setProperties(loadedProperties)
-      setVets(loadedTeam.filter(m => m.functionTitle?.toLowerCase().includes('veterinario') || m.functionTitle?.toLowerCase().includes('veterinário')))
+      const teamVetNames = loadedTeam
+        .filter(member => (
+          member.status !== 'inactive' && (
+            member.functionTitle?.toLowerCase().includes('veterinario') ||
+            member.functionTitle?.toLowerCase().includes('veterinário') ||
+            member.specialty?.toLowerCase().includes('veterin')
+          )
+        ))
+        .map(member => member.name)
+        .filter(Boolean)
+      const userVetNames = loadedUsers
+        .filter(user => user.status !== 'inactive' && user.role === 'vet')
+        .map(user => user.fullName || user.name)
+        .filter(Boolean)
+      const mergedVetNames = [...new Set([...teamVetNames, ...userVetNames])]
+      setVets(mergedVetNames.map((name, index) => ({ id: `vet-${index}-${name}`, name })))
       setLocations(loadedSettings.units || [])
+      setUiLanguage(loadedSettings?.regional?.language || 'pt-BR')
       
       setAppointments(
         loadedAppointments.map(appointment =>
@@ -273,6 +291,13 @@ export default function Agenda() {
     window.addEventListener('vet-settings-updated', loadData)
     return () => window.removeEventListener('vet-settings-updated', loadData)
   }, [])
+
+  useEffect(() => {
+    if (vets.length === 0) return
+    setNewAppointment(prev => (
+      prev.doctor ? prev : { ...prev, doctor: vets[0].name }
+    ))
+  }, [vets])
 
   useEffect(() => {
     if (hasAppliedInitialSchedule || !location.state?.openNewAppointment || !location.state?.schedulePatientId || patients.length === 0) {
@@ -451,7 +476,7 @@ export default function Agenda() {
     const startMinutes = timeToMinutes(newAppointment.startTime)
     const endMinutes = timeToMinutes(newAppointment.endTime)
 
-    if (!appointmentLabel || !newAppointment.date || !newAppointment.startTime || !newAppointment.endTime) {
+    if (!appointmentLabel || !newAppointment.doctor || !newAppointment.date || !newAppointment.startTime || !newAppointment.endTime) {
         alert("Preencha os campos obrigatórios");
         return;
     }
@@ -558,9 +583,9 @@ export default function Agenda() {
   const formatDateRange = () => {
     const options = { day: 'numeric', month: 'long', year: 'numeric' }
     
-    if (view === 'Hoje') return selectedDate.toLocaleDateString('pt-BR', options)
+    if (view === 'Hoje') return selectedDate.toLocaleDateString(uiLanguage, options)
     
-    if (view === 'Mês') return selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    if (view === 'Mês') return selectedDate.toLocaleDateString(uiLanguage, { month: 'long', year: 'numeric' })
 
     // Semana
     const currentDay = selectedDate.getDay()
@@ -572,7 +597,7 @@ export default function Agenda() {
     sunday.setDate(monday.getDate() + 6)
 
     const optMonth = { day: 'numeric', month: 'long' }
-    return `${monday.toLocaleDateString('pt-BR', optMonth)} - ${sunday.toLocaleDateString('pt-BR', optMonth)}, ${sunday.getFullYear()}`
+    return `${monday.toLocaleDateString(uiLanguage, optMonth)} - ${sunday.toLocaleDateString(uiLanguage, optMonth)}, ${sunday.getFullYear()}`
   }
 
   const handleFilterChange = (category, item) => {
@@ -634,7 +659,7 @@ export default function Agenda() {
                   const d = new Date(selectedDate); d.setMonth(d.getMonth()-1); setSelectedDate(d)
               }}><ChevronLeft className="h-4 w-4 text-gray-500" /></button>
               <span className="font-semibold text-gray-900 capitalize">
-                {selectedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                {selectedDate.toLocaleString(uiLanguage, { month: 'long', year: 'numeric' })}
               </span>
               <button className="p-1 hover:bg-gray-100 rounded" onClick={() => {
                    const d = new Date(selectedDate); d.setMonth(d.getMonth()+1); setSelectedDate(d)
@@ -791,7 +816,7 @@ export default function Agenda() {
                 <div className="p-4 border-r border-gray-50"></div> {/* Coluna Hora */}
                 {visibleDays.map((date) => {
                   const isToday = date.toDateString() === new Date().toDateString()
-                  const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+                  const dayName = date.toLocaleDateString(uiLanguage, { weekday: 'short' }).replace('.', '')
 
                   return (
                     <div key={date.toString()} className={cn(
@@ -975,10 +1000,7 @@ export default function Agenda() {
                     <option key={vet.id} value={vet.name}>{vet.name}</option>
                   ))
                 ) : (
-                  <>
-                    <option value="Dr. Silva">Dr. Silva</option>
-                    <option value="Dra. Santos">Dra. Santos</option>
-                  </>
+                  <option value="">Sem veterinários cadastrados</option>
                 )}
               </Select>
           </div>
@@ -1021,7 +1043,6 @@ export default function Agenda() {
                 name="date"
                 value={newAppointment.date}
                 onChange={handleInputChange}
-                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
             <div className="space-y-2">
@@ -1031,7 +1052,6 @@ export default function Agenda() {
                 name="startTime"
                 value={newAppointment.startTime}
                 onChange={handleInputChange}
-                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
             <div className="space-y-2">
@@ -1041,7 +1061,6 @@ export default function Agenda() {
                 name="endTime"
                 value={newAppointment.endTime}
                 onChange={handleInputChange}
-                disabled={editingAppointmentId && appointmentActionMode === 'edit'}
               />
             </div>
           </div>
@@ -1084,6 +1103,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
     );
 
     const canConfirmAppointment = isAppointmentToday(appointment) && !['confirmado', 'confirmed'].includes(normalizeAppointmentStatus(appointment.status))
+    const uiLanguage = mockDB.getSettings()?.regional?.language || 'pt-BR'
 
     return (
         <>
@@ -1093,7 +1113,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                     icon={CalendarIcon}
                     color="bg-blue-50 text-blue-600"
                     label="Data e Horário"
-                    value={`${formatDate(appointment.start)} - ${formatTime(appointment.start)} às ${formatTime(appointment.end)}`}
+                    value={`${formatDate(appointment.start, uiLanguage)} - ${formatTime(appointment.start, uiLanguage)} às ${formatTime(appointment.end, uiLanguage)}`}
                   />
                   <InfoItem
                     icon={CheckCircle}
@@ -1135,8 +1155,8 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
 
                 {appointment.notes && (
                   <div className="rounded-xl border border-gray-200 p-4">
-                    <p className="text-sm font-bold text-blue-900 mb-1">{formatTime(appointment.start)}</p>
-                    <p className="text-xs text-blue-600 font-medium">{formatDate(appointment.start)}</p>
+                    <p className="text-sm font-bold text-blue-900 mb-1">{formatTime(appointment.start, uiLanguage)}</p>
+                    <p className="text-xs text-blue-600 font-medium">{formatDate(appointment.start, uiLanguage)}</p>
                   </div>
                 )}
 

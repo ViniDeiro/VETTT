@@ -376,6 +376,13 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
     currency: 'BRL',
     decimalSeparator: ','
   },
+  payment: {
+    enabledMethods: ['cash', 'pix', 'debit', 'credit'],
+    allowInstallments: true,
+    maxInstallments: 6,
+    installmentInterestRate: 0,
+    installmentInterestType: 'simple'
+  },
   consultationTemplates: [
     {
       id: 'consult-1',
@@ -733,11 +740,17 @@ class MockDatabaseService {
   }
 
   private normalizeSettings(settings?: Partial<GeneralSettings> | null): GeneralSettings {
-    const normalizedDocumentTemplates = (settings?.documentTemplates || INITIAL_GENERAL_SETTINGS.documentTemplates).map((template, index) => ({
+    const incomingDocumentTemplates = Array.isArray(settings?.documentTemplates) && settings.documentTemplates.length > 0
+      ? settings.documentTemplates
+      : INITIAL_GENERAL_SETTINGS.documentTemplates;
+    const normalizedDocumentTemplates = incomingDocumentTemplates.map((template, index) => ({
       ...template,
       isDefault: Boolean(template.isDefault) || index === 0
     }));
-    const normalizedConsultationTemplates = (settings?.consultationTemplates || INITIAL_GENERAL_SETTINGS.consultationTemplates).map(template => ({
+    const incomingConsultationTemplates = Array.isArray(settings?.consultationTemplates) && settings.consultationTemplates.length > 0
+      ? settings.consultationTemplates
+      : INITIAL_GENERAL_SETTINGS.consultationTemplates;
+    const normalizedConsultationTemplates = incomingConsultationTemplates.map(template => ({
       ...template,
       icon: template.icon || '➕',
       checklist: Array.isArray(template.checklist) ? template.checklist : [],
@@ -755,6 +768,7 @@ class MockDatabaseService {
       appearance: { ...INITIAL_GENERAL_SETTINGS.appearance, ...(settings?.appearance || {}) },
       documents: { ...INITIAL_GENERAL_SETTINGS.documents, ...(settings?.documents || {}) },
       regional: { ...INITIAL_GENERAL_SETTINGS.regional, ...(settings?.regional || {}) },
+      payment: { ...INITIAL_GENERAL_SETTINGS.payment, ...(settings?.payment || {}) },
       whatsapp: { ...INITIAL_GENERAL_SETTINGS.whatsapp, ...(settings?.whatsapp || {}) },
       fiscal: { ...INITIAL_GENERAL_SETTINGS.fiscal, ...(settings?.fiscal || {}) },
       audit: { ...INITIAL_GENERAL_SETTINGS.audit, ...(settings?.audit || {}) },
