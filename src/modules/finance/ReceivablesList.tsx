@@ -27,13 +27,14 @@ export const ReceivablesList: React.FC = () => {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [animate, setAnimate] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activePeriodFilter, setActivePeriodFilter] = useState('Mês');
   
-  // Payment Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [installments, setInstallments] = useState(1);
   const [taxRate, setTaxRate] = useState(0);
+  const [settings, setSettings] = useState(() => mockDB.getSettings());
 
   useEffect(() => {
     setReceivables(mockDB.getReceivables());
@@ -49,7 +50,11 @@ export const ReceivablesList: React.FC = () => {
     if (!value) return new Date(0);
     if (value.includes('/')) {
       const [day, month, year] = value.split('/');
-      return new Date(`${year}-${month}-${day}T00:00:00`);
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    if (value.length === 10 && value.includes('-')) {
+      const [year, month, day] = value.split('-');
+      return new Date(Number(year), Number(month) - 1, Number(day));
     }
     return new Date(value);
   };
@@ -80,6 +85,22 @@ export const ReceivablesList: React.FC = () => {
       setInstallments(1);
       setTaxRate(0);
       setIsPayModalOpen(true);
+  };
+
+  const handleInstallmentChange = (newInstallments: number) => {
+      setInstallments(newInstallments);
+      const rate = settings.payment?.installmentRates?.[newInstallments] || 0;
+      setTaxRate(rate);
+  };
+
+  const handlePaymentMethodChange = (method: string) => {
+      setPaymentMethod(method);
+      if (method === 'credit_card') {
+          handleInstallmentChange(1);
+      } else {
+          setInstallments(1);
+          setTaxRate(0);
+      }
   };
 
   const handleConfirmPay = () => {
@@ -186,7 +207,23 @@ export const ReceivablesList: React.FC = () => {
                           (r.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || r.normalizedStatus === filterStatus;
     
-    return matchesSearch && matchesFilter;
+    let matchesPeriod = true;
+    if (activePeriodFilter !== 'Todos') {
+      const itemDate = parseDate(r.paymentDate || r.dueDate); // Use paymentDate if paid, else dueDate
+      const now = new Date();
+      if (activePeriodFilter === 'Hoje') {
+        matchesPeriod = itemDate.getDate() === now.getDate() && itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+      } else if (activePeriodFilter === 'Semana') {
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - 6);
+        weekStart.setHours(0,0,0,0);
+        matchesPeriod = itemDate >= weekStart && itemDate <= now;
+      } else if (activePeriodFilter === 'Mês') {
+        matchesPeriod = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+      }
+    }
+    
+    return matchesSearch && matchesFilter && matchesPeriod;
   });
 
   return (
@@ -247,8 +284,24 @@ export const ReceivablesList: React.FC = () => {
         )}>
             <CardContent className="p-6">
             <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Lançamentos {filterStatus !== 'all' && <span className="text-sm font-normal text-gray-500 ml-2">(Filtro: {filterStatus === 'paid' ? 'Pagos' : filterStatus === 'overdue' ? 'Atrasados' : 'Pendentes'})</span>}</h3>
-                <div className="flex gap-2 items-center">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Lançamentos {filterStatus !== 'all' && <span className="text-sm font-normal text-gray-500 ml-2">(Filtro: {filterStatus === 'paid' ? 'Pagos' : filterStatus === 'overdue' ? 'Atrasados' : 'Pendentes'})</span>}</h3>
+                  <div className="flex bg-gray-100 p-1 rounded-lg mt-2 inline-flex">
+                    {['Hoje', 'Semana', 'Mês', 'Todos'].map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setActivePeriodFilter(filter)}
+                        className={cn(
+                          'px-3 py-1 text-xs font-medium rounded-md transition-all',
+                          activePeriodFilter === filter ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                        )}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2 items-start">
                     <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
                         <Filter className="h-4 w-4" />
                         <select
@@ -442,7 +495,7 @@ export const ReceivablesList: React.FC = () => {
                         <Label>Forma de Pagamento</Label>
                         <Select 
                             value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            onChange={(e) => handlePaymentMethodChange(e.target.value)}
                         >
                             <option value="cash">Dinheiro</option>
                             <option value="pix">Pix</option>
@@ -458,9 +511,9 @@ export const ReceivablesList: React.FC = () => {
                                 <Label>Parcelas</Label>
                                 <Select 
                                     value={installments}
-                                    onChange={(e) => setInstallments(Number(e.target.value))}
+                                    onChange={(e) => handleInstallmentChange(Number(e.target.value))}
                                 >
-                                    {[1,2,3,4,5,6,10,12].map(i => (
+                                    {Array.from({ length: settings.payment.maxInstallments || 12 }, (_, i) => i + 1).map(i => (
                                         <option key={i} value={i}>{i}x</option>
                                     ))}
                                 </Select>

@@ -381,6 +381,14 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
     allowInstallments: true,
     maxInstallments: 6,
     installmentInterestRate: 0,
+    installmentRates: {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+      6: 0
+    },
     installmentInterestType: 'simple'
   },
   consultationTemplates: [
@@ -392,6 +400,8 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       duration: '30 min',
       icon: '🩺',
       anamnesisText: 'Queixa principal, alimentacao, uso de medicamentos e historico recente.',
+      physicalExamText: 'Paciente em bom estado geral. Nódulos linfáticos normais. Ausculta cardiopulmonar sem alterações.',
+      diagnosisText: 'Exame clínico dentro da normalidade. Sugerido acompanhamento anual.',
       checklist: ['Peso', 'Temperatura', 'Avaliacao oral'],
       physicalExamChecklist: ['Inspecao geral', 'Mucosas', 'Palpacao abdominal'],
       diagnosisChecklist: ['Hipotese principal', 'Diferenciais', 'Plano inicial'],
@@ -405,6 +415,8 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       duration: '50 min',
       icon: '🦷',
       anamnesisText: 'Odor oral, sangramento gengival, dor, alimentacao e higiene oral.',
+      physicalExamText: 'Halitose presente. Presença de cálculo dentário. Gengivite.',
+      diagnosisText: 'Doença periodontal grau 2. Indicado profilaxia dentária.',
       checklist: ['Odontograma', 'Anestesia', 'Termo assinado'],
       physicalExamChecklist: ['Avaliacao oral completa', 'Dor a palpacao', 'Sangramento gengival'],
       diagnosisChecklist: ['Doenca periodontal', 'Fraturas dentarias', 'Plano odontologico'],
@@ -418,6 +430,8 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       duration: '90 min',
       icon: '✂️',
       anamnesisText: 'Jejum, risco anestesico, hemograma e autorizacoes.',
+      physicalExamText: 'Apto para procedimento cirúrgico. Risco cirúrgico classificado.',
+      diagnosisText: 'Indicado procedimento cirúrgico conforme avaliação.',
       checklist: ['Hemograma', 'Assinatura', 'Checklist pre-operatorio'],
       physicalExamChecklist: ['Avaliacao cardiaca', 'Avaliacao respiratoria', 'Acesso venoso'],
       diagnosisChecklist: ['Indicacao cirurgica', 'Risco anestesico', 'Planejamento cirurgico'],
@@ -756,7 +770,9 @@ class MockDatabaseService {
       checklist: Array.isArray(template.checklist) ? template.checklist : [],
       requiredFields: Array.isArray(template.requiredFields) ? template.requiredFields : [],
       physicalExamChecklist: Array.isArray(template.physicalExamChecklist) ? template.physicalExamChecklist : [],
-      diagnosisChecklist: Array.isArray(template.diagnosisChecklist) ? template.diagnosisChecklist : []
+      diagnosisChecklist: Array.isArray(template.diagnosisChecklist) ? template.diagnosisChecklist : [],
+      physicalExamText: template.physicalExamText || '',
+      diagnosisText: template.diagnosisText || ''
     }));
 
     const hasDefaultDocumentTemplate = normalizedDocumentTemplates.some(template => template.isDefault);
@@ -768,7 +784,14 @@ class MockDatabaseService {
       appearance: { ...INITIAL_GENERAL_SETTINGS.appearance, ...(settings?.appearance || {}) },
       documents: { ...INITIAL_GENERAL_SETTINGS.documents, ...(settings?.documents || {}) },
       regional: { ...INITIAL_GENERAL_SETTINGS.regional, ...(settings?.regional || {}) },
-      payment: { ...INITIAL_GENERAL_SETTINGS.payment, ...(settings?.payment || {}) },
+      payment: { 
+        ...INITIAL_GENERAL_SETTINGS.payment, 
+        ...(settings?.payment || {}),
+        installmentRates: {
+          ...INITIAL_GENERAL_SETTINGS.payment.installmentRates,
+          ...(settings?.payment?.installmentRates || {})
+        }
+      },
       whatsapp: { ...INITIAL_GENERAL_SETTINGS.whatsapp, ...(settings?.whatsapp || {}) },
       fiscal: { ...INITIAL_GENERAL_SETTINGS.fiscal, ...(settings?.fiscal || {}) },
       audit: { ...INITIAL_GENERAL_SETTINGS.audit, ...(settings?.audit || {}) },

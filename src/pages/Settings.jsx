@@ -128,6 +128,8 @@ const EMPTY_CONSULTATION_FORM = {
   defaultValue: '',
   duration: '',
   anamnesisText: '',
+  physicalExamText: '',
+  diagnosisText: '',
   checklist: '',
   physicalExamChecklist: '',
   diagnosisChecklist: '',
@@ -898,6 +900,7 @@ export default function Settings() {
     setTeamMembers([...mockDB.getTeamMembers()])
     setAuditLogs([...mockDB.getAuditLogs()])
     resetSystemUserForm()
+    alert('Usuário salvo com sucesso!')
   }
 
   const removeSystemUser = userId => {
@@ -928,6 +931,8 @@ export default function Settings() {
       defaultValue: Number(consultationForm.defaultValue || 0),
       duration: consultationForm.duration,
       anamnesisText: consultationForm.anamnesisText,
+      physicalExamText: consultationForm.physicalExamText,
+      diagnosisText: consultationForm.diagnosisText,
       checklist: consultationForm.checklist.split(',').map(item => item.trim()).filter(Boolean),
       physicalExamChecklist: consultationForm.physicalExamChecklist.split(',').map(item => item.trim()).filter(Boolean),
       diagnosisChecklist: consultationForm.diagnosisChecklist.split(',').map(item => item.trim()).filter(Boolean),
@@ -962,6 +967,8 @@ export default function Settings() {
       defaultValue: String(template.defaultValue ?? ''),
       duration: template.duration || '',
       anamnesisText: template.anamnesisText || '',
+      physicalExamText: template.physicalExamText || '',
+      diagnosisText: template.diagnosisText || '',
       checklist: (template.checklist || []).join(', '),
       physicalExamChecklist: (template.physicalExamChecklist || []).join(', '),
       diagnosisChecklist: (template.diagnosisChecklist || []).join(', '),
@@ -1918,22 +1925,7 @@ export default function Settings() {
                     />
                   </div>
                   <div>
-                    <Label>Juros por parcela (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={settings.payment.installmentInterestRate}
-                      disabled={!settings.payment.allowInstallments}
-                      onChange={event => {
-                        const parsed = Number(event.target.value)
-                        const value = Number.isFinite(parsed) ? Math.max(0, parsed) : 0
-                        updateSettingsGroup('payment', 'installmentInterestRate', value)
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <Label>Tipo de juros</Label>
+                    <Label>Tipo de juros (Global)</Label>
                     <select
                       className="mt-1 w-full px-3 py-2 rounded-md border border-input bg-background"
                       value={settings.payment.installmentInterestType}
@@ -1944,12 +1936,48 @@ export default function Settings() {
                       <option value="compound">Compostos</option>
                     </select>
                   </div>
-                  <div className="rounded-md border bg-white p-3 text-sm text-gray-600">
+                  <div className="rounded-md border bg-white p-3 text-sm text-gray-600 xl:col-span-2">
                     {settings.payment.allowInstallments
-                      ? `Parcelamento ativo ate ${settings.payment.maxInstallments}x com juros de ${Number(settings.payment.installmentInterestRate || 0).toFixed(2)}%`
+                      ? `Parcelamento ativo ate ${settings.payment.maxInstallments}x. Configure as taxas detalhadas abaixo.`
                       : 'Parcelamento desativado'}
                   </div>
                 </div>
+
+                {settings.payment.allowInstallments && (
+                  <div className="mt-4 border-t pt-4">
+                    <Label className="mb-3 block text-base font-semibold text-gray-800">Taxas por quantidade de parcelas (%)</Label>
+                    <p className="text-xs text-gray-500 mb-4">Insira o total de juros cobrado pela operadora de cartão para cada quantidade de parcelas. Esse valor será preenchido automaticamente ao receber um pagamento parcelado.</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                      {Array.from({ length: settings.payment.maxInstallments || 1 }, (_, i) => i + 1).map(installmentCount => (
+                        <div key={installmentCount} className="flex flex-col gap-1">
+                          <Label className="text-xs font-medium text-gray-600">{installmentCount}x</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="0.00"
+                            value={(settings.payment.installmentRates && settings.payment.installmentRates[installmentCount]) ?? 0}
+                            onChange={event => {
+                              const parsed = Number(event.target.value)
+                              const value = Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+                              
+                              setSettings(prev => ({
+                                ...prev,
+                                payment: {
+                                  ...prev.payment,
+                                  installmentRates: {
+                                    ...prev.payment.installmentRates,
+                                    [installmentCount]: value
+                                  }
+                                }
+                              }))
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2253,7 +2281,25 @@ export default function Settings() {
                 <Input placeholder="Especialidade" value={teamForm.specialty} onChange={event => setTeamForm(prev => ({ ...prev, specialty: event.target.value }))} />
                 <Input placeholder="CRMV" value={teamForm.crmv} onChange={event => setTeamForm(prev => ({ ...prev, crmv: event.target.value }))} />
                 <Input placeholder="CPF" value={teamForm.cpf} onChange={event => setTeamForm(prev => ({ ...prev, cpf: maskCPF(event.target.value) }))} />
-                <Input placeholder="Assinatura" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} />
+                <div className="flex gap-2">
+                  <Input placeholder="Assinatura (Imagem)" value={teamForm.signature} onChange={event => setTeamForm(prev => ({ ...prev, signature: event.target.value }))} className="flex-1" />
+                  <Button type="button" variant="outline" size="icon" onClick={() => document.getElementById('system-user-signature-upload')?.click()}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <input
+                    type="file"
+                    id="system-user-signature-upload"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={event => {
+                      const file = event.target.files?.[0]
+                      if (!file) return
+                      const reader = new FileReader()
+                      reader.onload = readEvent => setTeamForm(prev => ({ ...prev, signature: readEvent.target?.result }))
+                      reader.readAsDataURL(file)
+                    }}
+                  />
+                </div>
                 <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.status} onChange={event => setUserForm(prev => ({ ...prev, status: event.target.value }))}>
                   <option value="active">Ativo</option>
                   <option value="inactive">Inativo</option>
@@ -2498,6 +2544,10 @@ export default function Settings() {
               </div>
               <textarea className="w-full border rounded-md p-3 min-h-[90px]" placeholder="Texto padrão de anamnese" value={consultationForm.anamnesisText} onChange={event => setConsultationForm(prev => ({ ...prev, anamnesisText: event.target.value }))} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <textarea className="w-full border rounded-md p-3 min-h-[90px]" placeholder="Texto padrão de exame físico" value={consultationForm.physicalExamText} onChange={event => setConsultationForm(prev => ({ ...prev, physicalExamText: event.target.value }))} />
+                <textarea className="w-full border rounded-md p-3 min-h-[90px]" placeholder="Texto padrão de diagnóstico" value={consultationForm.diagnosisText} onChange={event => setConsultationForm(prev => ({ ...prev, diagnosisText: event.target.value }))} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label>Checklist pré-consulta</Label>
                   <Input placeholder="Ex: Jejum 8h, Exame de sangue, Consentimento assinado" value={consultationForm.checklist} onChange={event => setConsultationForm(prev => ({ ...prev, checklist: event.target.value }))} />
@@ -2741,17 +2791,56 @@ export default function Settings() {
                   </label>
                 ))}
               </div>
-              <div className="rounded-md border p-3 bg-white">
-                <p className="text-xs font-semibold text-gray-700 mb-2">Campos automáticos (clique para inserir no texto)</p>
-                <div className="flex flex-wrap gap-2">
-                  {DOCUMENT_VARIABLE_OPTIONS.map(([token, label]) => (
-                    <Button key={token} type="button" variant="outline" size="sm" onClick={() => appendDocumentVariable(token)}>
-                      {label}
-                    </Button>
-                  ))}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="rounded-md border p-3 bg-white">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Campos automáticos (clique para inserir no texto)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {DOCUMENT_VARIABLE_OPTIONS.map(([token, label]) => (
+                        <Button key={token} type="button" variant="outline" size="sm" onClick={() => appendDocumentVariable(token)}>
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea className="w-full border rounded-md p-3 min-h-[300px] text-sm" placeholder="Texto do modelo" value={documentTemplateForm.content} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, content: event.target.value }))} />
+                </div>
+                
+                <div className="rounded-md border bg-gray-50 p-6 flex items-center justify-center min-h-[400px]">
+                  <div className="w-full max-w-[400px] aspect-[1/1.414] bg-white shadow-md border rounded p-6 flex flex-col relative overflow-hidden">
+                    {/* Header Simulation */}
+                    <div className="border-b-2 pb-2 mb-4">
+                      <div className="flex justify-between items-center">
+                        <div className="w-8 h-8 bg-gray-200 rounded" />
+                        <div className="flex-1 px-4 text-center">
+                          <p className="text-[10px] font-bold uppercase">{documentPreview.clinicName}</p>
+                          <p className="text-[8px] text-gray-500">{documentPreview.header}</p>
+                        </div>
+                      </div>
+                      <h4 className="text-center font-bold text-sm mt-3">{documentTemplateForm.title || 'Título do Documento'}</h4>
+                    </div>
+                    {/* Content Simulation */}
+                    <div 
+                      className="text-[9px] text-gray-800 flex-1 whitespace-pre-wrap font-serif" 
+                      dangerouslySetInnerHTML={{ 
+                        __html: (documentTemplateForm.content || 'Texto do documento...\n\nInsira os campos usando o editor ao lado.')
+                          .replace(/\n/g, '<br/>')
+                          .replace(/\{(.*?)\}/g, '<span class="bg-blue-100 text-blue-800 px-1 rounded-sm border border-blue-200">{$1}</span>') 
+                      }} 
+                    />
+                    {/* Footer Simulation */}
+                    <div className="mt-4 pt-2 border-t text-[7px] text-center text-gray-500">
+                      {documentTemplateForm.includeVetSignature && (
+                        <div className="mb-4">
+                          <div className="w-32 border-t border-gray-400 mx-auto mb-1"></div>
+                          <p>Assinatura do Veterinário</p>
+                        </div>
+                      )}
+                      <p>{documentPreview.footer}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <textarea className="w-full border rounded-md p-3 min-h-[110px]" placeholder="Texto do modelo" value={documentTemplateForm.content} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, content: event.target.value }))} />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={documentTemplateForm.isDefault} onChange={event => setDocumentTemplateForm(prev => ({ ...prev, isDefault: event.target.checked }))} />
                 Marcar como modelo padrão

@@ -24,6 +24,10 @@ const parseFlexibleDate = (value) => {
     const [day, month, year] = value.split('/')
     return new Date(Number(year), Number(month) - 1, Number(day))
   }
+  if (value.length === 10 && value.includes('-')) {
+      const [year, month, day] = value.split('-');
+      return new Date(Number(year), Number(month) - 1, Number(day));
+  }
   return new Date(value)
 }
 

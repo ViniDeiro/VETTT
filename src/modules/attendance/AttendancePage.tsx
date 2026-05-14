@@ -78,6 +78,7 @@ export const AttendancePage: React.FC = () => {
   // Attendance Form State
   const [currentAttendance, setCurrentAttendance] = useState<Attendance | null>(null);
   const [anamnesis, setAnamnesis] = useState('');
+  const [physicalExam, setPhysicalExam] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [serviceFee, setServiceFee] = useState(0);
   const [consumedItems, setConsumedItems] = useState<ConsumptionItem[]>([]);
@@ -245,9 +246,13 @@ export const AttendancePage: React.FC = () => {
       // Auto-fill from template
       if (template) {
         setAnamnesis(template.anamnesisText || '');
+        setPhysicalExam(template.physicalExamText || '');
+        setDiagnosis(template.diagnosisText || '');
         setServiceFee(template.defaultValue || 0);
       } else {
         setAnamnesis('');
+        setPhysicalExam('');
+        setDiagnosis('');
         setServiceFee(0);
       }
       
@@ -1180,15 +1185,71 @@ export const AttendancePage: React.FC = () => {
                                         />
                                     </div>
 
-                                    <div>
-                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Exame Físico e Diagnóstico</Label>
+                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Exame Físico</Label>
+                                        
+                                        {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template?.physicalExamChecklist?.length > 0 && (
+                                            <div className="mb-4">
+                                                <Label className="text-sm font-medium text-gray-600 mb-2 block">Itens a avaliar:</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template.physicalExamChecklist.map((item: string, idx: number) => (
+                                                        <label key={idx} className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                                                            <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                                            <span className="text-gray-700">{item}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <textarea 
-                                            className="w-full min-h-[150px] p-4 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all resize-y text-gray-700 leading-relaxed"
-                                            placeholder="Descreva os achados do exame físico e a conclusão diagnóstica..."
+                                            className="w-full min-h-[120px] p-4 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all resize-y text-gray-700 leading-relaxed"
+                                            placeholder="Descreva os achados do exame físico..."
+                                            value={physicalExam}
+                                            onChange={e => setPhysicalExam(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label className="text-base font-semibold text-gray-700 mb-2 block">Diagnóstico e Conclusão</Label>
+                                        
+                                        {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template?.diagnosisChecklist?.length > 0 && (
+                                            <div className="mb-4">
+                                                <Label className="text-sm font-medium text-gray-600 mb-2 block">Hipóteses e plano:</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template.diagnosisChecklist.map((item: string, idx: number) => (
+                                                        <label key={idx} className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                                                            <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                                            <span className="text-gray-700">{item}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <textarea 
+                                            className="w-full min-h-[120px] p-4 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all resize-y text-gray-700 leading-relaxed"
+                                            placeholder="Descreva a conclusão diagnóstica..."
                                             value={diagnosis}
                                             onChange={e => setDiagnosis(e.target.value)}
                                         />
                                     </div>
+
+                                    {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template?.requiredFields?.length > 0 && (
+                                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mt-4">
+                                            <Label className="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2">
+                                                <AlertCircle className="h-4 w-4" />
+                                                Campos Obrigatórios desta Consulta
+                                            </Label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template.requiredFields.map((item: string, idx: number) => (
+                                                    <label key={idx} className="flex items-center gap-2 bg-white/60 border border-yellow-300 px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-yellow-100 transition-colors">
+                                                        <input type="checkbox" className="rounded border-yellow-500 text-yellow-600 focus:ring-yellow-500" />
+                                                        <span className="text-yellow-900 font-medium">{item}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 {historySubTab === 'Procedimentos' && (
                                     <div className="space-y-4">

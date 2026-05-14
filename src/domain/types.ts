@@ -138,6 +138,8 @@ export interface ConsultationTemplate {
   duration: string;
   icon?: string;
   anamnesisText: string;
+  physicalExamText?: string;
+  diagnosisText?: string;
   checklist: string[];
   physicalExamChecklist?: string[];
   diagnosisChecklist?: string[];
@@ -287,7 +289,8 @@ export interface PaymentSettings {
   enabledMethods: Array<'cash' | 'pix' | 'debit' | 'credit' | 'bank_slip' | 'transfer'>;
   allowInstallments: boolean;
   maxInstallments: number;
-  installmentInterestRate: number;
+  installmentInterestRate: number; // legacy
+  installmentRates?: Record<number, number>; // dynamic rates per installment
   installmentInterestType: 'simple' | 'compound';
 }
 

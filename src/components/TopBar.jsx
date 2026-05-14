@@ -86,7 +86,7 @@ export default function TopBar() {
                         </div>
                         <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
                             <img
-                                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sofia"
+                                src={teamMember?.photo || user?.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}`}
                                 alt="Avatar"
                                 className="h-full w-full object-cover"
                             />
