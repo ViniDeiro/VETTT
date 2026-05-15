@@ -1185,6 +1185,7 @@ export const AttendancePage: React.FC = () => {
                                         />
                                     </div>
 
+                                    <div>
                                         <Label className="text-base font-semibold text-gray-700 mb-2 block">Exame Físico</Label>
                                         
                                         {consultationTypes.find(t => t.id === currentAttendance.consultationType)?.template?.physicalExamChecklist?.length > 0 && (
