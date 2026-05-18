@@ -157,15 +157,15 @@ const DEFAULT_SYSTEM_DOCUMENT_TEMPLATES = [
     id: 'doc-default-receita',
     type: 'receita',
     title: 'Receita padrão',
-    content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\nPrescrição: {conteudo}\nData: {data}',
+    content: 'Paciente: {nome_paciente}\nEspécie/Raça: {especie_paciente} - {raca_paciente}\nTutor: {nome_tutor}\nTelefone do tutor: {telefone_tutor}\nEndereço do tutor: {endereco_tutor}\n\nPrescrição:\n{conteudo}\n\nData: {data}\nVeterinário: {nome_vet}\nCRMV: {crmv_vet}\nAssinatura: {assinatura_vet}',
     isDefault: true,
     useInAttendance: true,
     includePatientName: true,
-    includePatientData: false,
+    includePatientData: true,
     includeOwnerName: true,
-    includeOwnerAddress: false,
+    includeOwnerAddress: true,
     includeVetName: true,
-    includeVetSignature: false,
+    includeVetSignature: true,
     includeVetCrmv: true,
     includeVetCpf: false
   },
@@ -173,15 +173,15 @@ const DEFAULT_SYSTEM_DOCUMENT_TEMPLATES = [
     id: 'doc-default-atestado',
     type: 'atestado',
     title: 'Atestado clínico',
-    content: 'Atesto para os devidos fins que {nome_paciente} foi atendido em {data}.',
+    content: 'Atesto para os devidos fins que o paciente {nome_paciente}, tutorado por {nome_tutor}, foi atendido nesta unidade em {data}.\n\nObservações clínicas:\n{conteudo}\n\nVeterinário: {nome_vet}\nCRMV: {crmv_vet}\nAssinatura: {assinatura_vet}',
     isDefault: false,
     useInAttendance: true,
     includePatientName: true,
-    includePatientData: false,
+    includePatientData: true,
     includeOwnerName: true,
-    includeOwnerAddress: false,
+    includeOwnerAddress: true,
     includeVetName: true,
-    includeVetSignature: false,
+    includeVetSignature: true,
     includeVetCrmv: true,
     includeVetCpf: false
   },
@@ -189,15 +189,15 @@ const DEFAULT_SYSTEM_DOCUMENT_TEMPLATES = [
     id: 'doc-default-alta',
     type: 'alta',
     title: 'Alta médica',
-    content: 'Paciente liberado com orientações e retorno programado.\nResumo: {conteudo}',
+    content: 'Paciente: {nome_paciente}\nTutor: {nome_tutor}\n\nPaciente liberado com orientações e retorno programado.\nResumo e orientações:\n{conteudo}\n\nVeterinário responsável: {nome_vet}\nCRMV: {crmv_vet}\nAssinatura: {assinatura_vet}',
     isDefault: false,
     useInAttendance: true,
     includePatientName: true,
-    includePatientData: false,
+    includePatientData: true,
     includeOwnerName: true,
-    includeOwnerAddress: false,
+    includeOwnerAddress: true,
     includeVetName: true,
-    includeVetSignature: false,
+    includeVetSignature: true,
     includeVetCrmv: true,
     includeVetCpf: false
   }
@@ -235,9 +235,17 @@ const EMPTY_PROFILE_FORM = {
 const EMPTY_UNIT_FORM = {
   name: '',
   type: 'filial',
+  zipCode: '',
   city: '',
   state: '',
+  neighborhood: '',
   address: '',
+  number: '',
+  complement: '',
+  phone: '',
+  contact: '',
+  responsibleName: '',
+  attendantName: '',
   active: true
 }
 
@@ -393,6 +401,8 @@ export default function Settings() {
   const [previewModel, setPreviewModel] = useState(null)
   const [isFetchingCep, setIsFetchingCep] = useState(false)
   const [cepStatusMessage, setCepStatusMessage] = useState('')
+  const [isFetchingUnitCep, setIsFetchingUnitCep] = useState(false)
+  const [unitCepStatusMessage, setUnitCepStatusMessage] = useState('')
 
   const actionButtonLabel = isSaving ? 'Salvando...' : 'Salvar Configurações'
   const regionalPreview = useMemo(() => {
@@ -578,23 +588,129 @@ export default function Settings() {
     }
   }
 
-  const handleImageUpload = (group, field) => (event) => {
+  const readFileAsDataUrl = file => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      if (typeof e.target?.result === 'string') {
+        resolve(e.target.result)
+      } else {
+        reject(new Error('Arquivo de imagem inválido.'))
+      }
+    }
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'))
+    reader.readAsDataURL(file)
+  })
+
+  const optimizeImageFile = async (file, options = {}) => {
+    const {
+      maxDimension = 1200,
+      quality = 0.82,
+      mimeType = 'image/jpeg'
+    } = options
+
+    const dataUrl = await readFileAsDataUrl(file)
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Não foi possível processar a imagem selecionada.'))
+      img.src = dataUrl
+    })
+
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height))
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('Não foi possível preparar a imagem para upload.')
+    }
+
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    return canvas.toDataURL(mimeType, quality)
+  }
+
+  const handleImageUpload = (group, field) => async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('A imagem deve ter no máximo 2MB.')
+    if (file.size > 4 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 4MB.')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const base64 = e.target?.result
-      if (base64) {
-        updateSettingsGroup(group, field, base64)
-      }
+    try {
+      const optimizedImage = await optimizeImageFile(file, {
+        maxDimension: group === 'clinic' ? 1400 : 900,
+        quality: 0.82
+      })
+      updateSettingsGroup(group, field, optimizedImage)
+    } catch (error) {
+      alert(error.message || 'Não foi possível enviar a imagem.')
+    } finally {
+      event.target.value = ''
     }
-    reader.readAsDataURL(file)
+  }
+
+  const handleTeamMediaUpload = (field, options = {}) => async event => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 4 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 4MB.')
+      return
+    }
+
+    try {
+      const optimizedImage = await optimizeImageFile(file, options)
+      setTeamForm(prev => ({ ...prev, [field]: optimizedImage }))
+    } catch (error) {
+      alert(error.message || 'Não foi possível enviar a imagem.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const fetchUnitAddressByZipCode = async rawZipCode => {
+    const zipCodeDigits = String(rawZipCode || unitForm.zipCode).replace(/\D/g, '').slice(0, 8)
+
+    if (zipCodeDigits.length !== 8) {
+      setUnitCepStatusMessage('Informe um CEP válido com 8 dígitos.')
+      return
+    }
+
+    setIsFetchingUnitCep(true)
+    setUnitCepStatusMessage('Consultando CEP...')
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${zipCodeDigits}/json/`)
+      const data = await response.json()
+
+      if (data.erro) {
+        setUnitCepStatusMessage('CEP não encontrado.')
+        return
+      }
+
+      setUnitForm(prev => ({
+        ...prev,
+        zipCode: maskCEP(zipCodeDigits),
+        address: data.logradouro || prev.address || '',
+        neighborhood: data.bairro || prev.neighborhood || '',
+        city: data.localidade || prev.city || '',
+        state: data.uf || prev.state || '',
+        complement: data.complemento || prev.complement || ''
+      }))
+      setUnitCepStatusMessage('Endereço da unidade preenchido automaticamente pelo CEP.')
+    } catch (error) {
+      setUnitCepStatusMessage('Não foi possível consultar o CEP da unidade agora.')
+    } finally {
+      setIsFetchingUnitCep(false)
+    }
   }
 
   const updateProfileState = updatedProfile => {
@@ -611,6 +727,13 @@ export default function Settings() {
       setSettings(savedSettings)
       window.dispatchEvent(new Event('vet-settings-updated'))
       alert('Configurações salvas com sucesso.')
+    } catch (error) {
+      console.error('Erro ao salvar configurações', error)
+      alert(
+        error?.name === 'QuotaExceededError'
+          ? 'Não foi possível salvar porque o armazenamento local ficou cheio. Reduza imagens muito grandes e tente novamente.'
+          : 'Não foi possível salvar as configurações agora.'
+      )
     } finally {
       setIsSaving(false)
     }
@@ -812,45 +935,73 @@ export default function Settings() {
     const selectedAccessProfile = profiles.find(profile => profile.id === userForm.accessProfileId)
     const resolvedRole = selectedAccessProfile?.baseRole || userForm.role || 'secretary'
     const normalizedName = userForm.name.trim()
+    const normalizedPassword = userForm.password || ''
 
-    if (editingSystemUserId) {
-      const existingUser = users.find(item => item.id === editingSystemUserId)
-      if (!existingUser) {
-        alert('Usuário não encontrado para edição.')
-        return
-      }
+    const duplicatedUser = users.find(item => (
+      item.email?.toLowerCase() === userForm.email?.toLowerCase() &&
+      item.id !== editingSystemUserId
+    ))
 
-      const userUpdates = {
-        name: normalizedName,
-        fullName: normalizedName,
-        role: resolvedRole,
-        email: userForm.email,
-        phone: userForm.phone,
-        functionTitle: userForm.functionTitle,
-        accessProfileId: userForm.accessProfileId,
-        status: userForm.status,
-        ...(userForm.password ? { password: userForm.password } : {})
-      }
-      const updatedUser = mockDB.updateUser(existingUser.id, userUpdates)
-      if (!updatedUser) {
-        alert('Nao foi possivel atualizar o usuário.')
-        return
-      }
+    if (duplicatedUser) {
+      alert('Já existe um usuário cadastrado com este e-mail.')
+      return
+    }
 
-      const linkedTeamMember = teamMembers.find(member => member.id === existingUser.teamMemberId || member.userId === existingUser.id)
-      if (linkedTeamMember) {
-        mockDB.updateTeamMember(linkedTeamMember.id, {
+    try {
+      if (editingSystemUserId) {
+        const existingUser = users.find(item => item.id === editingSystemUserId)
+        if (!existingUser) {
+          alert('Usuário não encontrado para edição.')
+          return
+        }
+
+        const userUpdates = {
           name: normalizedName,
-          functionTitle: userForm.functionTitle,
-          phone: userForm.phone,
+          fullName: normalizedName,
+          role: resolvedRole,
           email: userForm.email,
+          phone: userForm.phone,
+          functionTitle: userForm.functionTitle,
+          accessProfileId: userForm.accessProfileId,
           status: userForm.status,
-          specialty: teamForm.specialty,
-          crmv: teamForm.crmv,
-          cpf: teamForm.cpf,
-          signature: teamForm.signature,
-          photo: teamForm.photo
-        })
+          password: normalizedPassword || existingUser.password || ''
+        }
+        const updatedUser = mockDB.updateUser(existingUser.id, userUpdates)
+        if (!updatedUser) {
+          alert('Nao foi possivel atualizar o usuário.')
+          return
+        }
+
+        const linkedTeamMember = teamMembers.find(member => member.id === existingUser.teamMemberId || member.userId === existingUser.id)
+        if (linkedTeamMember) {
+          mockDB.updateTeamMember(linkedTeamMember.id, {
+            name: normalizedName,
+            functionTitle: userForm.functionTitle,
+            phone: userForm.phone,
+            email: userForm.email,
+            status: userForm.status,
+            specialty: teamForm.specialty,
+            crmv: teamForm.crmv,
+            cpf: teamForm.cpf,
+            signature: teamForm.signature,
+            photo: teamForm.photo
+          })
+        } else {
+          const newMember = mockDB.createTeamMember({
+            name: normalizedName,
+            functionTitle: userForm.functionTitle,
+            specialty: teamForm.specialty,
+            crmv: teamForm.crmv,
+            cpf: teamForm.cpf,
+            phone: userForm.phone,
+            email: userForm.email,
+            signature: teamForm.signature,
+            photo: teamForm.photo,
+            status: userForm.status,
+            userId: existingUser.id
+          })
+          mockDB.updateUser(existingUser.id, { teamMemberId: newMember.id })
+        }
       } else {
         const newMember = mockDB.createTeamMember({
           name: normalizedName,
@@ -862,45 +1013,38 @@ export default function Settings() {
           email: userForm.email,
           signature: teamForm.signature,
           photo: teamForm.photo,
-          status: userForm.status,
-          userId: existingUser.id
+          status: userForm.status
         })
-        mockDB.updateUser(existingUser.id, { teamMemberId: newMember.id })
+
+        const newUser = mockDB.createUser({
+          name: normalizedName,
+          fullName: normalizedName,
+          role: resolvedRole,
+          email: userForm.email,
+          phone: userForm.phone,
+          functionTitle: userForm.functionTitle,
+          accessProfileId: userForm.accessProfileId,
+          status: userForm.status,
+          password: normalizedPassword,
+          teamMemberId: newMember.id
+        })
+
+        mockDB.updateTeamMember(newMember.id, { userId: newUser.id })
       }
-    } else {
-      const newMember = mockDB.createTeamMember({
-        name: normalizedName,
-        functionTitle: userForm.functionTitle,
-        specialty: teamForm.specialty,
-        crmv: teamForm.crmv,
-        cpf: teamForm.cpf,
-        phone: userForm.phone,
-        email: userForm.email,
-        signature: teamForm.signature,
-        photo: teamForm.photo,
-        status: userForm.status
-      })
 
-      const newUser = mockDB.createUser({
-        name: normalizedName,
-        fullName: normalizedName,
-        role: resolvedRole,
-        email: userForm.email,
-        phone: userForm.phone,
-        functionTitle: userForm.functionTitle,
-        accessProfileId: userForm.accessProfileId,
-        status: userForm.status,
-        password: userForm.password,
-        teamMemberId: newMember.id
-      })
-      mockDB.updateTeamMember(newMember.id, { userId: newUser.id })
+      setUsers([...mockDB.getUsers()])
+      setTeamMembers([...mockDB.getTeamMembers()])
+      setAuditLogs([...mockDB.getAuditLogs()])
+      resetSystemUserForm()
+      alert('Usuário salvo com sucesso!')
+    } catch (error) {
+      console.error('Erro ao salvar usuário', error)
+      alert(
+        error?.name === 'QuotaExceededError'
+          ? 'Não foi possível salvar o usuário porque o armazenamento local ficou cheio. Reduza foto ou assinatura e tente novamente.'
+          : 'Não foi possível salvar o usuário agora.'
+      )
     }
-
-    setUsers([...mockDB.getUsers()])
-    setTeamMembers([...mockDB.getTeamMembers()])
-    setAuditLogs([...mockDB.getAuditLogs()])
-    resetSystemUserForm()
-    alert('Usuário salvo com sucesso!')
   }
 
   const removeSystemUser = userId => {
@@ -1279,9 +1423,17 @@ export default function Settings() {
 
     setSettings(prev => ({
       ...prev,
-      units: [...prev.units, { id: `unit-${Date.now()}`, ...unitForm }]
+      units: [...prev.units, {
+        id: `unit-${Date.now()}`,
+        ...unitForm,
+        zipCode: maskCEP(unitForm.zipCode || ''),
+        contact: unitForm.contact?.trim() || '',
+        responsibleName: unitForm.responsibleName?.trim() || '',
+        attendantName: unitForm.attendantName?.trim() || ''
+      }]
     }))
     setUnitForm(EMPTY_UNIT_FORM)
+    setUnitCepStatusMessage('')
   }
 
   const removeClinicUnit = unitId => {
@@ -2020,17 +2172,47 @@ export default function Settings() {
                   <option value="atendimento_movel">Atendimento móvel</option>
                   <option value="hospital_parceiro">Hospital parceiro</option>
                 </select>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="CEP"
+                    value={unitForm.zipCode}
+                    onChange={event => {
+                      const maskedZipCode = maskCEP(event.target.value)
+                      setUnitForm(prev => ({ ...prev, zipCode: maskedZipCode }))
+                      if (unitCepStatusMessage) setUnitCepStatusMessage('')
+                    }}
+                    maxLength={9}
+                  />
+                  <Button type="button" variant="outline" onClick={() => fetchUnitAddressByZipCode(unitForm.zipCode)} disabled={isFetchingUnitCep}>
+                    {isFetchingUnitCep ? <Loader2 className="h-4 w-4 animate-spin" /> : 'CEP'}
+                  </Button>
+                </div>
                 <Input placeholder="Cidade" value={unitForm.city} onChange={event => setUnitForm(prev => ({ ...prev, city: event.target.value }))} />
                 <Input placeholder="Estado" value={unitForm.state} onChange={event => setUnitForm(prev => ({ ...prev, state: event.target.value }))} />
+                <Input placeholder="Bairro" value={unitForm.neighborhood} onChange={event => setUnitForm(prev => ({ ...prev, neighborhood: event.target.value }))} />
                 <Input placeholder="Endereço" value={unitForm.address} onChange={event => setUnitForm(prev => ({ ...prev, address: event.target.value }))} />
+                <Input placeholder="Número" value={unitForm.number} onChange={event => setUnitForm(prev => ({ ...prev, number: event.target.value }))} />
+                <Input placeholder="Complemento" value={unitForm.complement} onChange={event => setUnitForm(prev => ({ ...prev, complement: event.target.value }))} />
+                <Input placeholder="Telefone / contato" value={unitForm.phone} onChange={event => setUnitForm(prev => ({ ...prev, phone: event.target.value }))} />
+                <Input placeholder="E-mail / contato" value={unitForm.contact} onChange={event => setUnitForm(prev => ({ ...prev, contact: event.target.value }))} />
+                <Input placeholder="Responsável técnico" value={unitForm.responsibleName} onChange={event => setUnitForm(prev => ({ ...prev, responsibleName: event.target.value }))} />
+                <Input placeholder="Atendente / recepção" value={unitForm.attendantName} onChange={event => setUnitForm(prev => ({ ...prev, attendantName: event.target.value }))} />
                 <Button type="button" onClick={addClinicUnit}>Adicionar unidade</Button>
               </div>
+              {unitCepStatusMessage && (
+                <p className="text-xs text-gray-500">{unitCepStatusMessage}</p>
+              )}
               <div className="space-y-2">
                 {settings.units.map(unit => (
                   <div key={unit.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{unit.name}</p>
-                      <p className="text-xs text-gray-500">{unit.type} • {unit.city}/{unit.state} • {unit.address || 'Sem endereço'}</p>
+                      <p className="text-xs text-gray-500">
+                        {unit.type} • {unit.city}/{unit.state} • {unit.address || 'Sem endereço'}{unit.number ? `, ${unit.number}` : ''}{unit.neighborhood ? ` • ${unit.neighborhood}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {unit.phone || 'Sem telefone'} • {unit.contact || 'Sem contato'} • Resp.: {unit.responsibleName || '-'} • Atendente: {unit.attendantName || '-'}
+                      </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => removeClinicUnit(unit.id)} className="text-red-600">
                       Remover
@@ -2259,7 +2441,7 @@ export default function Settings() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-gray-900">Usuários do sistema + configuração da equipe</p>
-                  <p className="text-xs text-gray-500">Cadastro unificado de acesso, perfil, status, função, contato, CPF, especialidade, assinatura e foto.</p>
+                  <p className="text-xs text-gray-500">Cadastro unificado de acesso, perfil, status, função, contato, CPF, especialidade, assinatura e foto. Ao editar, a senha atual é preservada se o campo ficar vazio.</p>
                 </div>
                 {editingSystemUserId && (
                   <Button type="button" variant="outline" size="sm" onClick={resetSystemUserForm}>
@@ -2291,13 +2473,7 @@ export default function Settings() {
                     id="system-user-signature-upload"
                     className="hidden"
                     accept="image/*"
-                    onChange={event => {
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      const reader = new FileReader()
-                      reader.onload = readEvent => setTeamForm(prev => ({ ...prev, signature: readEvent.target?.result }))
-                      reader.readAsDataURL(file)
-                    }}
+                    onChange={handleTeamMediaUpload('signature', { maxDimension: 900, quality: 0.85, mimeType: 'image/png' })}
                   />
                 </div>
                 <select className="w-full px-3 py-2 rounded-md border border-input bg-background" value={userForm.status} onChange={event => setUserForm(prev => ({ ...prev, status: event.target.value }))}>
@@ -2314,13 +2490,7 @@ export default function Settings() {
                     id="system-user-photo-upload"
                     className="hidden"
                     accept="image/*"
-                    onChange={event => {
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      const reader = new FileReader()
-                      reader.onload = readEvent => setTeamForm(prev => ({ ...prev, photo: readEvent.target?.result }))
-                      reader.readAsDataURL(file)
-                    }}
+                    onChange={handleTeamMediaUpload('photo', { maxDimension: 1000, quality: 0.82, mimeType: 'image/jpeg' })}
                   />
                 </div>
               </div>
@@ -2399,7 +2569,7 @@ export default function Settings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-gray-500">
-                Configuração do layout PDF e editor de modelos na seção "Editor de Documentos PDF" logo abaixo.
+                Layout PDF e modelos de documentos agora funcionam como uma única configuração de documentos do sistema.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
@@ -2750,7 +2920,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                Editor de Documentos PDF
+                Documentos PDF + Editor de Modelos
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2758,7 +2928,7 @@ export default function Settings() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-gray-900">{editingDocumentTemplateId ? 'Editando modelo de documento' : 'Novo modelo de documento'}</p>
-                    <p className="text-xs text-gray-500">Salve textos prontos e marque um deles como padrão para ficar guardado.</p>
+                    <p className="text-xs text-gray-500">Salve textos prontos com dados automáticos de paciente, tutor e veterinário. A assinatura usada no PDF vem do veterinário logado.</p>
                   </div>
                   {editingDocumentTemplateId && (
                     <Button type="button" variant="outline" onClick={resetDocumentTemplateForm}>Cancelar edição</Button>

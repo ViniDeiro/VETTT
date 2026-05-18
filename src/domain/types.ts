@@ -233,9 +233,17 @@ export interface ClinicUnit {
   id: string;
   name: string;
   type: 'matriz' | 'filial' | 'atendimento_movel' | 'hospital_parceiro';
+  zipCode?: string;
   city: string;
   state: string;
+  neighborhood?: string;
   address: string;
+  number?: string;
+  complement?: string;
+  phone?: string;
+  contact?: string;
+  responsibleName?: string;
+  attendantName?: string;
   active: boolean;
 }
 
@@ -474,7 +482,7 @@ export interface Attendance {
 }
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue';
-export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'transfer';
+export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'transfer' | 'bank_slip';
 
 export interface PaymentDetails {
   method: PaymentMethod;
@@ -506,6 +514,7 @@ export interface Receivable {
 export interface CashFlowEntry {
   id: string;
   date: string;
+  businessDate?: string;
   type: 'income' | 'expense';
   category: string;
   amount: number;
@@ -523,6 +532,32 @@ export interface CashFlowEntry {
   description: string;
   paymentMethod?: string;
   referenceId?: string; // e.g., receivableId or purchaseId
+  cashSessionId?: string;
+  sourceType?: 'receivable_payment' | 'manual_revenue' | 'revenue_adjustment' | 'manual_expense' | 'operational_cost';
+}
+
+export interface CashRegisterSessionSummary {
+  totalIncome: number;
+  totalExpense: number;
+  netAmount: number;
+  receivedCash: number;
+  receivedPix: number;
+  receivedDebit: number;
+  receivedCredit: number;
+  receivedTransfer: number;
+  receivedBankSlip: number;
+}
+
+export interface CashRegisterSession {
+  id: string;
+  businessDate: string;
+  status: 'open' | 'closed';
+  openedAt: string;
+  closedAt?: string;
+  openingBalance: number;
+  closingBalance?: number;
+  notes?: string;
+  summary?: CashRegisterSessionSummary;
 }
 
 export interface ProcedureTemplateItem {

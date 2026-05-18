@@ -12,11 +12,13 @@ import {
   FileText,
   FileSpreadsheet,
   File as FileIcon,
-  Bell,
   Wallet,
+  ArrowDownCircle,
 } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
+
+const FILTERS = ['Hoje', 'Semana', 'Mes', 'Ano', 'Todos']
 
 const parseFlexibleDate = (value) => {
   if (!value) return new Date('')
@@ -25,134 +27,122 @@ const parseFlexibleDate = (value) => {
     return new Date(Number(year), Number(month) - 1, Number(day))
   }
   if (value.length === 10 && value.includes('-')) {
-      const [year, month, day] = value.split('-');
-      return new Date(Number(year), Number(month) - 1, Number(day));
+    const [year, month, day] = value.split('-')
+    return new Date(Number(year), Number(month) - 1, Number(day))
   }
   return new Date(value)
-}
-
-const extractCurrencyValue = (value) => {
-  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')
-  return Number(normalized || 0)
 }
 
 const paymentMethodLabel = {
   cash: 'Dinheiro',
   pix: 'Pix',
-  debit_card: 'Cartao de Debito',
-  credit_card: 'Cartao de Credito',
+  debit_card: 'Cartao de debito',
+  credit_card: 'Cartao de credito',
   transfer: 'Transferencia',
-  boleto: 'Boleto',
+  bank_slip: 'Boleto',
+}
+
+const inFilter = (dateValue, filter) => {
+  if (filter === 'Todos') return true
+  const date = parseFlexibleDate(dateValue)
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(todayStart.getDate() - 6)
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const yearStart = new Date(now.getFullYear(), 0, 1)
+
+  if (filter === 'Hoje') return date >= todayStart
+  if (filter === 'Semana') return date >= weekStart
+  if (filter === 'Mes') return date >= monthStart
+  if (filter === 'Ano') return date >= yearStart
+  return true
 }
 
 export default function FinanceRevenue() {
   const [revenueHistory, setRevenueHistory] = useState([])
-  const [receivables, setReceivables] = useState([])
-  const [activeFilter, setActiveFilter] = useState('Mês')
+  const [activeFilter, setActiveFilter] = useState('Mes')
   const [formData, setFormData] = useState({
-    date: new Date().toLocaleDateString('pt-BR'),
+    date: new Date().toISOString().slice(0, 10),
     category: '',
     center: '',
     desc: '',
     value: '',
     method: 'pix',
+    entryType: 'income',
   })
 
   const loadRevenueData = () => {
     const flows = mockDB
       .getCashFlow()
-      .filter((entry) => entry.type === 'income')
+      .filter(entry => entry.type === 'income')
       .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
 
     setRevenueHistory(flows)
-    setReceivables(mockDB.getReceivables())
   }
 
   useEffect(() => {
     loadRevenueData()
   }, [])
 
-  const handleDateChange = (event) => {
-    let value = event.target.value.replace(/\D/g, '')
-    if (value.length > 2) value = `${value.slice(0, 2)}/${value.slice(2)}`
-    if (value.length > 5) value = `${value.slice(0, 5)}/${value.slice(5, 9)}`
-    setFormData((prev) => ({ ...prev, date: value }))
-  }
-
-  const handleValueChange = (event) => {
-    const digits = event.target.value.replace(/\D/g, '')
-    const formatted = formatCurrency(Number(digits || 0) / 100)
-    setFormData((prev) => ({ ...prev, value: formatted }))
-  }
-
-  const handleInputChange = (event) => {
+  const handleInputChange = event => {
     const { name, value } = event.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleSaveRevenue = () => {
-    const amount = extractCurrencyValue(formData.value)
+    const amount = Number(formData.value)
 
-    if (!formData.date || !formData.desc || amount <= 0) {
+    if (!formData.date || !formData.desc || !Number.isFinite(amount) || amount <= 0) {
       alert('Preencha os campos obrigatorios da receita.')
       return
     }
 
+    const normalizedAmount = formData.entryType === 'reversal' ? -amount : amount
     mockDB.createCashFlowEntry({
       date: formData.date,
+      businessDate: formData.date,
       type: 'income',
       category: formData.category || 'Receita avulsa',
-      amount,
-      grossAmount: amount,
+      amount: normalizedAmount,
+      grossAmount: normalizedAmount,
       totalCost: 0,
-      grossProfit: amount,
+      grossProfit: normalizedAmount,
       marginPercent: 100,
       paymentStatus: 'paid',
-      description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc} (${paymentMethodLabel[formData.method] || formData.method})`,
+      paymentMethod: formData.method,
+      description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc}`,
+      sourceType: formData.entryType === 'reversal' ? 'revenue_adjustment' : 'manual_revenue',
     })
 
     loadRevenueData()
     setFormData({
-      date: new Date().toLocaleDateString('pt-BR'),
+      date: new Date().toISOString().slice(0, 10),
       category: '',
       center: '',
       desc: '',
       value: '',
       method: 'pix',
+      entryType: 'income',
     })
 
-    alert('Receita registrada com sucesso.')
+    alert(formData.entryType === 'reversal' ? 'Baixa registrada com sucesso.' : 'Receita registrada com sucesso.')
   }
 
-  const getFilteredData = () => {
-    if (activeFilter === 'Todos') return revenueHistory
+  const filteredHistory = useMemo(() => {
+    return revenueHistory.filter(item => inFilter(item.date, activeFilter))
+  }, [activeFilter, revenueHistory])
 
-    const now = new Date()
-    const weekStart = new Date(now)
-    weekStart.setDate(now.getDate() - 6)
-
-    return revenueHistory.filter((item) => {
-      const itemDate = parseFlexibleDate(item.date)
-      if (activeFilter === 'Hoje') return formatDate(itemDate) === formatDate(now)
-      if (activeFilter === 'Semana') return itemDate >= weekStart && itemDate <= now
-      if (activeFilter === 'Mês') {
-        return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear()
-      }
-      return true
-    })
-  }
-
-  const filteredHistory = getFilteredData()
-
-  const currentMonthSummary = useMemo(() => {
-    const now = new Date()
-    const monthEntries = revenueHistory.filter((item) => {
-      const itemDate = parseFlexibleDate(item.date)
-      return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear()
-    })
-
-    const total = monthEntries.reduce((sum, item) => sum + item.amount, 0)
-    const categories = monthEntries.reduce((acc, item) => {
+  const summary = useMemo(() => {
+    const total = filteredHistory.reduce((sum, item) => sum + item.amount, 0)
+    const manualCount = filteredHistory.filter(item => !item.attendanceId).length
+    const automaticCount = filteredHistory.filter(item => item.attendanceId).length
+    const byMethod = filteredHistory.reduce((acc, item) => {
+      const key = item.paymentMethod || 'cash'
+      acc[key] = (acc[key] || 0) + item.amount
+      return acc
+    }, {})
+    const categories = filteredHistory.reduce((acc, item) => {
       const key = item.category || 'Sem categoria'
       acc[key] = (acc[key] || 0) + item.amount
       return acc
@@ -160,36 +150,32 @@ export default function FinanceRevenue() {
 
     return {
       total,
+      manualCount,
+      automaticCount,
+      methods: Object.entries(byMethod).map(([name, value]) => ({ name, value })),
       categories: Object.entries(categories)
         .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 4),
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+        .slice(0, 5),
     }
-  }, [revenueHistory])
+  }, [filteredHistory])
 
-  const alerts = useMemo(() => {
-    return receivables
-      .filter((item) => item.status !== 'paid')
-      .sort((a, b) => parseFlexibleDate(a.dueDate).getTime() - parseFlexibleDate(b.dueDate).getTime())
-      .slice(0, 3)
-  }, [receivables])
-
-  const handleExport = async (type) => {
+  const handleExport = async type => {
     const rows = [
-      ['Data', 'Categoria', 'Descricao', 'Valor', 'Origem', 'Status'],
-      ...filteredHistory.map((item) => [
+      ['Data', 'Categoria', 'Descricao', 'Valor', 'Origem', 'Forma'],
+      ...filteredHistory.map(item => [
         item.date,
         item.category,
         item.description,
-        formatCurrency(item.amount),
+        item.amount,
         item.attendanceId ? 'Atendimento' : 'Manual',
-        item.paymentStatus === 'paid' ? 'Recebido' : 'Pendente',
+        paymentMethodLabel[item.paymentMethod] || item.paymentMethod || '-',
       ]),
     ]
 
     try {
       if (type === 'csv' || type === 'excel') {
-        const csvContent = `data:text/csv;charset=utf-8,${rows.map((row) => row.join(',')).join('\n')}`
+        const csvContent = `data:text/csv;charset=utf-8,${rows.map(row => row.join(',')).join('\n')}`
         const encodedUri = encodeURI(csvContent)
         const link = document.createElement('a')
         link.setAttribute('href', encodedUri)
@@ -197,32 +183,23 @@ export default function FinanceRevenue() {
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-      } else if (type === 'pdf') {
+      } else {
         const { default: jsPDF } = await import('jspdf')
         const doc = new jsPDF()
-        doc.setFillColor(11, 44, 77)
-        doc.rect(0, 0, 210, 20, 'F')
-        doc.setTextColor(255, 255, 255)
         doc.setFontSize(16)
-        doc.text('Relatorio de Receitas', 10, 13)
+        doc.text('Relatorio de Receitas', 14, 20)
         doc.setFontSize(10)
-        doc.text(`Filtro: ${activeFilter}`, 150, 13)
-
-        let y = 30
-        doc.setTextColor(0, 0, 0)
-        filteredHistory.forEach((item) => {
+        doc.text(`Filtro: ${activeFilter}`, 14, 28)
+        doc.text(`Total: ${formatCurrency(summary.total)}`, 14, 34)
+        let y = 46
+        filteredHistory.forEach(item => {
           if (y > 280) {
             doc.addPage()
             y = 20
           }
-          doc.text(
-            `${item.date} - ${item.category} - ${formatCurrency(item.amount)} - ${item.attendanceId ? 'Atendimento' : 'Manual'}`,
-            10,
-            y
-          )
+          doc.text(`${formatDate(parseFlexibleDate(item.date))} - ${item.category} - ${formatCurrency(item.amount)}`, 14, y)
           y += 8
         })
-
         doc.save('relatorio_receitas.pdf')
       }
     } catch (error) {
@@ -240,9 +217,9 @@ export default function FinanceRevenue() {
               <div className="flex flex-col lg:flex-row gap-8">
                 <div className="flex-1 space-y-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">Nova Receita Avulsa</h2>
+                    <h2 className="text-xl font-bold text-gray-900">Entrada ou baixa de receita</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Use esta tela apenas para entradas que nao vieram automaticamente do atendimento.
+                      Registre entradas manuais e baixas/estornos que nao vieram automaticamente do atendimento.
                     </p>
                   </div>
 
@@ -251,21 +228,36 @@ export default function FinanceRevenue() {
                       <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Data</Label>
                       <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <Input
-                          value={formData.date}
-                          onChange={handleDateChange}
-                          maxLength={10}
-                          placeholder="DD/MM/AAAA"
-                          className="pl-10"
-                        />
+                        <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="pl-10" />
                       </div>
                     </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Movimento</Label>
+                      <Select name="entryType" value={formData.entryType} onChange={handleInputChange}>
+                        <option value="income">Entrada</option>
+                        <option value="reversal">Baixa / Estorno</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Forma de recebimento</Label>
+                      <Select name="method" value={formData.method} onChange={handleInputChange}>
+                        <option value="pix">Pix</option>
+                        <option value="cash">Dinheiro</option>
+                        <option value="debit_card">Cartao debito</option>
+                        <option value="credit_card">Cartao credito</option>
+                        <option value="transfer">Transferencia</option>
+                        <option value="bank_slip">Boleto</option>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Categoria</Label>
                       <Select name="category" value={formData.category} onChange={handleInputChange}>
                         <option value="">Selecione uma categoria</option>
                         <option value="Consultas">Consultas</option>
-                        <option value="Vacinas">Vacinas</option>
+                        <option value="Procedimentos">Procedimentos</option>
                         <option value="Exames">Exames</option>
                         <option value="Vendas">Vendas</option>
                         <option value="Outros">Outros</option>
@@ -285,45 +277,24 @@ export default function FinanceRevenue() {
 
                   <div>
                     <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Descricao</Label>
-                    <Input
-                      name="desc"
-                      value={formData.desc}
-                      onChange={handleInputChange}
-                      placeholder="Descreva a receita avulsa"
-                    />
+                    <Input name="desc" value={formData.desc} onChange={handleInputChange} placeholder="Descreva a movimentacao" />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Valor</Label>
-                      <Input value={formData.value} onChange={handleValueChange} placeholder="R$ 0,00" />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Forma de recebimento</Label>
-                      <Select name="method" value={formData.method} onChange={handleInputChange}>
-                        <option value="pix">Pix</option>
-                        <option value="cash">Dinheiro</option>
-                        <option value="debit_card">Cartao Debito</option>
-                        <option value="credit_card">Cartao Credito</option>
-                        <option value="transfer">Transferencia</option>
-                        <option value="boleto">Boleto</option>
-                      </Select>
-                    </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Valor</Label>
+                    <Input name="value" type="number" min={0} step="0.01" value={formData.value} onChange={handleInputChange} placeholder="0.00" />
                   </div>
 
-                  <Button
-                    onClick={handleSaveRevenue}
-                    className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white font-bold h-12 mt-2"
-                  >
-                    <Plus className="mr-2 h-5 w-5" />
-                    Salvar receita
+                  <Button onClick={handleSaveRevenue} className="w-full bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white font-bold h-12 mt-2">
+                    {formData.entryType === 'reversal' ? <ArrowDownCircle className="mr-2 h-5 w-5" /> : <Plus className="mr-2 h-5 w-5" />}
+                    {formData.entryType === 'reversal' ? 'Registrar baixa' : 'Salvar receita'}
                   </Button>
                 </div>
 
                 <div className="w-full lg:w-80 bg-[#0B2C4D] rounded-xl p-5 text-white flex flex-col gap-6">
                   <div>
-                    <h3 className="text-sm font-medium text-blue-200 mb-1">Resumo de Receitas do Mes</h3>
-                    <p className="text-3xl font-bold">{formatCurrency(currentMonthSummary.total)}</p>
+                    <h3 className="text-sm font-medium text-blue-200 mb-1">Resumo do filtro atual</h3>
+                    <p className="text-3xl font-bold">{formatCurrency(summary.total)}</p>
                   </div>
 
                   <div className="rounded-xl bg-white/10 p-4">
@@ -332,7 +303,7 @@ export default function FinanceRevenue() {
                       <TrendingUp className="h-4 w-4 text-[var(--clinic-button)]" />
                     </div>
                     <div className="space-y-3">
-                      {currentMonthSummary.categories.map((item) => (
+                      {summary.categories.map(item => (
                         <div key={item.name}>
                           <div className="flex items-center justify-between text-xs text-blue-100 mb-1">
                             <span>{item.name}</span>
@@ -341,15 +312,13 @@ export default function FinanceRevenue() {
                           <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                             <div
                               className="h-full bg-[var(--clinic-button)]"
-                              style={{
-                                width: `${currentMonthSummary.total ? (item.value / currentMonthSummary.total) * 100 : 0}%`,
-                              }}
+                              style={{ width: `${summary.total ? Math.min(100, (Math.abs(item.value) / Math.abs(summary.total || 1)) * 100) : 0}%` }}
                             />
                           </div>
                         </div>
                       ))}
-                      {currentMonthSummary.categories.length === 0 && (
-                        <p className="text-xs text-blue-200">Nenhuma entrada registrada neste mes.</p>
+                      {summary.categories.length === 0 && (
+                        <p className="text-xs text-blue-200">Nenhuma movimentacao registrada neste filtro.</p>
                       )}
                     </div>
                   </div>
@@ -362,15 +331,11 @@ export default function FinanceRevenue() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <p className="text-blue-200">Automatico</p>
-                        <p className="font-bold">
-                          {revenueHistory.filter((item) => item.attendanceId).length}
-                        </p>
+                        <p className="font-bold">{summary.automaticCount}</p>
                       </div>
                       <div>
                         <p className="text-blue-200">Manual</p>
-                        <p className="font-bold">
-                          {revenueHistory.filter((item) => !item.attendanceId).length}
-                        </p>
+                        <p className="font-bold">{summary.manualCount}</p>
                       </div>
                     </div>
                   </div>
@@ -384,10 +349,10 @@ export default function FinanceRevenue() {
               <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Historico de Receitas</h3>
-                  <p className="text-sm text-gray-500">Entradas de caixa recebidas e integradas ao financeiro.</p>
+                  <p className="text-sm text-gray-500">Visualize receita diaria, semanal, mensal, anual ou geral.</p>
                 </div>
                 <div className="flex bg-gray-100 p-1 rounded-lg">
-                  {['Hoje', 'Semana', 'Mês', 'Todos'].map((filter) => (
+                  {FILTERS.map(filter => (
                     <button
                       key={filter}
                       onClick={() => setActiveFilter(filter)}
@@ -410,26 +375,20 @@ export default function FinanceRevenue() {
                       <th className="pb-3">Categoria</th>
                       <th className="pb-3">Descricao</th>
                       <th className="pb-3">Origem</th>
+                      <th className="pb-3">Forma</th>
                       <th className="pb-3">Valor</th>
-                      <th className="pb-3 text-center">Forma</th>
-                      <th className="pb-3 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
-                    {filteredHistory.map((item) => (
+                    {filteredHistory.map(item => (
                       <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                         <td className="py-4 pl-2 text-gray-500 font-medium">{formatDate(parseFlexibleDate(item.date))}</td>
                         <td className="py-4 text-gray-900">{item.category}</td>
                         <td className="py-4 text-gray-500">{item.description}</td>
                         <td className="py-4 text-gray-500">{item.attendanceId ? 'Atendimento' : 'Manual'}</td>
-                        <td className="py-4 text-gray-900 font-bold">{formatCurrency(item.amount)}</td>
-                        <td className="py-4 text-center text-gray-500 font-medium">
-                          {paymentMethodLabel[item.paymentMethod] || item.paymentMethod || '-'}
-                        </td>
-                        <td className="py-4 text-center">
-                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-700">
-                            {item.paymentStatus === 'paid' ? 'Recebido' : 'Pendente'}
-                          </span>
+                        <td className="py-4 text-gray-500">{paymentMethodLabel[item.paymentMethod] || item.paymentMethod || '-'}</td>
+                        <td className={cn('py-4 font-bold', item.amount < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                          {formatCurrency(item.amount)}
                         </td>
                       </tr>
                     ))}
@@ -450,29 +409,21 @@ export default function FinanceRevenue() {
         <div className="w-full lg:w-80 space-y-6">
           <div className="bg-[#0B2C4D] rounded-xl p-6 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg">Alertas</h3>
-              <Bell className="h-5 w-5 text-[var(--clinic-button)]" />
+              <h3 className="font-bold text-lg">Formas de recebimento</h3>
+              <Wallet className="h-5 w-5 text-[var(--clinic-button)]" />
             </div>
             <div className="space-y-3">
-              {alerts.map((item) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    'bg-white text-[#0B2C4D] p-3 rounded-lg text-sm font-medium border-l-4 shadow-sm',
-                    item.status === 'overdue' ? 'border-red-500' : 'border-[var(--clinic-button)]'
-                  )}
-                >
-                  <p className="font-bold mb-1">
-                    {item.status === 'overdue' ? 'Conta em atraso' : 'Recebimento pendente'}
-                  </p>
-                  <p className="text-xs opacity-90">
-                    {item.patientName} / {item.ownerName} - {formatCurrency(item.amount)}
-                  </p>
+              {summary.methods.map(item => (
+                <div key={item.name} className="bg-white/10 p-3 rounded-lg text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>{paymentMethodLabel[item.name] || item.name}</span>
+                    <span className="font-bold">{formatCurrency(item.value)}</span>
+                  </div>
                 </div>
               ))}
-              {alerts.length === 0 && (
+              {summary.methods.length === 0 && (
                 <div className="bg-white/10 p-3 rounded-lg text-sm text-blue-100">
-                  Nenhum alerta de recebimento pendente no momento.
+                  Nenhum recebimento encontrado para o filtro atual.
                 </div>
               )}
             </div>
@@ -481,24 +432,15 @@ export default function FinanceRevenue() {
           <div className="bg-[var(--clinic-button)] rounded-xl p-6 text-white">
             <h3 className="font-bold text-lg mb-4">Exportar</h3>
             <div className="flex gap-4">
-              <button
-                onClick={() => handleExport('csv')}
-                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
-              >
+              <button onClick={() => handleExport('csv')} className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
                 <FileText className="h-6 w-6" />
                 <span className="text-xs font-bold">CSV</span>
               </button>
-              <button
-                onClick={() => handleExport('pdf')}
-                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
-              >
+              <button onClick={() => handleExport('pdf')} className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
                 <FileIcon className="h-6 w-6" />
                 <span className="text-xs font-bold">PDF</span>
               </button>
-              <button
-                onClick={() => handleExport('excel')}
-                className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30"
-              >
+              <button onClick={() => handleExport('excel')} className="flex-1 bg-white/20 hover:bg-white/30 transition-colors rounded-lg p-3 flex flex-col items-center gap-2 border border-white/30">
                 <FileSpreadsheet className="h-6 w-6" />
                 <span className="text-xs font-bold">Excel</span>
               </button>

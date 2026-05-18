@@ -11,237 +11,180 @@ import {
   Calendar,
   Users,
   Wallet,
+  Package,
+  Activity,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { mockDB } from '../services/mockDatabase'
 
-const parseFlexibleDate = (value) => {
+const parseFlexibleDate = value => {
   if (!value) return new Date('')
   if (value.includes('/')) {
     const [day, month, year] = value.split('/')
     return new Date(Number(year), Number(month) - 1, Number(day))
   }
+  if (value.length === 10 && value.includes('-')) {
+    const [year, month, day] = value.split('-')
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
   return new Date(value)
 }
 
-const percentDiff = (current, previous) => {
-  if (!previous && !current) return '0%'
-  if (!previous) return '+100%'
-  const value = ((current - previous) / previous) * 100
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
-}
-
-const getPeriodRange = (period) => {
+const getRange = period => {
   const now = new Date()
-  if (period === 'last30') {
-    return {
-      title: 'Ultimos 30 dias',
-      start: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29),
-      end: now,
-    }
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  if (period === 'Hoje') {
+    return { title: 'Hoje', start: todayStart, end: now }
   }
-
-  if (period === 'currentMonth') {
-    return {
-      title: 'Mes atual',
-      start: new Date(now.getFullYear(), now.getMonth(), 1),
-      end: now,
-    }
+  if (period === 'Semana') {
+    const start = new Date(todayStart)
+    start.setDate(todayStart.getDate() - 6)
+    return { title: 'Ultimos 7 dias', start, end: now }
   }
-
-  if (period === 'lastMonth') {
-    return {
-      title: 'Mes anterior',
-      start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
-      end: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59),
-    }
+  if (period === 'Mes') {
+    return { title: 'Mes atual', start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
   }
-
-  return {
-    title: 'Ano atual',
-    start: new Date(now.getFullYear(), 0, 1),
-    end: now,
-  }
+  return { title: 'Ano atual', start: new Date(now.getFullYear(), 0, 1), end: now }
 }
 
-const getPreviousRange = (period, currentRange) => {
-  if (period === 'last30') {
-    return {
-      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), currentRange.start.getDate() - 30),
-      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), currentRange.start.getDate() - 1, 23, 59, 59),
-    }
-  }
-
-  if (period === 'currentMonth') {
-    return {
-      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth() - 1, 1),
-      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), 0, 23, 59, 59),
-    }
-  }
-
-  if (period === 'lastMonth') {
-    return {
-      start: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth() - 1, 1),
-      end: new Date(currentRange.start.getFullYear(), currentRange.start.getMonth(), 0, 23, 59, 59),
-    }
-  }
-
-  return {
-    start: new Date(currentRange.start.getFullYear() - 1, 0, 1),
-    end: new Date(currentRange.start.getFullYear() - 1, 11, 31, 23, 59, 59),
-  }
+const isInRange = (dateValue, start, end) => {
+  const date = parseFlexibleDate(dateValue)
+  return date >= start && date <= end
 }
 
 export default function FinanceReports() {
-  const [period, setPeriod] = useState('last30')
+  const [period, setPeriod] = useState('Mes')
   const records = mockDB.getFinancialRecords()
   const receivables = mockDB.getReceivables()
-  const incomeEntries = mockDB.getCashFlow().filter((entry) => entry.type === 'income')
+  const inventory = mockDB.getInventory()
+  const cashFlow = mockDB.getCashFlow()
 
   const report = useMemo(() => {
-    const currentRange = getPeriodRange(period)
-    const previousRange = getPreviousRange(period, currentRange)
+    const currentRange = getRange(period)
+    const currentRecords = records.filter(record => isInRange(record.date, currentRange.start, currentRange.end))
+    const incomeEntries = cashFlow.filter(entry => entry.type === 'income' && isInRange(entry.date, currentRange.start, currentRange.end))
+    const expenseEntries = cashFlow.filter(entry => entry.type === 'expense' && isInRange(entry.date, currentRange.start, currentRange.end))
+    const currentReceivables = receivables.filter(item => isInRange(item.dueDate, currentRange.start, currentRange.end))
 
-    const isInRange = (value, start, end) => {
-      const date = parseFlexibleDate(value)
-      return date >= start && date <= end
-    }
+    const cashRevenue = incomeEntries.reduce((sum, item) => sum + item.amount, 0)
+    const clinicalCost = currentRecords.reduce((sum, item) => sum + item.totalCost, 0)
+    const operationalCost = expenseEntries.reduce((sum, item) => sum + item.amount, 0)
+    const totalCost = clinicalCost + operationalCost
+    const profit = cashRevenue - totalCost
 
-    const currentRecords = records.filter((record) => isInRange(record.date, currentRange.start, currentRange.end))
-    const previousRecords = records.filter((record) => isInRange(record.date, previousRange.start, previousRange.end))
-    const currentIncome = incomeEntries.filter((entry) => isInRange(entry.date, currentRange.start, currentRange.end))
-    const currentReceivables = receivables.filter((item) => isInRange(item.dueDate, currentRange.start, currentRange.end))
+    const uniqueDays = new Set(
+      [...incomeEntries, ...expenseEntries].map(item => parseFlexibleDate(item.date).toISOString().slice(0, 10))
+    ).size || 1
 
-    const revenue = currentRecords.reduce((sum, item) => sum + item.grossAmount, 0)
-    const expense = currentRecords.reduce((sum, item) => sum + item.totalCost, 0)
-    const profit = currentRecords.reduce((sum, item) => sum + item.grossProfit, 0)
-    const previousRevenue = previousRecords.reduce((sum, item) => sum + item.grossAmount, 0)
-    const previousExpense = previousRecords.reduce((sum, item) => sum + item.totalCost, 0)
-    const previousProfit = previousRecords.reduce((sum, item) => sum + item.grossProfit, 0)
-
-    const bucketCount = period === 'currentYear' ? 12 : 6
-    const chartData = Array.from({ length: bucketCount }, (_, index) => {
-      if (period === 'currentYear') {
-        const start = new Date(currentRange.start.getFullYear(), index, 1)
-        const end = new Date(currentRange.start.getFullYear(), index + 1, 0, 23, 59, 59)
-        return {
-          label: start.toLocaleDateString('pt-BR', { month: 'short' }),
-          revenue: currentRecords
-            .filter((record) => isInRange(record.date, start, end))
-            .reduce((sum, item) => sum + item.grossAmount, 0),
-          expense: currentRecords
-            .filter((record) => isInRange(record.date, start, end))
-            .reduce((sum, item) => sum + item.totalCost, 0),
-        }
-      }
-
-      const totalMs = currentRange.end.getTime() - currentRange.start.getTime()
-      const chunkMs = totalMs / bucketCount
-      const start = new Date(currentRange.start.getTime() + chunkMs * index)
-      const end = new Date(
-        index === bucketCount - 1 ? currentRange.end.getTime() : currentRange.start.getTime() + chunkMs * (index + 1)
-      )
+    const bestMonths = Array.from({ length: 12 }, (_, index) => {
+      const start = new Date(new Date().getFullYear(), index, 1)
+      const end = new Date(new Date().getFullYear(), index + 1, 0, 23, 59, 59)
       return {
-        label: formatDate(start),
-        revenue: currentRecords
-          .filter((record) => isInRange(record.date, start, end))
-          .reduce((sum, item) => sum + item.grossAmount, 0),
-        expense: currentRecords
-          .filter((record) => isInRange(record.date, start, end))
-          .reduce((sum, item) => sum + item.totalCost, 0),
+        label: start.toLocaleDateString('pt-BR', { month: 'short' }),
+        revenue: cashFlow
+          .filter(entry => entry.type === 'income' && isInRange(entry.date, start, end))
+          .reduce((sum, item) => sum + item.amount, 0),
+        expense: cashFlow
+          .filter(entry => entry.type === 'expense' && isInRange(entry.date, start, end))
+          .reduce((sum, item) => sum + item.amount, 0),
       }
     })
 
-    const patientHistory = Object.values(
-      currentRecords.reduce((acc, record) => {
-        const key = record.patientId
-        if (!acc[key]) {
-          acc[key] = {
-            id: key,
-            patientName: record.patientName,
-            ownerName: record.ownerName,
-            totalGross: 0,
-            totalProfit: 0,
-            count: 0,
-            lastDate: record.date,
-          }
-        }
-        acc[key].totalGross += record.grossAmount
-        acc[key].totalProfit += record.grossProfit
-        acc[key].count += 1
-        if (parseFlexibleDate(record.date) > parseFlexibleDate(acc[key].lastDate)) {
-          acc[key].lastDate = record.date
-        }
-        return acc
-      }, {})
-    ).sort((a, b) => b.totalGross - a.totalGross)
+    const salesByDescription = currentRecords.reduce((acc, record) => {
+      const key = record.description || 'Sem descricao'
+      if (!acc[key]) {
+        acc[key] = { name: key, value: 0, count: 0 }
+      }
+      acc[key].value += record.grossAmount
+      acc[key].count += 1
+      return acc
+    }, {})
+
+    const costByCategory = expenseEntries.reduce((acc, entry) => {
+      const key = entry.category || 'Sem categoria'
+      acc[key] = (acc[key] || 0) + entry.amount
+      return acc
+    }, {})
 
     return {
       title: currentRange.title,
-      revenue,
-      expense,
+      cashRevenue,
+      clinicalCost,
+      operationalCost,
+      totalCost,
       profit,
-      growth: {
-        rev: percentDiff(revenue, previousRevenue),
-        exp: percentDiff(expense, previousExpense),
-        prof: percentDiff(profit, previousProfit),
-      },
-      chartData,
-      patientHistory: patientHistory.slice(0, 6),
-      receivedAmount: currentIncome.reduce((sum, item) => sum + item.amount, 0),
-      paidCount: currentReceivables.filter((item) => item.status === 'paid').length,
-      pendingCount: currentReceivables.filter((item) => item.status !== 'paid').length,
-      averageMargin: currentRecords.length
-        ? currentRecords.reduce((sum, item) => sum + item.marginPercent, 0) / currentRecords.length
-        : 0,
+      averageCostPerDay: totalCost / uniqueDays,
+      averageRevenuePerDay: cashRevenue / uniqueDays,
+      paidCount: currentReceivables.filter(item => item.status === 'paid').length,
+      pendingCount: currentReceivables.filter(item => item.status !== 'paid').length,
+      bestMonths: bestMonths.sort((a, b) => b.revenue - a.revenue).slice(0, 4),
+      chartData: period === 'Ano' ? bestMonths : bestMonths.slice(Math.max(bestMonths.length - 6, 0)),
+      bestSales: Object.values(salesByDescription).sort((a, b) => b.value - a.value).slice(0, 5),
+      costCategories: Object.entries(costByCategory)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5),
+      expensiveProducts: [...inventory]
+        .sort((a, b) => (b.salePrice || 0) - (a.salePrice || 0))
+        .slice(0, 5),
+      patientHistory: Object.values(
+        currentRecords.reduce((acc, record) => {
+          if (!acc[record.patientId]) {
+            acc[record.patientId] = {
+              id: record.patientId,
+              patientName: record.patientName,
+              ownerName: record.ownerName,
+              totalGross: 0,
+              totalProfit: 0,
+              count: 0,
+            }
+          }
+          acc[record.patientId].totalGross += record.grossAmount
+          acc[record.patientId].totalProfit += record.grossProfit
+          acc[record.patientId].count += 1
+          return acc
+        }, {})
+      ).sort((a, b) => b.totalGross - a.totalGross).slice(0, 5)
     }
-  }, [incomeEntries, period, receivables, records])
+  }, [cashFlow, inventory, period, receivables, records])
 
   const handleExport = () => {
     import('jspdf').then(({ default: jsPDF }) => {
       const doc = new jsPDF()
-
-      doc.setFillColor(11, 44, 77)
-      doc.rect(0, 0, 210, 30, 'F')
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(20)
-      doc.text('Relatorio Financeiro', 10, 20)
+      doc.setFontSize(18)
+      doc.text('Relatorio Financeiro Consolidado', 14, 20)
       doc.setFontSize(10)
-      doc.text(`Periodo: ${report.title}`, 10, 26)
+      doc.text(`Periodo: ${report.title}`, 14, 28)
+      doc.text(`Receita: ${formatCurrency(report.cashRevenue)}`, 14, 36)
+      doc.text(`Custos totais: ${formatCurrency(report.totalCost)}`, 14, 42)
+      doc.text(`Lucro / Prejuizo: ${formatCurrency(report.profit)}`, 14, 48)
+      doc.text(`Custo medio por dia: ${formatCurrency(report.averageCostPerDay)}`, 14, 54)
 
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(14)
-      doc.text('Resumo', 10, 45)
-      doc.setFontSize(11)
-      doc.text(`Receita total: ${formatCurrency(report.revenue)}`, 10, 55)
-      doc.text(`Custo operacional: ${formatCurrency(report.expense)}`, 10, 62)
-      doc.text(`Lucro bruto: ${formatCurrency(report.profit)}`, 10, 69)
-      doc.text(`Recebido em caixa: ${formatCurrency(report.receivedAmount)}`, 10, 76)
-      doc.text(`Margem media: ${report.averageMargin.toFixed(1)}%`, 10, 83)
-
-      let y = 98
-      doc.setFontSize(13)
-      doc.text('Historico por paciente', 10, y)
+      let y = 66
+      doc.setFontSize(12)
+      doc.text('Melhores vendas', 14, y)
       y += 8
       doc.setFontSize(10)
-
-      report.patientHistory.forEach((item, index) => {
-        doc.text(
-          `${index + 1}. ${item.patientName} / ${item.ownerName} - ${formatCurrency(item.totalGross)} - ${item.count} atendimentos`,
-          10,
-          y
-        )
+      report.bestSales.forEach(item => {
+        doc.text(`${item.name} - ${formatCurrency(item.value)} (${item.count}x)`, 14, y)
         y += 7
       })
 
-      doc.setFontSize(8)
-      doc.setTextColor(150, 150, 150)
-      doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} pelo VetTooth`, 10, 280)
-      doc.save(`relatorio_financeiro_${period}.pdf`)
+      y += 6
+      doc.setFontSize(12)
+      doc.text('Categorias de custo', 14, y)
+      y += 8
+      doc.setFontSize(10)
+      report.costCategories.forEach(item => {
+        doc.text(`${item.name} - ${formatCurrency(item.value)}`, 14, y)
+        y += 7
+      })
+
+      doc.save(`relatorio_financeiro_${period.toLowerCase()}.pdf`)
     })
   }
 
-  const maxChartValue = Math.max(...report.chartData.map((item) => Math.max(item.revenue, item.expense)), 1)
+  const maxChartValue = Math.max(...report.chartData.map(item => Math.max(item.revenue, item.expense)), 1)
 
   return (
     <Layout>
@@ -249,7 +192,7 @@ export default function FinanceReports() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Relatorios Financeiros</h1>
-            <p className="text-sm text-gray-500">Periodo calculado em cima dos atendimentos e recebimentos reais.</p>
+            <p className="text-sm text-gray-500">Receita, custos, lucro, melhores meses, melhores vendas e produtos mais caros.</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -257,13 +200,13 @@ export default function FinanceReports() {
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
               <select
                 value={period}
-                onChange={(event) => setPeriod(event.target.value)}
+                onChange={event => setPeriod(event.target.value)}
                 className="pl-10 h-10 rounded-lg border-gray-200 text-sm focus:ring-[#0B2C4D] focus:border-[#0B2C4D]"
               >
-                <option value="last30">Ultimos 30 dias</option>
-                <option value="currentMonth">Mes atual</option>
-                <option value="lastMonth">Mes anterior</option>
-                <option value="currentYear">Ano atual</option>
+                <option value="Hoje">Hoje</option>
+                <option value="Semana">Semana</option>
+                <option value="Mes">Mes</option>
+                <option value="Ano">Ano</option>
               </select>
             </div>
             <Button onClick={handleExport} className="bg-[#0B2C4D] hover:bg-[#0B2C4D]/90 text-white gap-2">
@@ -273,17 +216,16 @@ export default function FinanceReports() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <Card className="border-none shadow-sm bg-teal-50">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-teal-100 rounded-xl">
                   <TrendingUp className="h-6 w-6 text-teal-600" />
                 </div>
-                <span className="text-xs font-bold text-teal-700 bg-teal-100 px-2 py-1 rounded-full">{report.growth.rev}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">Receita Total</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.revenue)}</h3>
+              <p className="text-sm text-gray-600 font-medium">Receita do periodo</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.cashRevenue)}</h3>
             </CardContent>
           </Card>
 
@@ -293,23 +235,33 @@ export default function FinanceReports() {
                 <div className="p-3 bg-red-100 rounded-xl">
                   <TrendingDown className="h-6 w-6 text-red-600" />
                 </div>
-                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full">{report.growth.exp}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">Custo Operacional</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.expense)}</h3>
+              <p className="text-sm text-gray-600 font-medium">Custos totais</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.totalCost)}</h3>
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm bg-blue-50">
+          <Card className={cn('border-none shadow-sm', report.profit >= 0 ? 'bg-blue-50' : 'bg-orange-50')}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-blue-100 rounded-xl">
-                  <DollarSign className="h-6 w-6 text-blue-600" />
+                <div className={cn('p-3 rounded-xl', report.profit >= 0 ? 'bg-blue-100' : 'bg-orange-100')}>
+                  <DollarSign className={cn('h-6 w-6', report.profit >= 0 ? 'text-blue-600' : 'text-orange-600')} />
                 </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">{report.growth.prof}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">Lucro Bruto</p>
+              <p className="text-sm text-gray-600 font-medium">Lucro / Prejuizo</p>
               <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.profit)}</h3>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm bg-slate-50">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-slate-100 rounded-xl">
+                  <Activity className="h-6 w-6 text-slate-600" />
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 font-medium">Custo medio por dia</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(report.averageCostPerDay)}</h3>
             </CardContent>
           </Card>
         </div>
@@ -320,8 +272,8 @@ export default function FinanceReports() {
               <div className="flex items-center gap-3">
                 <Wallet className="h-5 w-5 text-teal-600" />
                 <div>
-                  <p className="text-sm text-gray-500">Recebido em caixa</p>
-                  <p className="font-bold text-gray-900">{formatCurrency(report.receivedAmount)}</p>
+                  <p className="text-sm text-gray-500">Receita media por dia</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(report.averageRevenuePerDay)}</p>
                 </div>
               </div>
             </CardContent>
@@ -330,17 +282,6 @@ export default function FinanceReports() {
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-500">Pacientes faturados</p>
-                  <p className="font-bold text-gray-900">{report.patientHistory.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-none shadow-sm">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <TrendingUp className="h-5 w-5 text-green-600" />
                 <div>
                   <p className="text-sm text-gray-500">Contas pagas</p>
                   <p className="font-bold text-gray-900">{report.paidCount}</p>
@@ -359,51 +300,43 @@ export default function FinanceReports() {
               </div>
             </CardContent>
           </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <Package className="h-5 w-5 text-purple-600" />
+                <div>
+                  <p className="text-sm text-gray-500">Produtos caros</p>
+                  <p className="font-bold text-gray-900">{report.expensiveProducts.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Evolucao Financeira</h3>
+                <h3 className="text-lg font-bold text-gray-900">Evolucao financeira</h3>
                 <BarChart className="h-5 w-5 text-gray-400" />
               </div>
 
               <div className="h-64 flex items-end justify-between gap-3 px-2">
-                {report.chartData.map((item) => (
+                {report.chartData.map(item => (
                   <div key={item.label} className="flex-1 flex items-end gap-1 h-full">
                     <div className="flex-1 flex flex-col justify-end items-center gap-2 h-full">
-                      <div
-                        className="w-full bg-[var(--clinic-button)] rounded-t-sm opacity-80"
-                        style={{ height: `${(item.revenue / maxChartValue) * 100}%` }}
-                      />
+                      <div className="w-full bg-[var(--clinic-button)] rounded-t-sm opacity-80" style={{ height: `${(item.revenue / maxChartValue) * 100}%` }} />
                     </div>
                     <div className="flex-1 flex flex-col justify-end items-center gap-2 h-full">
-                      <div
-                        className="w-full bg-red-300 rounded-t-sm opacity-80"
-                        style={{ height: `${(item.expense / maxChartValue) * 100}%` }}
-                      />
+                      <div className="w-full bg-red-300 rounded-t-sm opacity-80" style={{ height: `${(item.expense / maxChartValue) * 100}%` }} />
                     </div>
                   </div>
                 ))}
               </div>
               <div className="flex justify-between mt-4 text-[11px] text-gray-500 font-medium gap-2">
-                {report.chartData.map((item) => (
-                  <span key={`${item.label}-axis`} className="truncate">
-                    {item.label}
-                  </span>
+                {report.chartData.map(item => (
+                  <span key={`${item.label}-axis`} className="truncate">{item.label}</span>
                 ))}
-              </div>
-
-              <div className="flex items-center justify-center gap-6 mt-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-[var(--clinic-button)] rounded-full" />
-                  <span className="text-sm text-gray-600">Receita</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-300 rounded-full" />
-                  <span className="text-sm text-gray-600">Custo</span>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -411,48 +344,110 @@ export default function FinanceReports() {
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Historico por Paciente</h3>
-                <Users className="h-5 w-5 text-gray-400" />
+                <h3 className="text-lg font-bold text-gray-900">Melhores vendas</h3>
+                <TrendingUp className="h-5 w-5 text-gray-400" />
               </div>
-
               <div className="space-y-4">
-                {report.patientHistory.map((patient, index) => (
-                  <div key={patient.id} className="rounded-xl border border-gray-100 p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs">
-                          {index + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{patient.patientName}</p>
-                          <p className="text-xs text-gray-500">{patient.ownerName}</p>
-                        </div>
-                      </div>
-                      <span className="font-bold text-gray-900">{formatCurrency(patient.totalGross)}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+                {report.bestSales.map(item => (
+                  <div key={item.name} className="rounded-xl border border-gray-100 p-4">
+                    <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-gray-500">Atendimentos</p>
-                        <p className="font-medium text-gray-900">{patient.count}</p>
+                        <p className="font-medium text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.count} venda(s)</p>
                       </div>
-                      <div>
-                        <p className="text-gray-500">Lucro</p>
-                        <p className="font-medium text-green-600">{formatCurrency(patient.totalProfit)}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Ultimo</p>
-                        <p className="font-medium text-gray-900">{formatDate(parseFlexibleDate(patient.lastDate))}</p>
-                      </div>
+                      <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
                     </div>
                   </div>
                 ))}
-                {report.patientHistory.length === 0 && (
-                  <p className="text-sm text-gray-400">Nenhum registro financeiro encontrado neste periodo.</p>
+                {report.bestSales.length === 0 && (
+                  <p className="text-sm text-gray-400">Nenhuma venda registrada neste periodo.</p>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Melhores meses</h3>
+              <div className="space-y-3">
+                {report.bestMonths.map(item => (
+                  <div key={item.label} className="rounded-lg bg-gray-50 p-4 flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{item.label}</span>
+                    <span className="font-bold text-emerald-600">{formatCurrency(item.revenue)}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Custos por categoria</h3>
+              <div className="space-y-3">
+                {report.costCategories.map(item => (
+                  <div key={item.name} className="rounded-lg bg-gray-50 p-4 flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{item.name}</span>
+                    <span className="font-bold text-red-600">{formatCurrency(item.value)}</span>
+                  </div>
+                ))}
+                {report.costCategories.length === 0 && (
+                  <p className="text-sm text-gray-400">Nenhum custo operacional no periodo.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Produtos mais caros</h3>
+              <div className="space-y-3">
+                {report.expensiveProducts.map(item => (
+                  <div key={item.id} className="rounded-lg bg-gray-50 p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{item.name}</p>
+                      <p className="text-xs text-gray-500">{item.category}</p>
+                    </div>
+                    <span className="font-bold text-gray-900">{formatCurrency(item.salePrice || 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="border-none shadow-sm">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Historico por paciente</h3>
+            <div className="space-y-4">
+              {report.patientHistory.map(patient => (
+                <div key={patient.id} className="rounded-xl border border-gray-100 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{patient.patientName}</p>
+                      <p className="text-xs text-gray-500">{patient.ownerName}</p>
+                    </div>
+                    <span className="font-bold text-gray-900">{formatCurrency(patient.totalGross)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                    <div>
+                      <p className="text-gray-500">Atendimentos</p>
+                      <p className="font-medium text-gray-900">{patient.count}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Lucro</p>
+                      <p className="font-medium text-green-600">{formatCurrency(patient.totalProfit)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {report.patientHistory.length === 0 && (
+                <p className="text-sm text-gray-400">Nenhum registro financeiro encontrado neste periodo.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   )

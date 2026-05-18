@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
@@ -13,9 +13,37 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { mockDB } from '../services/mockDatabase'
+import { useAuth } from '../modules/auth/AuthContext'
+
+const parseFlexibleDate = (value) => {
+  if (!value) return new Date('')
+  if (value.includes('/')) {
+    const [day, month, year] = value.split('/')
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
+  if (value.length === 10 && value.includes('-')) {
+    const [year, month, day] = value.split('-')
+    return new Date(Number(year), Number(month) - 1, Number(day))
+  }
+  return new Date(value)
+}
+
+const getShortPersonName = (value) => {
+  const name = String(value || '').trim().replace(/\s+/g, ' ')
+  if (!name) return ''
+  const parts = name.split(' ')
+  if (parts.length === 1) return parts[0]
+  return `${parts[0]} ${parts[parts.length - 1]}`
+}
+
+const formatVetDisplayName = (value) => {
+  const shortName = getShortPersonName(value)
+  return shortName ? `M.V. ${shortName}` : ''
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { dashboard } = mockDB.getSettings()
 
   const statsMap = {
@@ -79,18 +107,57 @@ export default function Dashboard() {
     .map(key => statsMap[key])
     .filter(Boolean)
 
-  const nextAppointments = [
-    { name: 'Luna', type: 'Cão, Limpeza', time: '09:00' },
-    { name: 'Thor', type: 'Gato, Extração', time: '10:15' },
-    { name: 'Bella', type: 'Cavalo, Exame', time: '11:30' },
-    { name: 'Max', type: 'Cão, Retorno', time: '14:00' },
-  ]
+  const { nextAppointments, alerts } = useMemo(() => {
+    const currentUserVetLabel = formatVetDisplayName(user?.fullName || user?.name)
+    const hasVetProfile = user?.role === 'vet' || String(user?.functionTitle || '').toLowerCase().includes('veterin')
+    const now = new Date()
+    const endRange = new Date(now)
+    endRange.setDate(now.getDate() + 7)
 
-  const alerts = [
-    { title: 'Estoque baixo: Broca Odontológica', type: 'warning' },
-    { title: 'Retorno: Fred (Gato) em 2 dias', type: 'info' },
-    { title: 'Vacina: Rex (Cão) vencendo', type: 'alert' },
-  ]
+    const allAppointments = mockDB.getAppointments()
+      .filter(appointment => {
+        const start = new Date(appointment.start)
+        return start >= new Date(now.getFullYear(), now.getMonth(), now.getDate()) && start <= endRange
+      })
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+
+    const userAppointments = hasVetProfile
+      ? allAppointments.filter(appointment => appointment.doctor === currentUserVetLabel)
+      : []
+
+    const visibleAppointments = userAppointments.length > 0 ? userAppointments : allAppointments
+
+    const upcomingAppointments = visibleAppointments.slice(0, 6).map(appointment => ({
+      id: appointment.id,
+      name: appointment.patient || appointment.patientName || appointment.customType || 'Agendamento',
+      type: appointment.procedure || appointment.type || 'Agendamento',
+      time: new Date(appointment.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(appointment.start).toLocaleDateString('pt-BR'),
+      color: appointment.color || 'bg-blue-500',
+      doctor: appointment.doctor || 'Nao informado'
+    }))
+
+    const notifications = visibleAppointments.slice(0, 5).map(appointment => {
+      const start = new Date(appointment.start)
+      const isToday = start.toDateString() === now.toDateString()
+      const title = isToday
+        ? `Hoje: ${appointment.patient || appointment.customType || 'Agendamento'} às ${start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        : `${start.toLocaleDateString('pt-BR')}: ${appointment.patient || appointment.customType || 'Agendamento'}`
+      return {
+        title: `${title} com ${appointment.doctor || 'veterinario'}`,
+        type: 'appointment'
+      }
+    })
+
+    if (notifications.length === 0) {
+      notifications.push({ title: 'Nenhum agendamento proximo para este usuario.', type: 'info' })
+    }
+
+    return {
+      nextAppointments: upcomingAppointments,
+      alerts: notifications
+    }
+  }, [user])
 
   return (
     <Layout>
@@ -130,19 +197,20 @@ export default function Dashboard() {
           {/* Next Appointments */}
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Próximos Atendimentos</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Próximos Agendamentos</h3>
               <div className="space-y-4">
                 {nextAppointments.map((apt, index) => (
                   <div 
-                    key={index} 
+                    key={apt.id || index} 
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
                     onClick={() => navigate('/agenda')}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                      <div className={`h-2 w-2 rounded-full ${apt.color?.split(' ')[0] || 'bg-blue-500'}`}></div>
                       <div>
                         <span className="font-bold text-gray-900">{apt.name}</span>
                         <span className="text-gray-500 ml-2">({apt.type})</span>
+                        <p className="text-xs text-gray-500 mt-1">{apt.date} • {apt.doctor}</p>
                       </div>
                     </div>
                     <div className="font-semibold text-gray-700 bg-white px-3 py-1 rounded-lg shadow-sm">
@@ -150,6 +218,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
+                {nextAppointments.length === 0 && (
+                  <div className="text-sm text-gray-400">Nenhum agendamento encontrado para os proximos dias.</div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -157,7 +228,7 @@ export default function Dashboard() {
           {/* Alerts */}
           <Card className="border-none shadow-sm">
             <CardContent className="p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Alertas</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Notificações de Agendamento</h3>
               <div className="space-y-4">
                 {alerts.map((alert, index) => (
                   <div key={index} className="flex items-center gap-3 p-3 border-b border-gray-100 last:border-0">

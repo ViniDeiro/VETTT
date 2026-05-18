@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -7,537 +7,823 @@ import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
 import { mockDB } from '../../services/mockDatabase';
-import { Receivable } from '../../domain/types';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Search, 
-  FileText, 
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  CreditCard,
+import { CashFlowEntry, Receivable } from '../../domain/types';
+import {
+  Wallet,
+  Search,
+  FileText,
   DollarSign,
+  Plus,
+  LockKeyhole,
+  Unlock,
+  Receipt,
   AlertTriangle,
-  CheckCircle2
+  CreditCard,
+  Landmark
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL'
+}).format(Number(value || 0));
+
+const parseDate = (value?: string) => {
+  if (!value) return new Date(0);
+  if (value.includes('/')) {
+    const [day, month, year] = value.split('/');
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  if (value.length === 10 && value.includes('-')) {
+    const [year, month, day] = value.split('-');
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  return new Date(value);
+};
+
+const normalizePaymentMethod = (method?: string) => {
+  if (method === 'credit') return 'credit_card';
+  if (method === 'debit') return 'debit_card';
+  if (method === 'boleto') return 'bank_slip';
+  return method || 'cash';
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'Dinheiro',
+  pix: 'Pix',
+  debit_card: 'Cartao de debito',
+  credit_card: 'Cartao de credito',
+  transfer: 'Transferencia',
+  bank_slip: 'Boleto'
+};
+
+const buildCashSummary = (entries: CashFlowEntry[]) => {
+  return entries.reduce((acc, entry) => {
+    const amount = Number(entry.amount || 0);
+    if (entry.type === 'income') {
+      acc.totalIncome += amount;
+      const method = normalizePaymentMethod(entry.paymentMethod);
+      if (method === 'cash') acc.cash += amount;
+      if (method === 'pix') acc.pix += amount;
+      if (method === 'debit_card') acc.debit += amount;
+      if (method === 'credit_card') acc.credit += amount;
+      if (method === 'transfer') acc.transfer += amount;
+      if (method === 'bank_slip') acc.bankSlip += amount;
+    }
+    if (entry.type === 'expense') {
+      acc.totalExpense += amount;
+    }
+    acc.netAmount = acc.totalIncome - acc.totalExpense;
+    return acc;
+  }, {
+    totalIncome: 0,
+    totalExpense: 0,
+    netAmount: 0,
+    cash: 0,
+    pix: 0,
+    debit: 0,
+    credit: 0,
+    transfer: 0,
+    bankSlip: 0
+  });
+};
+
 export const ReceivablesList: React.FC = () => {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
+  const [cashSessions, setCashSessions] = useState<any[]>([]);
+  const [currentSession, setCurrentSession] = useState<any | null>(null);
+  const [sessionEntries, setSessionEntries] = useState<CashFlowEntry[]>([]);
   const [animate, setAnimate] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activePeriodFilter, setActivePeriodFilter] = useState('Mês');
-  
-  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-  const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [installments, setInstallments] = useState(1);
-  const [taxRate, setTaxRate] = useState(0);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue'>('all');
   const [settings, setSettings] = useState(() => mockDB.getSettings());
 
-  useEffect(() => {
-    setReceivables(mockDB.getReceivables());
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isOpenCashModalOpen, setIsOpenCashModalOpen] = useState(false);
+  const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
+  const [isManualEntryModalOpen, setIsManualEntryModalOpen] = useState(false);
+  const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [installments, setInstallments] = useState(1);
+  const [taxRate, setTaxRate] = useState(0);
+  const [openCashForm, setOpenCashForm] = useState({ openingBalance: '', notes: '' });
+  const [closeCashForm, setCloseCashForm] = useState({ closingBalance: '', notes: '' });
+  const [manualEntryForm, setManualEntryForm] = useState({
+    description: '',
+    category: 'Venda avulsa',
+    amount: '',
+    paymentMethod: 'cash'
+  });
+
+  const loadData = () => {
+    const session = mockDB.getCurrentCashSession();
+    setReceivables([...mockDB.getReceivables()]);
+    setCashSessions(mockDB.getCashSessions());
+    setCurrentSession(session);
+    setSessionEntries(session ? mockDB.getCashSessionEntries(session.id) : []);
+    setSettings(mockDB.getSettings());
     setAnimate(true);
+  };
+
+  useEffect(() => {
+    loadData();
+    window.addEventListener('vet-settings-updated', loadData);
+    return () => window.removeEventListener('vet-settings-updated', loadData);
   }, []);
 
-  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(Number(value || 0));
+  const enabledPaymentMethods = useMemo(() => {
+    const configuredMethods = settings.payment?.enabledMethods || ['cash', 'pix', 'debit', 'credit'];
+    return configuredMethods
+      .map((method: string) => normalizePaymentMethod(method))
+      .filter((method: string, index: number, list: string[]) => list.indexOf(method) === index);
+  }, [settings]);
 
-  const parseDate = (value?: string) => {
-    if (!value) return new Date(0);
-    if (value.includes('/')) {
-      const [day, month, year] = value.split('/');
-      return new Date(Number(year), Number(month) - 1, Number(day));
+  const cashSummary = useMemo(() => buildCashSummary(sessionEntries), [sessionEntries]);
+  const expectedClosing = currentSession
+    ? Number((Number(currentSession.openingBalance || 0) + cashSummary.netAmount).toFixed(2))
+    : 0;
+
+  const normalizedReceivables = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return receivables
+      .map(receivable => {
+        const dueDate = parseDate(receivable.dueDate);
+        const normalizedStatus =
+          receivable.status === 'paid'
+            ? 'paid'
+            : dueDate.getTime() < today.getTime()
+              ? 'overdue'
+              : 'pending';
+
+        return {
+          ...receivable,
+          normalizedStatus
+        };
+      })
+      .sort((a, b) => parseDate(a.dueDate).getTime() - parseDate(b.dueDate).getTime());
+  }, [receivables]);
+
+  const filteredReceivables = useMemo(() => {
+    return normalizedReceivables.filter(receivable => {
+      if (receivable.normalizedStatus === 'paid') return false;
+
+      const query = searchTerm.trim().toLowerCase();
+      const matchesSearch = !query || [
+        receivable.patientName,
+        receivable.ownerName,
+        receivable.description,
+        receivable.professionalName || ''
+      ].some(field => field.toLowerCase().includes(query));
+
+      const matchesStatus = filterStatus === 'all' || receivable.normalizedStatus === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [filterStatus, normalizedReceivables, searchTerm]);
+
+  const recentClosedSessions = useMemo(() => {
+    return cashSessions
+      .filter(session => session.status === 'closed')
+      .slice(0, 5);
+  }, [cashSessions]);
+
+  const openPayModal = (receivable: Receivable) => {
+    if (!currentSession) {
+      alert('Abra o caixa do dia antes de registrar um recebimento.');
+      return;
     }
-    if (value.length === 10 && value.includes('-')) {
-      const [year, month, day] = value.split('-');
-      return new Date(Number(year), Number(month) - 1, Number(day));
-    }
-    return new Date(value);
-  };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const normalizedReceivables = receivables
-    .map((receivable) => {
-      const dueDate = parseDate(receivable.dueDate);
-      const normalizedStatus =
-        receivable.status === 'paid'
-          ? 'paid'
-          : dueDate.getTime() < today.getTime()
-            ? 'overdue'
-            : 'pending';
-
-      return {
-        ...receivable,
-        normalizedStatus,
-      };
-    })
-    .sort((a, b) => parseDate(a.dueDate).getTime() - parseDate(b.dueDate).getTime());
-
-  const handleOpenPayModal = (rec: Receivable) => {
-      setSelectedReceivable(rec);
-      setPaymentMethod('cash');
-      setInstallments(1);
-      setTaxRate(0);
-      setIsPayModalOpen(true);
-  };
-
-  const handleInstallmentChange = (newInstallments: number) => {
-      setInstallments(newInstallments);
-      const rate = settings.payment?.installmentRates?.[newInstallments] || 0;
-      setTaxRate(rate);
+    const defaultMethod = enabledPaymentMethods[0] || 'cash';
+    setSelectedReceivable(receivable);
+    setPaymentMethod(defaultMethod);
+    setPaymentAmount(String(receivable.amount || ''));
+    setInstallments(1);
+    setTaxRate(settings.payment?.installmentRates?.[1] || 0);
+    setIsPayModalOpen(true);
   };
 
   const handlePaymentMethodChange = (method: string) => {
-      setPaymentMethod(method);
-      if (method === 'credit_card') {
-          handleInstallmentChange(1);
-      } else {
-          setInstallments(1);
-          setTaxRate(0);
-      }
+    setPaymentMethod(method);
+    if (method === 'credit_card') {
+      const rate = settings.payment?.installmentRates?.[installments] || 0;
+      setTaxRate(rate);
+      return;
+    }
+    setInstallments(1);
+    setTaxRate(0);
   };
 
-  const handleConfirmPay = () => {
-    if (selectedReceivable) {
-        mockDB.payReceivable(selectedReceivable.id, {
-            method: paymentMethod,
-            installments: paymentMethod === 'credit_card' ? installments : 1,
-            taxRate: taxRate
-        });
-        setReceivables([...mockDB.getReceivables()]);
-        setIsPayModalOpen(false);
-        setSelectedReceivable(null);
-    }
+  const handleInstallmentChange = (value: number) => {
+    setInstallments(value);
+    setTaxRate(settings.payment?.installmentRates?.[value] || 0);
   };
 
-  // Metrics
-  const totalOpen = normalizedReceivables
-    .filter(r => r.normalizedStatus !== 'paid')
-    .reduce((acc, r) => acc + r.amount, 0);
-  const totalReceived = normalizedReceivables
-    .filter(r => r.normalizedStatus === 'paid')
-    .reduce((acc, r) => acc + r.amount, 0);
-  const totalOverdue = normalizedReceivables
-    .filter(r => r.normalizedStatus === 'overdue')
-    .reduce((acc, r) => acc + r.amount, 0);
-  const countPending = normalizedReceivables.filter(r => r.normalizedStatus === 'pending').length;
-  const averageTicket = normalizedReceivables.length
-    ? normalizedReceivables.reduce((acc, r) => acc + r.amount, 0) / normalizedReceivables.length
-    : 0;
+  const handleConfirmPayment = () => {
+    if (!selectedReceivable || !currentSession) return;
 
-  const cards = [
-    {
-      title: 'Em Aberto',
-      value: formatCurrency(totalOpen),
-      change: `${countPending} pendentes no prazo`,
-      isPositive: true,
-      trend: 'up',
-      color: 'text-orange-500'
-    },
-    {
-      title: 'Recebido',
-      value: formatCurrency(totalReceived),
-      change: `${normalizedReceivables.filter(r => r.normalizedStatus === 'paid').length} contas baixadas`,
-      isPositive: true,
-      trend: 'up',
-      color: 'text-teal-500'
-    },
-    {
-      title: 'Em Atraso',
-      value: formatCurrency(totalOverdue),
-      change: `${normalizedReceivables.filter(r => r.normalizedStatus === 'overdue').length} vencidas`,
-      isPositive: false,
-      trend: totalOverdue > 0 ? 'down' : 'up',
-      color: totalOverdue > 0 ? 'text-red-500' : 'text-gray-500'
-    },
-    {
-      title: 'Ticket Médio',
-      value: formatCurrency(averageTicket),
-      change: `${normalizedReceivables.length} lançamento(s)`,
-      isPositive: true,
-      trend: 'up',
-      color: 'text-blue-500'
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Informe um valor valido para receber.');
+      return;
     }
-  ];
 
-  const handlePrintReceipt = (rec: Receivable) => {
-      alert(`Imprimindo recibo para ${rec.patientName} - Valor: R$ ${rec.amount.toFixed(2)}`);
+    mockDB.payReceivable(selectedReceivable.id, {
+      method: paymentMethod,
+      installments: paymentMethod === 'credit_card' ? installments : 1,
+      taxRate: paymentMethod === 'credit_card' ? taxRate : 0,
+      amount,
+      cashSessionId: currentSession.id,
+      businessDate: currentSession.businessDate
+    });
+
+    setIsPayModalOpen(false);
+    setSelectedReceivable(null);
+    loadData();
+  };
+
+  const handleOpenCashSession = () => {
+    const openingBalance = Number(openCashForm.openingBalance || 0);
+    mockDB.openCashSession({
+      openingBalance: Number.isFinite(openingBalance) ? openingBalance : 0,
+      notes: openCashForm.notes
+    });
+    setOpenCashForm({ openingBalance: '', notes: '' });
+    setIsOpenCashModalOpen(false);
+    loadData();
+  };
+
+  const handleCloseCashSession = () => {
+    if (!currentSession) return;
+
+    const closingBalance = Number(closeCashForm.closingBalance || expectedClosing);
+    mockDB.closeCashSession(currentSession.id, {
+      closingBalance: Number.isFinite(closingBalance) ? closingBalance : expectedClosing,
+      notes: closeCashForm.notes
+    });
+    setCloseCashForm({ closingBalance: '', notes: '' });
+    setIsCloseCashModalOpen(false);
+    loadData();
+  };
+
+  const handleCreateManualEntry = () => {
+    if (!currentSession) {
+      alert('Abra o caixa do dia antes de adicionar valores.');
+      return;
+    }
+
+    const amount = Number(manualEntryForm.amount);
+    if (!manualEntryForm.description || !Number.isFinite(amount) || amount <= 0) {
+      alert('Preencha descricao e valor da entrada manual.');
+      return;
+    }
+
+    mockDB.createCashFlowEntry({
+      date: currentSession.businessDate,
+      businessDate: currentSession.businessDate,
+      type: 'income',
+      category: manualEntryForm.category,
+      amount,
+      grossAmount: amount,
+      totalCost: 0,
+      grossProfit: amount,
+      marginPercent: 100,
+      paymentStatus: 'paid',
+      description: manualEntryForm.description,
+      paymentMethod: manualEntryForm.paymentMethod,
+      cashSessionId: currentSession.id,
+      sourceType: 'manual_revenue'
+    });
+
+    setManualEntryForm({
+      description: '',
+      category: 'Venda avulsa',
+      amount: '',
+      paymentMethod: enabledPaymentMethods[0] || 'cash'
+    });
+    setIsManualEntryModalOpen(false);
+    loadData();
   };
 
   const handleExport = async () => {
     try {
       const { default: jsPDF } = await import('jspdf');
       const doc = new jsPDF();
-      
-      doc.setFontSize(18);
-      doc.text('Relatório de Contas a Receber', 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 28);
 
-      let y = 40;
-      filteredReceivables.forEach((rec, i) => {
-          if (y > 280) {
-              doc.addPage();
-              y = 20;
-          }
-          const status = rec.normalizedStatus === 'paid' ? 'PAGO' : rec.normalizedStatus === 'overdue' ? 'ATRASADO' : 'PENDENTE';
-          doc.text(`${parseDate(rec.dueDate).toLocaleDateString('pt-BR')} - ${rec.ownerName} (${rec.patientName}) - ${formatCurrency(rec.amount)} - ${status}`, 14, y);
-          y += 10;
+      doc.setFontSize(18);
+      doc.text('Caixa Diario e Contas a Receber', 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, 14, 28);
+
+      let y = 38;
+      if (currentSession) {
+        doc.text(`Caixa aberto em ${currentSession.businessDate}`, 14, y);
+        y += 8;
+        doc.text(`Recebido no dia: ${formatCurrency(cashSummary.totalIncome)}`, 14, y);
+        y += 8;
+        doc.text(`Dinheiro: ${formatCurrency(cashSummary.cash)} | Pix: ${formatCurrency(cashSummary.pix)} | Cartao: ${formatCurrency(cashSummary.debit + cashSummary.credit)}`, 14, y);
+        y += 12;
+      }
+
+      filteredReceivables.forEach(receivable => {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        const status = receivable.normalizedStatus === 'overdue' ? 'ATRASADO' : 'PENDENTE';
+        doc.text(
+          `${parseDate(receivable.dueDate).toLocaleDateString('pt-BR')} - ${receivable.ownerName} / ${receivable.patientName} - ${formatCurrency(receivable.amount)} - ${status}`,
+          14,
+          y
+        );
+        y += 8;
       });
 
-      doc.save('contas_a_receber.pdf');
+      doc.save('caixa_e_contas_a_receber.pdf');
     } catch (error) {
-      console.error('Erro ao exportar PDF', error);
-      alert('Erro ao gerar PDF');
+      console.error('Erro ao exportar contas a receber', error);
+      alert('Nao foi possivel exportar o relatorio.');
     }
   };
 
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'paid'>('all');
+  const totalPending = filteredReceivables.reduce((sum, item) => sum + item.amount, 0);
+  const totalOverdue = normalizedReceivables
+    .filter(item => item.normalizedStatus === 'overdue')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const totalCard = cashSummary.debit + cashSummary.credit;
 
-  const filteredReceivables = normalizedReceivables.filter(r => {
-    const matchesSearch = r.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          r.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (r.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || r.normalizedStatus === filterStatus;
-    
-    let matchesPeriod = true;
-    if (activePeriodFilter !== 'Todos') {
-      const itemDate = parseDate(r.paymentDate || r.dueDate); // Use paymentDate if paid, else dueDate
-      const now = new Date();
-      if (activePeriodFilter === 'Hoje') {
-        matchesPeriod = itemDate.getDate() === now.getDate() && itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-      } else if (activePeriodFilter === 'Semana') {
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - 6);
-        weekStart.setHours(0,0,0,0);
-        matchesPeriod = itemDate >= weekStart && itemDate <= now;
-      } else if (activePeriodFilter === 'Mês') {
-        matchesPeriod = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-      }
+  const cards = [
+    {
+      title: 'Recebido no caixa',
+      value: formatCurrency(cashSummary.totalIncome),
+      detail: currentSession ? `${sessionEntries.filter(entry => entry.type === 'income').length} lancamentos do dia` : 'Caixa fechado',
+      icon: Wallet,
+      tone: 'text-teal-600 bg-teal-50'
+    },
+    {
+      title: 'Dinheiro + Pix',
+      value: formatCurrency(cashSummary.cash + cashSummary.pix),
+      detail: `Dinheiro ${formatCurrency(cashSummary.cash)} | Pix ${formatCurrency(cashSummary.pix)}`,
+      icon: DollarSign,
+      tone: 'text-emerald-600 bg-emerald-50'
+    },
+    {
+      title: 'Cartoes',
+      value: formatCurrency(totalCard),
+      detail: `Debito ${formatCurrency(cashSummary.debit)} | Credito ${formatCurrency(cashSummary.credit)}`,
+      icon: CreditCard,
+      tone: 'text-blue-600 bg-blue-50'
+    },
+    {
+      title: 'Em aberto',
+      value: formatCurrency(totalPending),
+      detail: `${filteredReceivables.length} contas visiveis | Atrasado ${formatCurrency(totalOverdue)}`,
+      icon: AlertTriangle,
+      tone: 'text-orange-600 bg-orange-50'
     }
-    
-    return matchesSearch && matchesFilter && matchesPeriod;
-  });
+  ];
 
   return (
     <Layout>
       <div className="space-y-6">
-        
-        {/* Header & Search */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-2">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Contas a Receber</h1>
-                <p className="text-gray-500 text-sm">Acompanhe cobranças geradas automaticamente pelos atendimentos e registre os recebimentos.</p>
-            </div>
-            <div className="relative w-full max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input 
-                    type="text" 
-                    placeholder="Buscar por tutor, paciente, descrição ou profissional..." 
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                />
-            </div>
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">A Receber / Caixa Diario</h1>
+            <p className="text-sm text-gray-500">
+              O caixa do dia considera apenas a sessao aberta hoje. Valores antigos ficam no historico e nos relatorios.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {currentSession ? (
+              <>
+                <Button variant="outline" className="gap-2" onClick={() => setIsManualEntryModalOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Adicionar valor
+                </Button>
+                <Button className="gap-2 bg-red-600 hover:bg-red-700 text-white" onClick={() => {
+                  setCloseCashForm({ closingBalance: String(expectedClosing), notes: '' });
+                  setIsCloseCashModalOpen(true);
+                }}>
+                  <LockKeyhole className="h-4 w-4" />
+                  Fechar caixa
+                </Button>
+              </>
+            ) : (
+              <Button className="gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={() => setIsOpenCashModalOpen(true)}>
+                <Unlock className="h-4 w-4" />
+                Abrir caixa
+              </Button>
+            )}
+            <Button variant="outline" className="gap-2" onClick={handleExport}>
+              <FileText className="h-4 w-4" />
+              Exportar
+            </Button>
+          </div>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {cards.map((card, index) => (
-            <Card 
-              key={index} 
-              className={cn(
-                "border-none shadow-sm transition-all duration-700 transform",
-                animate ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-              )}
-              style={{ transitionDelay: `${index * 100}ms` }}
-            >
+        <Card className={cn('border-none shadow-sm', currentSession ? 'bg-green-50' : 'bg-amber-50')}>
+          <CardContent className="p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                {currentSession ? `Caixa aberto para ${parseDate(currentSession.businessDate).toLocaleDateString('pt-BR')}` : 'Caixa fechado para hoje'}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {currentSession
+                  ? `Saldo de abertura ${formatCurrency(currentSession.openingBalance)} | Fechamento esperado ${formatCurrency(expectedClosing)}`
+                  : 'Abra o caixa para registrar recebimentos, entradas manuais e consolidar formas de pagamento do dia.'}
+              </p>
+            </div>
+            {currentSession && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div className="rounded-lg bg-white px-4 py-3">
+                  <p className="text-gray-500">Dinheiro</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(cashSummary.cash)}</p>
+                </div>
+                <div className="rounded-lg bg-white px-4 py-3">
+                  <p className="text-gray-500">Pix</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(cashSummary.pix)}</p>
+                </div>
+                <div className="rounded-lg bg-white px-4 py-3">
+                  <p className="text-gray-500">Cartoes</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(totalCard)}</p>
+                </div>
+                <div className="rounded-lg bg-white px-4 py-3">
+                  <p className="text-gray-500">Boleto/Transf.</p>
+                  <p className="font-bold text-gray-900">{formatCurrency(cashSummary.transfer + cashSummary.bankSlip)}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {cards.map((card, index) => {
+            const Icon = card.icon;
+            return (
+              <Card
+                key={card.title}
+                className={cn(
+                  'border-none shadow-sm transition-all duration-700 transform',
+                  animate ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
+                )}
+                style={{ transitionDelay: `${index * 80}ms` }}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500 font-medium mb-2">{card.title}</p>
+                      <h3 className="text-2xl font-bold text-gray-900">{card.value}</h3>
+                      <p className="text-sm text-gray-500 mt-2">{card.detail}</p>
+                    </div>
+                    <div className={cn('rounded-xl p-3', card.tone)}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <Card className="xl:col-span-2 border-none shadow-sm">
+            <CardContent className="p-6">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Contas pendentes para receber</h3>
+                  <p className="text-sm text-gray-500">Baixe pagamentos dentro do caixa aberto no dia.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={event => setSearchTerm(event.target.value)}
+                      placeholder="Buscar por tutor, paciente ou descricao"
+                      className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                    <select
+                      value={filterStatus}
+                      onChange={event => setFilterStatus(event.target.value as 'all' | 'pending' | 'overdue')}
+                      className="bg-transparent outline-none"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendentes</option>
+                      <option value="overdue">Atrasados</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100">
+                      <th className="pb-3 pl-2">Vencimento</th>
+                      <th className="pb-3">Tutor / Paciente</th>
+                      <th className="pb-3">Descricao</th>
+                      <th className="pb-3">Profissional</th>
+                      <th className="pb-3">Valor</th>
+                      <th className="pb-3 text-center">Status</th>
+                      <th className="pb-3 text-right pr-2">Acao</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {filteredReceivables.map(receivable => (
+                      <tr key={receivable.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                        <td className="py-4 pl-2 text-gray-500 font-medium">
+                          {parseDate(receivable.dueDate).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="py-4">
+                          <div className="font-medium text-gray-900">{receivable.ownerName}</div>
+                          <div className="text-xs text-gray-500">{receivable.patientName}</div>
+                        </td>
+                        <td className="py-4 text-gray-500">{receivable.description}</td>
+                        <td className="py-4 text-gray-500">{receivable.professionalName || '-'}</td>
+                        <td className="py-4 text-gray-900 font-bold">{formatCurrency(receivable.amount)}</td>
+                        <td className="py-4 text-center">
+                          <span className={cn(
+                            'px-3 py-1 rounded-full text-xs font-bold',
+                            receivable.normalizedStatus === 'overdue'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-800'
+                          )}>
+                            {receivable.normalizedStatus === 'overdue' ? 'ATRASADO' : 'PENDENTE'}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right pr-2">
+                          <Button
+                            onClick={() => openPayModal(receivable)}
+                            disabled={!currentSession}
+                            className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                          >
+                            <DollarSign className="h-3 w-3 mr-1" />
+                            Receber
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredReceivables.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-gray-400">
+                          Nenhuma conta pendente encontrada.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
               <CardContent className="p-6">
-                <p className="text-gray-500 font-medium mb-2">{card.title}</p>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{card.value}</h3>
-                <div className="flex items-center text-sm">
-                  {card.trend === 'down' ? (
-                     <TrendingDown className={`h-4 w-4 mr-1 ${card.color}`} />
-                  ) : (
-                     <TrendingUp className={`h-4 w-4 mr-1 ${card.color}`} />
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">Movimentos do caixa</h3>
+                  <Receipt className="h-5 w-5 text-gray-400" />
+                </div>
+                <div className="space-y-3 max-h-[420px] overflow-auto">
+                  {sessionEntries.map(entry => (
+                    <div key={entry.id} className="rounded-xl border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{entry.description}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {entry.category} | {PAYMENT_METHOD_LABELS[normalizePaymentMethod(entry.paymentMethod)] || '-'}
+                          </p>
+                        </div>
+                        <p className={cn(
+                          'font-bold',
+                          entry.type === 'expense' ? 'text-red-600' : 'text-emerald-600'
+                        )}>
+                          {entry.type === 'expense' ? '-' : '+'}
+                          {formatCurrency(entry.amount)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {sessionEntries.length === 0 && (
+                    <p className="text-sm text-gray-400">
+                      {currentSession ? 'Nenhum movimento registrado no caixa de hoje.' : 'Abra o caixa para comecar a registrar recebimentos.'}
+                    </p>
                   )}
-                  <span className={`${card.color} font-medium`}>
-                    {card.change}
-                  </span>
                 </div>
               </CardContent>
             </Card>
-          ))}
+
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">Ultimos fechamentos</h3>
+                  <Landmark className="h-5 w-5 text-gray-400" />
+                </div>
+                <div className="space-y-3">
+                  {recentClosedSessions.map(session => (
+                    <div key={session.id} className="rounded-xl border border-gray-100 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{parseDate(session.businessDate).toLocaleDateString('pt-BR')}</p>
+                          <p className="text-xs text-gray-500">
+                            Recebido {formatCurrency(session.summary?.totalIncome || 0)}
+                          </p>
+                        </div>
+                        <p className="font-bold text-gray-900">{formatCurrency(session.closingBalance || 0)}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {recentClosedSessions.length === 0 && (
+                    <p className="text-sm text-gray-400">Nenhum caixa fechado ainda.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
-        {/* Transactions Table */}
-        <Card className={cn(
-            "border-none shadow-sm transition-all duration-1000 delay-300 transform",
-            animate ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-        )}>
-            <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Lançamentos {filterStatus !== 'all' && <span className="text-sm font-normal text-gray-500 ml-2">(Filtro: {filterStatus === 'paid' ? 'Pagos' : filterStatus === 'overdue' ? 'Atrasados' : 'Pendentes'})</span>}</h3>
-                  <div className="flex bg-gray-100 p-1 rounded-lg mt-2 inline-flex">
-                    {['Hoje', 'Semana', 'Mês', 'Todos'].map((filter) => (
-                      <button
-                        key={filter}
-                        onClick={() => setActivePeriodFilter(filter)}
-                        className={cn(
-                          'px-3 py-1 text-xs font-medium rounded-md transition-all',
-                          activePeriodFilter === filter ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        )}
-                      >
-                        {filter}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex gap-2 items-start">
-                    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
-                        <Filter className="h-4 w-4" />
-                        <select
-                            value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'overdue' | 'paid')}
-                            className="bg-transparent outline-none"
-                        >
-                            <option value="all">Todos</option>
-                            <option value="pending">Pendentes</option>
-                            <option value="overdue">Atrasados</option>
-                            <option value="paid">Pagos</option>
-                        </select>
-                    </div>
-                    <Button 
-                        variant="outline" 
-                        className="gap-2 text-gray-600 border-gray-200"
-                        onClick={handleExport}
-                    >
-                        <FileText className="h-4 w-4" /> Exportar
-                    </Button>
-                </div>
-            </div>
-
-            <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                <thead>
-                    <tr className="text-xs text-gray-500 font-semibold border-b border-gray-100">
-                        <th className="pb-3 pl-2">Vencimento</th>
-                        <th className="pb-3">Tutor / Paciente</th>
-                        <th className="pb-3">Descrição</th>
-                        <th className="pb-3">Profissional</th>
-                        <th className="pb-3">Resumo</th>
-                        <th className="pb-3">Método</th>
-                        <th className="pb-3">Valor</th>
-                        <th className="pb-3 text-center">Status</th>
-                        <th className="pb-3 text-right pr-2">Ações</th>
-                    </tr>
-                </thead>
-                <tbody className="text-sm">
-                    {filteredReceivables.map((rec) => (
-                        <tr key={rec.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                            <td className="py-4 pl-2 text-gray-500 font-medium">
-                                <div>{parseDate(rec.dueDate).toLocaleDateString('pt-BR')}</div>
-                                {rec.paymentDate && (
-                                  <div className="text-xs text-gray-400 mt-1">Pago em {parseDate(rec.paymentDate).toLocaleDateString('pt-BR')}</div>
-                                )}
-                            </td>
-                            <td className="py-4">
-                                <div className="font-medium text-gray-900">{rec.ownerName}</div>
-                                <div className="text-xs text-gray-500">{rec.patientName}</div>
-                            </td>
-                            <td className="py-4 text-gray-500">{rec.description}</td>
-                            <td className="py-4 text-gray-500">{rec.professionalName || '-'}</td>
-                            <td className="py-4">
-                                <div className="text-xs text-gray-500">Custo: {formatCurrency(rec.totalCost || 0)}</div>
-                                <div className="text-xs text-emerald-600 font-medium">Lucro: {formatCurrency(rec.grossProfit || 0)}</div>
-                            </td>
-                            <td className="py-4 text-gray-500">
-                                <div>{rec.paymentMethod || '-'}</div>
-                                {rec.paymentDetails?.installments && rec.paymentDetails.installments > 1 && (
-                                  <div className="text-xs text-gray-400 mt-1">{rec.paymentDetails.installments}x</div>
-                                )}
-                            </td>
-                            <td className="py-4 text-gray-900 font-bold">{formatCurrency(rec.amount)}</td>
-                            <td className="py-4 text-center">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                    rec.normalizedStatus === 'paid' ? 'bg-teal-100 text-teal-700' : 
-                                    rec.normalizedStatus === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                    {rec.normalizedStatus === 'paid' ? 'PAGO' : rec.normalizedStatus === 'overdue' ? 'ATRASADO' : 'PENDENTE'}
-                                </span>
-                            </td>
-                            <td className="py-4 text-right pr-2">
-                                {rec.normalizedStatus !== 'paid' ? (
-                                    <Button 
-                                        onClick={() => handleOpenPayModal(rec)}
-                                        className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
-                                    >
-                                        <DollarSign className="h-3 w-3 mr-1" /> Receber
-                                    </Button>
-                                ) : (
-                                    <Button 
-                                        onClick={() => handlePrintReceipt(rec)}
-                                        variant="outline"
-                                        className="h-8 text-xs border-gray-300 text-gray-600 hover:bg-gray-50"
-                                    >
-                                        Recibo
-                                    </Button>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                    {filteredReceivables.length === 0 && (
-                        <tr>
-                            <td colSpan={9} className="py-8 text-center text-gray-400">
-                                Nenhum lançamento encontrado.
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-                </table>
-            </div>
-            
-            {/* Footer Pagination (Visual Only) */}
-            <div className="mt-6 flex items-center justify-between border-t pt-4 text-sm text-gray-500">
-                <span>Mostrando {filteredReceivables.length} resultados</span>
-                <div className="flex gap-1">
-                    <button className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="h-4 w-4" /></button>
-                    <button className="px-3 py-1 bg-gray-100 rounded text-gray-900 font-medium">1</button>
-                    <button className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="h-4 w-4" /></button>
-                </div>
-            </div>
-
-            </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="border-none shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <h3 className="text-lg font-bold text-gray-900">Prioridades</h3>
-              </div>
-              <div className="space-y-3">
-                {normalizedReceivables.filter(r => r.normalizedStatus === 'overdue').slice(0, 5).map((rec) => (
-                  <div key={rec.id} className="rounded-lg border border-red-100 bg-red-50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-red-900">{rec.patientName}</p>
-                        <p className="text-xs text-red-700">{rec.ownerName} - vencimento em {parseDate(rec.dueDate).toLocaleDateString('pt-BR')}</p>
-                      </div>
-                      <p className="font-bold text-red-800">{formatCurrency(rec.amount)}</p>
-                    </div>
-                  </div>
-                ))}
-                {normalizedReceivables.filter(r => r.normalizedStatus === 'overdue').length === 0 && (
-                  <p className="text-sm text-gray-500">Nenhuma conta em atraso no momento.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <CheckCircle2 className="h-5 w-5 text-teal-500" />
-                <h3 className="text-lg font-bold text-gray-900">Resumo Operacional</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        <Modal isOpen={isPayModalOpen} onClose={() => setIsPayModalOpen(false)} title="Dar baixa no pagamento">
+          {selectedReceivable && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold">Pendentes</p>
-                  <p className="text-xl font-bold text-gray-900 mt-2">{normalizedReceivables.filter(r => r.normalizedStatus === 'pending').length}</p>
+                  <p className="text-sm text-gray-500">Conta</p>
+                  <p className="font-bold text-gray-900 mt-1">{selectedReceivable.ownerName}</p>
+                  <p className="text-xs text-gray-500">{selectedReceivable.patientName}</p>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold">Atrasadas</p>
-                  <p className="text-xl font-bold text-red-600 mt-2">{normalizedReceivables.filter(r => r.normalizedStatus === 'overdue').length}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold">Pagas</p>
-                  <p className="text-xl font-bold text-teal-600 mt-2">{normalizedReceivables.filter(r => r.normalizedStatus === 'paid').length}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500 uppercase font-semibold">Lucro Previsto</p>
-                  <p className="text-xl font-bold text-emerald-600 mt-2">
-                    {formatCurrency(normalizedReceivables.reduce((acc, rec) => acc + (rec.grossProfit || 0), 0))}
+                <div className="rounded-lg bg-gray-50 p-4 text-right">
+                  <p className="text-sm text-gray-500">Valor liquido estimado</p>
+                  <p className="font-bold text-green-600 mt-1">
+                    {formatCurrency(Number(paymentAmount || 0) * (1 - (Number(taxRate || 0) / 100)))}
                   </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* Payment Modal */}
-        <Modal isOpen={isPayModalOpen} onClose={() => setIsPayModalOpen(false)} title="Registrar Pagamento">
-            {selectedReceivable && (
-                <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
-                        <div>
-                            <p className="text-sm text-gray-500">Valor Original</p>
-                            <p className="text-xl font-bold text-gray-900">{formatCurrency(selectedReceivable.amount)}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-sm text-gray-500">Valor Líquido Estimado</p>
-                            <p className="text-xl font-bold text-green-600">
-                                {formatCurrency(selectedReceivable.amount * (1 - (taxRate / 100)))}
-                            </p>
-                        </div>
-                    </div>
+              <div>
+                <Label>Valor recebido</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={event => setPaymentAmount(event.target.value)}
+                />
+              </div>
 
-                    <div>
-                        <Label>Forma de Pagamento</Label>
-                        <Select 
-                            value={paymentMethod}
-                            onChange={(e) => handlePaymentMethodChange(e.target.value)}
-                        >
-                            <option value="cash">Dinheiro</option>
-                            <option value="pix">Pix</option>
-                            <option value="debit_card">Cartão de Débito</option>
-                            <option value="credit_card">Cartão de Crédito</option>
-                            <option value="transfer">Transferência</option>
-                        </Select>
-                    </div>
+              <div>
+                <Label>Forma de pagamento</Label>
+                <Select value={paymentMethod} onChange={event => handlePaymentMethodChange(event.target.value)}>
+                  {enabledPaymentMethods.map(method => (
+                    <option key={method} value={method}>{PAYMENT_METHOD_LABELS[method] || method}</option>
+                  ))}
+                </Select>
+              </div>
 
-                    {paymentMethod === 'credit_card' && (
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Parcelas</Label>
-                                <Select 
-                                    value={installments}
-                                    onChange={(e) => handleInstallmentChange(Number(e.target.value))}
-                                >
-                                    {Array.from({ length: settings.payment.maxInstallments || 12 }, (_, i) => i + 1).map(i => (
-                                        <option key={i} value={i}>{i}x</option>
-                                    ))}
-                                </Select>
-                            </div>
-                            <div>
-                                <Label>Taxa / Juros (%)</Label>
-                                <Input 
-                                    type="number"
-                                    value={taxRate}
-                                    onChange={(e) => setTaxRate(Number(e.target.value))}
-                                    placeholder="0"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="pt-4 flex justify-end gap-2 border-t mt-4">
-                        <Button variant="outline" onClick={() => setIsPayModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleConfirmPay} className="bg-green-600 hover:bg-green-700 text-white">
-                            Confirmar Recebimento
-                        </Button>
-                    </div>
+              {paymentMethod === 'credit_card' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Parcelas</Label>
+                    <Select value={installments} onChange={event => handleInstallmentChange(Number(event.target.value))}>
+                      {Array.from({ length: settings.payment.maxInstallments || 1 }, (_, index) => index + 1).map(item => (
+                        <option key={item} value={item}>{item}x</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Taxa / juros (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={taxRate}
+                      onChange={event => setTaxRate(Number(event.target.value))}
+                    />
+                  </div>
                 </div>
-            )}
+              )}
+
+              <div className="pt-4 flex justify-end gap-2 border-t">
+                <Button variant="outline" onClick={() => setIsPayModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handleConfirmPayment} className="bg-green-600 hover:bg-green-700 text-white">
+                  Confirmar recebimento
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        <Modal isOpen={isOpenCashModalOpen} onClose={() => setIsOpenCashModalOpen(false)} title="Abrir caixa do dia">
+          <div className="space-y-4">
+            <div>
+              <Label>Saldo inicial</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={openCashForm.openingBalance}
+                onChange={event => setOpenCashForm(prev => ({ ...prev, openingBalance: event.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Observacoes</Label>
+              <Input
+                value={openCashForm.notes}
+                onChange={event => setOpenCashForm(prev => ({ ...prev, notes: event.target.value }))}
+                placeholder="Ex.: caixa aberto pela recepcao"
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t">
+              <Button variant="outline" onClick={() => setIsOpenCashModalOpen(false)}>Cancelar</Button>
+              <Button onClick={handleOpenCashSession} className="bg-green-600 hover:bg-green-700 text-white">
+                Abrir caixa
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal isOpen={isCloseCashModalOpen} onClose={() => setIsCloseCashModalOpen(false)} title="Fechar caixa do dia">
+          <div className="space-y-4">
+            <div className="rounded-lg bg-gray-50 p-4">
+              <p className="text-sm text-gray-500">Fechamento esperado</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(expectedClosing)}</p>
+            </div>
+            <div>
+              <Label>Saldo final contado</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={closeCashForm.closingBalance}
+                onChange={event => setCloseCashForm(prev => ({ ...prev, closingBalance: event.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Observacoes do fechamento</Label>
+              <Input
+                value={closeCashForm.notes}
+                onChange={event => setCloseCashForm(prev => ({ ...prev, notes: event.target.value }))}
+                placeholder="Ex.: conferencia do caixa"
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t">
+              <Button variant="outline" onClick={() => setIsCloseCashModalOpen(false)}>Cancelar</Button>
+              <Button onClick={handleCloseCashSession} className="bg-red-600 hover:bg-red-700 text-white">
+                Fechar caixa
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal isOpen={isManualEntryModalOpen} onClose={() => setIsManualEntryModalOpen(false)} title="Adicionar valor ao caixa">
+          <div className="space-y-4">
+            <div>
+              <Label>Descricao</Label>
+              <Input
+                value={manualEntryForm.description}
+                onChange={event => setManualEntryForm(prev => ({ ...prev, description: event.target.value }))}
+                placeholder="Ex.: venda de medicamento no balcao"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Categoria</Label>
+                <Input
+                  value={manualEntryForm.category}
+                  onChange={event => setManualEntryForm(prev => ({ ...prev, category: event.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Valor</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={manualEntryForm.amount}
+                  onChange={event => setManualEntryForm(prev => ({ ...prev, amount: event.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Forma de pagamento</Label>
+              <Select
+                value={manualEntryForm.paymentMethod}
+                onChange={event => setManualEntryForm(prev => ({ ...prev, paymentMethod: event.target.value }))}
+              >
+                {enabledPaymentMethods.map(method => (
+                  <option key={method} value={method}>{PAYMENT_METHOD_LABELS[method] || method}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t">
+              <Button variant="outline" onClick={() => setIsManualEntryModalOpen(false)}>Cancelar</Button>
+              <Button onClick={handleCreateManualEntry} className="bg-[var(--clinic-button)] hover:bg-[var(--clinic-button)]/90 text-white">
+                Salvar valor
+              </Button>
+            </div>
+          </div>
         </Modal>
       </div>
     </Layout>

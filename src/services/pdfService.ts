@@ -391,12 +391,23 @@ class PdfService {
     if (signature) {
       doc.setDrawColor(150);
       doc.line(70, pageHeight - 40, 140, pageHeight - 40);
-      doc.setFontSize(10);
-      doc.setTextColor(50);
-      const signatureLabel = settings.documents.showSignature
-        ? (teamMember?.signature || 'Assinatura digital do veterinario')
-        : 'Documento emitido sem assinatura digital';
-      doc.text(signatureLabel, 105, pageHeight - 35, { align: 'center' });
+      const signatureValue = settings.documents.showSignature ? (teamMember?.signature || '') : '';
+      const hasSignatureImage = Boolean(signatureValue) && (
+        signatureValue.startsWith('data:image/') ||
+        /\.(png|jpe?g|webp)$/i.test(signatureValue)
+      );
+
+      if (hasSignatureImage) {
+        this.addImageSafely(doc, signatureValue, 78, pageHeight - 47, 54, 14);
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(50);
+        const signatureLabel = settings.documents.showSignature
+          ? (signatureValue || 'Assinatura digital do veterinario')
+          : 'Documento emitido sem assinatura digital';
+        doc.text(signatureLabel, 105, pageHeight - 35, { align: 'center' });
+      }
+
       doc.setFontSize(8);
       const credentialLine = [
         teamMember?.name,

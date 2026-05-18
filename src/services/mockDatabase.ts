@@ -2,7 +2,8 @@ import {
   Patient, Owner, Property, InventoryItem, 
   Attendance, Receivable, User, ConsumptionItem,
   ProcedureTemplate, CashFlowEntry, FinancialRecord, VaccineApplication, AppliedProcedure,
-  AccessProfile, AppModuleKey, ModulePermission, TeamMember, GeneralSettings, AuditLogEntry, BackupSnapshot
+  AccessProfile, AppModuleKey, ModulePermission, TeamMember, GeneralSettings, AuditLogEntry, BackupSnapshot,
+  CashRegisterSession, CashRegisterSessionSummary
 } from '../domain/types';
 
 // Initial Mock Data
@@ -548,9 +549,17 @@ const INITIAL_GENERAL_SETTINGS: GeneralSettings = {
       id: 'unit-1',
       name: 'VetTooth Matriz',
       type: 'matriz',
+      zipCode: '01234-567',
       city: 'Sao Paulo',
       state: 'SP',
       address: 'Rua das Flores, 123',
+      neighborhood: 'Centro',
+      number: '123',
+      complement: 'Sala 2',
+      phone: '(11) 3333-4444',
+      contact: 'contato@vettooth.com',
+      responsibleName: 'Dra. Mariana Costa',
+      attendantName: 'Ana Souza',
       active: true
     }
   ],
@@ -588,6 +597,8 @@ class MockDatabaseService {
   private receivables: Receivable[] = [];
   private appointments: any[] = [];
   private procedures: ProcedureTemplate[] = [];
+  private cashFlow: CashFlowEntry[] = [];
+  private cashSessions: CashRegisterSession[] = [];
   private financialRecords: FinancialRecord[] = [];
   private profiles: AccessProfile[] = [];
   private users: User[] = [];
@@ -679,6 +690,14 @@ class MockDatabaseService {
     } catch (e) {
       console.error('Error loading cashflow', e);
       this.cashFlow = [];
+    }
+
+    try {
+      const loadedCashSessions = localStorage.getItem('vet_cash_sessions');
+      this.cashSessions = loadedCashSessions ? JSON.parse(loadedCashSessions) : [];
+    } catch (e) {
+      console.error('Error loading cash sessions', e);
+      this.cashSessions = [];
     }
 
     try {
@@ -803,7 +822,17 @@ class MockDatabaseService {
         isDefault: hasDefaultDocumentTemplate ? Boolean(template.isDefault) : index === 0
       })),
       automatedMessages: settings?.automatedMessages || INITIAL_GENERAL_SETTINGS.automatedMessages,
-      units: settings?.units || INITIAL_GENERAL_SETTINGS.units,
+      units: (settings?.units || INITIAL_GENERAL_SETTINGS.units).map(unit => ({
+        ...unit,
+        zipCode: unit?.zipCode || '',
+        neighborhood: unit?.neighborhood || '',
+        number: unit?.number || '',
+        complement: unit?.complement || '',
+        phone: unit?.phone || '',
+        contact: unit?.contact || '',
+        responsibleName: unit?.responsibleName || '',
+        attendantName: unit?.attendantName || ''
+      })),
       clinicalReminders: settings?.clinicalReminders || INITIAL_GENERAL_SETTINGS.clinicalReminders
     };
   }
@@ -1019,7 +1048,11 @@ class MockDatabaseService {
     );
 
     if (this.settings.security.dailyAutoBackup && this.shouldCreateDailyBackup()) {
-      this.createBackup('Backup automatico diario');
+      try {
+        this.createBackup('Backup automatico diario');
+      } catch (error) {
+        console.error('Error creating automatic backup', error);
+      }
     }
 
     return this.settings;
@@ -1048,6 +1081,8 @@ class MockDatabaseService {
         receivables: this.receivables,
         appointments: this.appointments,
         procedures: this.procedures,
+        cashFlow: this.cashFlow,
+        cashSessions: this.cashSessions,
         financialRecords: this.financialRecords,
         profiles: this.profiles,
         users: this.users,
@@ -1087,6 +1122,8 @@ class MockDatabaseService {
     this.procedures = Array.isArray(data.procedures)
       ? (data.procedures as ProcedureTemplate[]).map(item => this.enrichProcedure(item))
       : this.procedures;
+    this.cashFlow = Array.isArray(data.cashFlow) ? (data.cashFlow as CashFlowEntry[]) : this.cashFlow;
+    this.cashSessions = Array.isArray(data.cashSessions) ? (data.cashSessions as CashRegisterSession[]) : this.cashSessions;
     this.financialRecords = Array.isArray(data.financialRecords) ? (data.financialRecords as FinancialRecord[]) : this.financialRecords;
     this.profiles = Array.isArray(data.profiles) ? (data.profiles as AccessProfile[]) : this.profiles;
     this.users = Array.isArray(data.users) ? (data.users as User[]) : this.users;
@@ -1101,6 +1138,8 @@ class MockDatabaseService {
     this.save('vet_receivables', this.receivables);
     this.save('vet_appointments', this.appointments);
     this.save('vet_procedures', this.procedures);
+    this.save('vet_cashflow', this.cashFlow);
+    this.save('vet_cash_sessions', this.cashSessions);
     this.save('vet_financial_records', this.financialRecords);
     this.save('vet_profiles', this.profiles);
     this.save('vet_users', this.users);
@@ -1750,19 +1789,159 @@ class MockDatabaseService {
   }
 
   getReceivables() { return this.receivables; }
+
+  private parseSupportedDate(value: string | Date = new Date()) {
+    if (value instanceof Date) return value;
+    if (!value) return new Date('');
+    if (value.includes('/')) {
+      const [day, month, year] = value.split('/');
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    if (value.length === 10 && value.includes('-')) {
+      const [year, month, day] = value.split('-');
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+
+  private getBusinessDate(value: string | Date = new Date()) {
+    const parsedDate = this.parseSupportedDate(value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return new Date().toISOString().slice(0, 10);
+    }
+    return `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`;
+  }
+
+  private createEmptyCashSessionSummary(): CashRegisterSessionSummary {
+    return {
+      totalIncome: 0,
+      totalExpense: 0,
+      netAmount: 0,
+      receivedCash: 0,
+      receivedPix: 0,
+      receivedDebit: 0,
+      receivedCredit: 0,
+      receivedTransfer: 0,
+      receivedBankSlip: 0
+    };
+  }
+
+  getCashSessions() {
+    return [...this.cashSessions].sort((a, b) => (
+      b.businessDate.localeCompare(a.businessDate) || b.openedAt.localeCompare(a.openedAt)
+    ));
+  }
+
+  getCurrentCashSession() {
+    const today = this.getBusinessDate();
+    return this.cashSessions.find(session => session.businessDate === today && session.status === 'open') || null;
+  }
+
+  getCashSessionEntries(sessionId: string) {
+    return this.cashFlow
+      .filter(entry => entry.cashSessionId === sessionId)
+      .sort((a, b) => this.parseSupportedDate(b.date).getTime() - this.parseSupportedDate(a.date).getTime());
+  }
+
+  getCashSessionSummary(sessionId: string) {
+    const summary = this.createEmptyCashSessionSummary();
+    const entries = this.getCashSessionEntries(sessionId);
+
+    entries.forEach(entry => {
+      const amount = Number(entry.amount || 0);
+      if (entry.type === 'income') {
+        summary.totalIncome += amount;
+        if (entry.paymentMethod === 'cash') summary.receivedCash += amount;
+        if (entry.paymentMethod === 'pix') summary.receivedPix += amount;
+        if (entry.paymentMethod === 'debit_card') summary.receivedDebit += amount;
+        if (entry.paymentMethod === 'credit_card') summary.receivedCredit += amount;
+        if (entry.paymentMethod === 'transfer') summary.receivedTransfer += amount;
+        if (entry.paymentMethod === 'bank_slip' || entry.paymentMethod === 'boleto') summary.receivedBankSlip += amount;
+      }
+
+      if (entry.type === 'expense') {
+        summary.totalExpense += amount;
+      }
+    });
+
+    summary.totalIncome = Number(summary.totalIncome.toFixed(2));
+    summary.totalExpense = Number(summary.totalExpense.toFixed(2));
+    summary.netAmount = Number((summary.totalIncome - summary.totalExpense).toFixed(2));
+    summary.receivedCash = Number(summary.receivedCash.toFixed(2));
+    summary.receivedPix = Number(summary.receivedPix.toFixed(2));
+    summary.receivedDebit = Number(summary.receivedDebit.toFixed(2));
+    summary.receivedCredit = Number(summary.receivedCredit.toFixed(2));
+    summary.receivedTransfer = Number(summary.receivedTransfer.toFixed(2));
+    summary.receivedBankSlip = Number(summary.receivedBankSlip.toFixed(2));
+
+    return summary;
+  }
+
+  openCashSession(payload: { openingBalance?: number; businessDate?: string; notes?: string } = {}) {
+    const businessDate = payload.businessDate || this.getBusinessDate();
+    const existingSession = this.cashSessions.find(session => session.businessDate === businessDate && session.status === 'open');
+    if (existingSession) return existingSession;
+
+    const session: CashRegisterSession = {
+      id: this.createId(),
+      businessDate,
+      status: 'open',
+      openedAt: new Date().toISOString(),
+      openingBalance: Number((payload.openingBalance || 0).toFixed(2)),
+      notes: payload.notes || '',
+      summary: this.createEmptyCashSessionSummary()
+    };
+
+    this.cashSessions.push(session);
+    this.save('vet_cash_sessions', this.cashSessions);
+    this.logAudit('create', 'cash_session', businessDate, null, session);
+    return session;
+  }
+
+  closeCashSession(sessionId: string, payload: { closingBalance?: number; notes?: string } = {}) {
+    const sessionIndex = this.cashSessions.findIndex(session => session.id === sessionId);
+    if (sessionIndex === -1) return null;
+
+    const session = this.cashSessions[sessionIndex];
+    const summary = this.getCashSessionSummary(sessionId);
+    const expectedClosing = Number((session.openingBalance + summary.netAmount).toFixed(2));
+
+    this.cashSessions[sessionIndex] = {
+      ...session,
+      status: 'closed',
+      closedAt: new Date().toISOString(),
+      closingBalance: typeof payload.closingBalance === 'number'
+        ? Number(payload.closingBalance.toFixed(2))
+        : expectedClosing,
+      notes: payload.notes ?? session.notes,
+      summary
+    };
+
+    this.save('vet_cash_sessions', this.cashSessions);
+    this.logAudit('update', 'cash_session', session.businessDate, session, this.cashSessions[sessionIndex]);
+    return this.cashSessions[sessionIndex];
+  }
   
-  payReceivable(id: string, details: { method: any, installments?: number, taxRate?: number }) {
+  payReceivable(id: string, details: { method: any, installments?: number, taxRate?: number, amount?: number, businessDate?: string, cashSessionId?: string }) {
     const recIndex = this.receivables.findIndex(r => r.id === id);
     if (recIndex !== -1) {
       const rec = this.receivables[recIndex];
+      const paymentDate = new Date().toISOString();
+      const businessDate = details.businessDate || this.getBusinessDate(paymentDate);
+      const amountPaid = typeof details.amount === 'number' && details.amount > 0
+        ? Number(details.amount.toFixed(2))
+        : rec.amount;
+      const activeCashSession = details.cashSessionId
+        ? this.cashSessions.find(session => session.id === details.cashSessionId) || null
+        : this.cashSessions.find(session => session.businessDate === businessDate && session.status === 'open') || null;
+
+      rec.amount = amountPaid;
       rec.status = 'paid';
-      // paymentDate must be ISO string or formatted date string? 
-      // Receivables uses ISO usually but for UI display we often use locale.
-      rec.paymentDate = new Date().toISOString();
+      rec.paymentDate = paymentDate;
       rec.paymentMethod = details.method;
       
-      const taxAmount = details.taxRate ? rec.amount * (details.taxRate / 100) : 0;
-      const netValue = rec.amount - taxAmount;
+      const taxAmount = details.taxRate ? amountPaid * (details.taxRate / 100) : 0;
+      const netValue = amountPaid - taxAmount;
       
       rec.paymentDetails = {
           method: details.method,
@@ -1776,20 +1955,25 @@ class MockDatabaseService {
 
       const linkedFinancialRecord = this.financialRecords.find(record => record.attendanceId === rec.attendanceId);
       if (linkedFinancialRecord) {
+        linkedFinancialRecord.grossAmount = amountPaid;
+        linkedFinancialRecord.grossProfit = Number((amountPaid - (linkedFinancialRecord.totalCost || 0)).toFixed(2));
+        linkedFinancialRecord.marginPercent = amountPaid > 0
+          ? Number(((linkedFinancialRecord.grossProfit / amountPaid) * 100).toFixed(2))
+          : 0;
         linkedFinancialRecord.paymentStatus = 'paid';
         this.save('vet_financial_records', this.financialRecords);
       }
 
-      // Create CashFlow Entry (Income)
       const entry: CashFlowEntry = {
           id: this.createId(),
-          date: new Date().toLocaleDateString('pt-BR'), 
+          date: paymentDate,
+          businessDate,
           type: 'income',
           category: 'Serviços Veterinários',
-          amount: rec.amount,
-          grossAmount: rec.amount,
+          amount: amountPaid,
+          grossAmount: amountPaid,
           totalCost: rec.totalCost,
-          grossProfit: rec.grossProfit,
+          grossProfit: Number((amountPaid - (rec.totalCost || 0)).toFixed(2)),
           marginPercent: rec.marginPercent,
           paymentStatus: rec.status,
           attendanceId: rec.attendanceId,
@@ -1800,15 +1984,11 @@ class MockDatabaseService {
           professionalName: rec.professionalName,
           description: `Recebimento: ${rec.description} (${details.method})`,
           paymentMethod: details.method,
-          referenceId: rec.id
+          referenceId: rec.id,
+          cashSessionId: activeCashSession?.id,
+          sourceType: 'receivable_payment'
       };
       this.cashFlow.push(entry);
-
-      // If there is tax/fee, create Expense entry? 
-      // For now, let's keep it simple: Just register the Income.
-      // Or maybe register the net value if it's "Cash Flow".
-      // Let's stick to Gross Amount for Revenue report and Net for Cash Flow if we were sophisticated.
-      // But `FinanceRevenue` displays `value`. 
 
       this.save('vet_cashflow', this.cashFlow);
       return rec;
@@ -1816,22 +1996,25 @@ class MockDatabaseService {
     return null;
   }
 
-  // --- Cash Flow ---
-  private cashFlow: CashFlowEntry[] = [];
-  
   getCashFlow() {
       return this.cashFlow;
   }
 
   createCashFlowEntry(entry: Omit<CashFlowEntry, 'id'>) {
+      const businessDate = entry.businessDate || this.getBusinessDate(entry.date);
+      const activeCashSession = entry.cashSessionId
+        ? this.cashSessions.find(session => session.id === entry.cashSessionId) || null
+        : this.cashSessions.find(session => session.businessDate === businessDate && session.status === 'open') || null;
       const newEntry: CashFlowEntry = {
           ...entry,
           id: this.createId(),
+          businessDate,
           amount: Number(entry.amount.toFixed(2)),
           grossAmount: typeof entry.grossAmount === 'number' ? Number(entry.grossAmount.toFixed(2)) : undefined,
           totalCost: typeof entry.totalCost === 'number' ? Number(entry.totalCost.toFixed(2)) : undefined,
           grossProfit: typeof entry.grossProfit === 'number' ? Number(entry.grossProfit.toFixed(2)) : undefined,
-          marginPercent: typeof entry.marginPercent === 'number' ? Number(entry.marginPercent.toFixed(2)) : undefined
+          marginPercent: typeof entry.marginPercent === 'number' ? Number(entry.marginPercent.toFixed(2)) : undefined,
+          cashSessionId: entry.cashSessionId || activeCashSession?.id
       };
 
       this.cashFlow.push(newEntry);

@@ -34,6 +34,8 @@ const getTodayISODate = () => new Date().toISOString().split('T')[0]
 const createEmptyAppointment = () => ({
   patientId: '',
   patientName: '',
+  ownerId: '',
+  ownerName: '',
   appointmentMode: 'patient',
   type: 'Canino',
   doctor: '',
@@ -43,6 +45,7 @@ const createEmptyAppointment = () => ({
   procedure: '',
   customType: '',
   notes: '',
+  serviceLocationId: '',
   serviceLocation: ''
 })
 
@@ -72,6 +75,57 @@ const getAppointmentColor = (type) => {
   if (normalizedType === 'Felino') return 'bg-[#60A5FA] border-[#60A5FA] text-white'
 
   return 'bg-violet-500 border-violet-500 text-white'
+}
+
+const VET_COLOR_PALETTE = [
+  'bg-blue-600 border-blue-700 text-white',
+  'bg-emerald-600 border-emerald-700 text-white',
+  'bg-violet-600 border-violet-700 text-white',
+  'bg-amber-500 border-amber-600 text-white',
+  'bg-rose-600 border-rose-700 text-white',
+  'bg-cyan-600 border-cyan-700 text-white',
+  'bg-fuchsia-600 border-fuchsia-700 text-white',
+  'bg-indigo-600 border-indigo-700 text-white'
+]
+
+const getShortPersonName = (value) => {
+  const name = String(value || '').trim().replace(/\s+/g, ' ')
+  if (!name) return ''
+  const parts = name.split(' ')
+  if (parts.length === 1) return parts[0]
+  return `${parts[0]} ${parts[parts.length - 1]}`
+}
+
+const formatVetDisplayName = (value) => {
+  const shortName = getShortPersonName(value)
+  return shortName ? `M.V. ${shortName}` : ''
+}
+
+const getVetColor = (value) => {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return 'bg-[var(--clinic-button)] border-[var(--clinic-button)] text-white'
+
+  const hash = normalized.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return VET_COLOR_PALETTE[hash % VET_COLOR_PALETTE.length]
+}
+
+const getClinicUnitTypeLabel = (type) => {
+  if (type === 'matriz') return 'Matriz'
+  if (type === 'filial') return 'Filial'
+  if (type === 'atendimento_movel') return 'Atendimento movel'
+  if (type === 'hospital_parceiro') return 'Hospital parceiro'
+  return 'Unidade'
+}
+
+const formatLocationLabel = (unit) => {
+  if (!unit) return ''
+  return `${getClinicUnitTypeLabel(unit.type)} ${unit.name}`.trim()
+}
+
+const getAppointmentModeLabel = (mode) => {
+  if (mode === 'patient') return 'Paciente cadastrado'
+  if (mode === 'owner') return 'Por tutor'
+  return 'Outro tipo'
 }
 
 const timeToMinutes = (time) => {
@@ -208,21 +262,31 @@ export default function Agenda() {
     const propertiesList = sources.properties || properties
 
     const patientData = patientsList.find(p => p.id === appointment.patientId) || null
-    const ownerData = patientData ? ownersList.find(o => o.id === patientData.ownerId) || null : null
+    const ownerData = appointment.ownerId
+      ? ownersList.find(o => o.id === appointment.ownerId) || null
+      : patientData
+        ? ownersList.find(o => o.id === patientData.ownerId) || null
+        : null
     const propertyData = patientData?.propertyId
       ? propertiesList.find(p => p.id === patientData.propertyId) || null
       : null
+    const locationUnit = sources.settings?.units?.find(u =>
+      u.id === appointment.serviceLocationId || u.name === appointment.serviceLocation
+    ) || null
+    const serviceLocationLabel = appointment.serviceLocationLabel || formatLocationLabel(locationUnit) || appointment.serviceLocation || ''
 
     return {
       ...appointment,
-      patient: appointment.patient || appointment.patientName || appointment.customType || patientData?.name || 'Agendamento',
+      patient: appointment.patient || appointment.patientName || appointment.ownerName || appointment.customType || patientData?.name || 'Agendamento',
       type: getSpeciesLabel(appointment.type || patientData?.species || 'Canino'),
-      color: appointment.color || getAppointmentColor(appointment.type || patientData?.species || 'Canino'),
+      color: appointment.color || getVetColor(appointment.doctor) || getAppointmentColor(appointment.type || patientData?.species || 'Canino'),
       ownerName: ownerData?.name || appointment.ownerName || 'Não informado',
       ownerData,
       propertyData,
-      serviceLocation: appointment.serviceLocation || '',
-      serviceLocationAddress: sources.settings?.units?.find(u => u.name === appointment.serviceLocation)?.address || '',
+      ownerPatients: ownerData ? patientsList.filter(p => p.ownerId === ownerData.id) : [],
+      serviceLocation: serviceLocationLabel,
+      serviceLocationAddress: locationUnit?.address || '',
+      serviceLocationType: locationUnit ? getClinicUnitTypeLabel(locationUnit.type) : '',
       patientData: patientData
         ? {
             ...patientData,
@@ -270,8 +334,13 @@ export default function Agenda() {
         .map(user => user.fullName || user.name)
         .filter(Boolean)
       const mergedVetNames = [...new Set([...teamVetNames, ...userVetNames])]
-      setVets(mergedVetNames.map((name, index) => ({ id: `vet-${index}-${name}`, name })))
-      setLocations(loadedSettings.units || [])
+      setVets(mergedVetNames.map((name, index) => ({
+        id: `vet-${index}-${name}`,
+        name,
+        displayName: formatVetDisplayName(name),
+        color: getVetColor(name)
+      })))
+      setLocations((loadedSettings.units || []).filter(unit => unit.active !== false))
       setUiLanguage(loadedSettings?.regional?.language || 'pt-BR')
       
       setAppointments(
@@ -295,7 +364,7 @@ export default function Agenda() {
   useEffect(() => {
     if (vets.length === 0) return
     setNewAppointment(prev => (
-      prev.doctor ? prev : { ...prev, doctor: vets[0].name }
+      prev.doctor ? prev : { ...prev, doctor: vets[0].displayName }
     ))
   }, [vets])
 
@@ -314,12 +383,14 @@ export default function Agenda() {
       appointmentMode: 'patient',
       patientId: patient.id,
       patientName: patient.name,
+      ownerId: patient.ownerId || '',
+      ownerName: owners.find(owner => owner.id === patient.ownerId)?.name || '',
       type: getSpeciesLabel(patient.species || 'Canino'),
       date: today.toISOString().split('T')[0]
     }))
     setIsModalOpen(true)
     setHasAppliedInitialSchedule(true)
-  }, [hasAppliedInitialSchedule, location.state, patients])
+  }, [hasAppliedInitialSchedule, location.state, owners, patients])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -332,9 +403,22 @@ export default function Agenda() {
             appointmentMode: 'other',
             patientId: '',
             patientName: '',
+            ownerId: '',
+            ownerName: '',
             type: 'Outro',
             procedure: '',
+            serviceLocationId: '',
             serviceLocation: ''
+          }
+        }
+
+        if (value === 'owner') {
+          return {
+            ...prev,
+            appointmentMode: 'owner',
+            patientId: '',
+            patientName: '',
+            type: 'Outro'
           }
         }
 
@@ -361,21 +445,41 @@ export default function Agenda() {
   const handlePatientSelect = (item) => {
       const p = patients.find(pat => pat.id === item.id)
       if (p) {
+          const ownerData = owners.find(owner => owner.id === p.ownerId)
           setNewAppointment(prev => ({
               ...prev,
               appointmentMode: 'patient',
               patientId: p.id,
               patientName: p.name,
+              ownerId: p.ownerId || '',
+              ownerName: ownerData?.name || '',
               type: getSpeciesLabel(p.species || 'Canino')
           }))
       }
+  }
+
+  const handleOwnerSelect = (item) => {
+    const ownerData = owners.find(owner => owner.id === item.id)
+    if (!ownerData) return
+
+    setNewAppointment(prev => ({
+      ...prev,
+      appointmentMode: 'owner',
+      ownerId: ownerData.id,
+      ownerName: ownerData.name,
+      patientId: '',
+      patientName: '',
+      type: 'Outro'
+    }))
   }
 
   const fillAppointmentForm = (appointment) => {
     setEditingAppointmentId(appointment.id)
     setNewAppointment({
       patientId: appointment.patientId,
-      patientName: appointment.patient,
+      patientName: appointment.patientName || '',
+      ownerId: appointment.ownerId || '',
+      ownerName: appointment.ownerName || '',
       appointmentMode: appointment.appointmentMode || (appointment.patientId ? 'patient' : 'other'),
       type: appointment.type,
       doctor: appointment.doctor,
@@ -385,6 +489,7 @@ export default function Agenda() {
       procedure: appointment.procedure?.split(' - ')[1] || appointment.procedure || '',
       customType: appointment.customType || '',
       notes: appointment.notes || '',
+      serviceLocationId: appointment.serviceLocationId || '',
       serviceLocation: appointment.serviceLocation || ''
     })
   }
@@ -472,7 +577,12 @@ export default function Agenda() {
 
   const handleSaveAppointment = () => {
     const isPatientAppointment = newAppointment.appointmentMode === 'patient'
-    const appointmentLabel = isPatientAppointment ? newAppointment.patientName : newAppointment.customType
+    const isOwnerAppointment = newAppointment.appointmentMode === 'owner'
+    const appointmentLabel = isPatientAppointment
+      ? newAppointment.patientName
+      : isOwnerAppointment
+        ? `Tutor: ${newAppointment.ownerName}`
+        : newAppointment.customType
     const startMinutes = timeToMinutes(newAppointment.startTime)
     const endMinutes = timeToMinutes(newAppointment.endTime)
 
@@ -486,12 +596,9 @@ export default function Agenda() {
       return
     }
 
-    if (isPatientAppointment) {
+    {
       const hasConflict = appointments.some(existingAppointment => {
         if (existingAppointment.id === editingAppointmentId) return false
-
-        const existingMode = existingAppointment.appointmentMode || (existingAppointment.patientId ? 'patient' : 'other')
-        if (existingMode !== 'patient') return false
         if ((existingAppointment.doctor || '') !== newAppointment.doctor) return false
         if (formatDateForInput(existingAppointment.start) !== newAppointment.date) return false
 
@@ -502,7 +609,7 @@ export default function Agenda() {
       })
 
       if (hasConflict) {
-        alert(`Já existe um agendamento de paciente para ${newAppointment.doctor} nesse horário.`)
+        alert(`Já existe um agendamento para ${newAppointment.doctor} nesse horário.`)
         return
       }
     }
@@ -510,29 +617,41 @@ export default function Agenda() {
     const start = `${newAppointment.date}T${newAppointment.startTime}:00`
     const end = `${newAppointment.date}T${newAppointment.endTime}:00`
     const appointmentType = isPatientAppointment ? newAppointment.type : 'Outro'
-    const procedureLabel = isPatientAppointment ? newAppointment.procedure : ''
+    const procedureLabel = (isPatientAppointment || isOwnerAppointment) ? newAppointment.procedure : ''
     const existingAppointment = editingAppointmentId
       ? appointments.find(appointment => appointment.id === editingAppointmentId)
       : null
+    const selectedVet = vets.find(vet => vet.displayName === newAppointment.doctor) || null
+    const selectedLocation = locations.find(loc => loc.id === newAppointment.serviceLocationId) || null
+    const serviceLocationLabel = selectedLocation
+      ? formatLocationLabel(selectedLocation)
+      : (newAppointment.serviceLocationId || '')
 
     const appointment = {
       title: isPatientAppointment
         ? `${newAppointment.patientName}${procedureLabel ? ` - ${procedureLabel}` : ''}`
+        : isOwnerAppointment
+          ? `Tutor: ${newAppointment.ownerName}${procedureLabel ? ` - ${procedureLabel}` : ''}`
         : newAppointment.customType,
       patient: appointmentLabel,
       patientId: isPatientAppointment ? newAppointment.patientId : '',
       patientName: isPatientAppointment ? newAppointment.patientName : '',
+      ownerId: (isPatientAppointment || isOwnerAppointment) ? newAppointment.ownerId : '',
+      ownerName: (isPatientAppointment || isOwnerAppointment) ? newAppointment.ownerName : '',
       appointmentMode: newAppointment.appointmentMode,
       type: appointmentType,
       procedure: procedureLabel,
       customType: isPatientAppointment ? '' : newAppointment.customType,
       doctor: newAppointment.doctor,
+      doctorColor: selectedVet?.color || getVetColor(newAppointment.doctor),
       start,
       end,
       notes: newAppointment.notes,
-      serviceLocation: isPatientAppointment ? newAppointment.serviceLocation : '',
+      serviceLocationId: (isPatientAppointment || isOwnerAppointment) ? newAppointment.serviceLocationId : '',
+      serviceLocation: (isPatientAppointment || isOwnerAppointment) ? serviceLocationLabel : '',
+      serviceLocationLabel: (isPatientAppointment || isOwnerAppointment) ? serviceLocationLabel : '',
       status: existingAppointment?.status || 'pendente',
-      color: getAppointmentColor(appointmentType)
+      color: selectedVet?.color || getVetColor(newAppointment.doctor)
     }
 
     if (editingAppointmentId) {
@@ -559,7 +678,7 @@ export default function Agenda() {
   // Filtros
   const [filters, setFilters] = useState({
     species: { equino: true, canino: true, felino: true, outros: false },
-    veterinarian: { silva: true, santos: true, todos: false },
+      veterinarian: { todos: true },
     status: { confirmado: true, pendente: true, cancelado: false, realizado: false }
   })
 
@@ -882,10 +1001,10 @@ export default function Agenda() {
                             }}
                           >
                             <div>
-                                <div className="font-bold truncate text-[11px] uppercase tracking-wider opacity-80">{apt.type}</div>
+                                <div className="font-bold truncate text-[11px] uppercase tracking-wider opacity-80">{apt.doctor}</div>
                                 <div className="truncate font-bold text-sm mt-0.5">{apt.patient}</div>
                             </div>
-                            {apt.procedure && <div className="truncate text-[10px] mt-1 opacity-90">{apt.procedure}</div>}
+                            <div className="truncate text-[10px] mt-1 opacity-90">{apt.procedure || getAppointmentModeLabel(apt.appointmentMode)}</div>
                           </div>
                         ))}
                       </div>
@@ -956,6 +1075,7 @@ export default function Agenda() {
               onChange={handleInputChange}
             >
               <option value="patient">Paciente cadastrado</option>
+              <option value="owner">Por tutor</option>
               <option value="other">Outro tipo de agendamento</option>
             </Select>
           </div>
@@ -970,6 +1090,16 @@ export default function Agenda() {
               value={newAppointment.patientName}
             />
           </div>
+          ) : newAppointment.appointmentMode === 'owner' ? (
+            <div className="space-y-2">
+              <Label>Tutor (Busca)</Label>
+              <Autocomplete
+                options={owners.map(owner => ({ id: owner.id, label: `${owner.name}${owner.document ? ` - ${owner.document}` : ''}` }))}
+                onSelect={handleOwnerSelect}
+                placeholder="Buscar tutor cadastrado..."
+                value={newAppointment.ownerName}
+              />
+            </div>
           ) : (
             <div className="space-y-2">
               <Label>Qual é o agendamento?</Label>
@@ -989,6 +1119,12 @@ export default function Agenda() {
               <Input value={newAppointment.type} readOnly className="bg-gray-50" />
             </div>
             )}
+            {newAppointment.appointmentMode === 'owner' && (
+             <div className="space-y-2">
+              <Label>Tutor selecionado</Label>
+              <Input value={newAppointment.ownerName || 'Nenhum tutor selecionado'} readOnly className="bg-gray-50" />
+            </div>
+            )}
               <Label>Veterinário</Label>
               <Select
                 name="doctor"
@@ -997,7 +1133,7 @@ export default function Agenda() {
               >
                 {vets.length > 0 ? (
                   vets.map(vet => (
-                    <option key={vet.id} value={vet.name}>{vet.name}</option>
+                    <option key={vet.id} value={vet.displayName}>{vet.displayName}</option>
                   ))
                 ) : (
                   <option value="">Sem veterinários cadastrados</option>
@@ -1005,7 +1141,7 @@ export default function Agenda() {
               </Select>
           </div>
 
-          {newAppointment.appointmentMode === 'patient' && (
+          {(newAppointment.appointmentMode === 'patient' || newAppointment.appointmentMode === 'owner') && (
             <>
               <div className="space-y-2">
                 <Label>Procedimento</Label>
@@ -1020,13 +1156,13 @@ export default function Agenda() {
               <div className="space-y-2">
                 <Label>Local do atendimento</Label>
                 <Select
-                  name="serviceLocation"
-                  value={newAppointment.serviceLocation}
+                  name="serviceLocationId"
+                  value={newAppointment.serviceLocationId}
                   onChange={handleInputChange}
                 >
                   <option value="">Selecione um local...</option>
                   {locations.map(loc => (
-                    <option key={loc.id} value={loc.name}>{loc.name}</option>
+                    <option key={loc.id} value={loc.id}>{formatLocationLabel(loc)}</option>
                   ))}
                   <option value="Domicílio/Propriedade">Domicílio/Propriedade</option>
                   <option value="Outro">Outro</option>
@@ -1128,7 +1264,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                     icon={Stethoscope}
                     color="bg-indigo-50 text-indigo-600"
                     label={appointment.appointmentMode === 'other' ? 'Agendamento' : 'Procedimento'}
-                    value={appointment.appointmentMode === 'other' ? (appointment.customType || appointment.patient || 'Não informado') : (appointment.procedure || 'Não informado')}
+                    value={appointment.appointmentMode === 'other' ? (appointment.customType || appointment.patient || 'Não informado') : (appointment.procedure || getAppointmentModeLabel(appointment.appointmentMode))}
                   />
                   <InfoItem
                     icon={User}
@@ -1163,7 +1299,14 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 {/* Tutor */}
                 {appointment.appointmentMode !== 'other' && (
                 <div className="rounded-xl border border-gray-200 p-4 space-y-3">
-                  <p className="text-sm font-bold text-gray-900">Tutor</p>
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-bold text-gray-900">Tutor</p>
+                    {appointment.appointmentMode === 'owner' && appointment.ownerPatients?.length > 0 && (
+                      <span className="text-xs rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-700">
+                        {appointment.ownerPatients.length} paciente(s) vinculado(s)
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InfoItem icon={User} color="bg-blue-50 text-[#0B2C4D]" label="Nome" value={appointment.ownerData?.name || appointment.ownerName || 'Desconhecido'} />
                     <InfoItem icon={MessageCircle} color="bg-green-50 text-green-600" label="Telefone" value={appointment.ownerData?.phone || 'Não informado'} />
@@ -1180,7 +1323,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 )}
 
                 {/* Paciente */}
-                {appointment.appointmentMode !== 'other' && (
+                {appointment.appointmentMode === 'patient' && (
                 <div className="rounded-xl border border-gray-200 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-sm font-bold text-gray-900">Paciente</p>
@@ -1213,7 +1356,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                 </div>
                 )}
 
-                {appointment.appointmentMode !== 'other' && appointment.propertyData && (
+                {appointment.appointmentMode === 'patient' && appointment.propertyData && (
                   <div className="rounded-xl border border-gray-200 p-4 space-y-3">
                     <p className="text-sm font-bold text-gray-900">Propriedade</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
