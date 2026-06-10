@@ -29,15 +29,17 @@ import { ReceivablesList } from './modules/finance/ReceivablesList'
 export { useAuth }
 
 function PrivateRoute({ children, moduleKey, action = 'view' }) {
-  const { user, canAccess } = useAuth()
+  const { user, isLoading, canAccess } = useAuth()
 
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Carregando...</div>
   if (!user) return <Navigate to="/login" />
   if (moduleKey && !canAccess(moduleKey, action)) return <Navigate to="/dashboard" replace />
   return children
 }
 
 function LoginWrapper() {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Carregando...</div>
   return user ? <Navigate to="/dashboard" /> : <Login />
 }
 

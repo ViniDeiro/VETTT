@@ -1271,6 +1271,30 @@ class MockDatabaseService {
     }
   }
 
+  syncAuthenticatedUser(user: User) {
+    const existingIndex = this.users.findIndex(item => item.id === user.id);
+    const normalizedUser: User = {
+      ...user,
+      status: user.status || 'active',
+      accessProfileId: user.accessProfileId || (
+        user.role === 'admin' ? 'profile-admin' : user.role === 'vet' ? 'profile-vet' : 'profile-secretary'
+      )
+    };
+
+    if (existingIndex >= 0) {
+      this.users[existingIndex] = {
+        ...this.users[existingIndex],
+        ...normalizedUser
+      };
+    } else {
+      this.users.push(normalizedUser);
+    }
+
+    this.save('vet_users', this.users);
+    this.setCurrentUser(normalizedUser.id);
+    return normalizedUser;
+  }
+
   login(email: string, password?: string) {
     // Basic validation in mockDB
     const matchedUser = this.users.find(user => 
