@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Role, AppModuleKey, ModulePermission, AccessProfile, TeamMember } from '../../domain/types';
 import { mockDB } from '../../services/mockDatabase';
-import { supabase } from '../../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -99,6 +99,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   const loadUserContext = async (authUserId: string, attempts = 3) => {
+    if (!supabase) {
+      setUser(null);
+      setProfile(null);
+      setTeamMember(null);
+      syncMockCurrentUser(null);
+      return null;
+    }
+
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const { data: profileRow, error } = await supabase
         .from('user_profiles')
@@ -142,8 +150,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     let mounted = true;
 
+    if (!isSupabaseConfigured || !supabase) {
+      setUser(null);
+      setProfile(null);
+      setTeamMember(null);
+      syncMockCurrentUser(null);
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const client = supabase;
+
     const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await client.auth.getSession();
       if (!mounted) return;
 
       if (data.session?.user) {
@@ -159,7 +180,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     loadSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
         loadUserContext(session.user.id).finally(() => mounted && setIsLoading(false));
@@ -179,6 +200,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password?: string) => {
+    if (!supabase) return false;
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: password || ''
@@ -197,6 +220,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async ({ name, email, password, role, clinicName, phone }: RegisterPayload) => {
+    if (!supabase) {
+      return {
+        success: false,
+        message: 'Configuração do Supabase ausente. Verifique as variáveis públicas do ambiente.'
+      };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -228,7 +258,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await supabase?.auth.signOut();
     syncMockCurrentUser(null);
     setUser(null);
     setProfile(null);
