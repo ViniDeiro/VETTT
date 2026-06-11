@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
@@ -12,7 +12,7 @@ import {
   Box,
   AlertCircle,
 } from 'lucide-react'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 import { useAuth } from '../modules/auth/AuthContext'
 
 const parseFlexibleDate = (value) => {
@@ -44,13 +44,67 @@ const formatVetDisplayName = (value) => {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { dashboard } = mockDB.getSettings()
+  const [dashboardData, setDashboardData] = useState(null)
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadDashboard = async () => {
+      try {
+        const data = await supabaseDataService.getDashboardData()
+        if (mounted) setDashboardData(data)
+      } catch (error) {
+        console.error('Erro ao carregar dashboard:', error)
+        if (mounted) setLoadError('Nao foi possivel carregar os dados do dashboard.')
+      }
+    }
+
+    loadDashboard()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const dashboard = dashboardData?.settings?.dashboard
+
+  const liveStats = useMemo(() => {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 1)
+
+    const isToday = (value) => {
+      const date = new Date(value)
+      return date >= start && date < end
+    }
+
+    const attendancesToday = (dashboardData?.attendances || []).filter(item => isToday(item.date || item.created_at))
+    const financialToday = (dashboardData?.financialRecords || []).filter(item => isToday(item.date || item.created_at))
+    const cashToday = (dashboardData?.cashFlow || []).filter(item => isToday(item.date || item.created_at))
+    const revenue = financialToday.reduce((sum, item) => sum + Number(item.gross_amount || 0), 0)
+      || cashToday.filter(item => item.type === 'income').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const profit = financialToday.reduce((sum, item) => sum + Number(item.gross_profit || 0), 0)
+    const procedureCount = financialToday.reduce((sum, item) => sum + Number(item.procedure_count || 0), 0)
+    const lowStockCount = (dashboardData?.inventory || []).filter(item => item.status === 'low' || item.status === 'expired').length
+    const ticketAverage = attendancesToday.length > 0 ? revenue / attendancesToday.length : 0
+
+    return {
+      attendancesToday,
+      revenue,
+      profit,
+      procedureCount,
+      lowStockCount,
+      ticketAverage
+    }
+  }, [dashboardData])
 
   const statsMap = {
     numero_atendimentos: {
       title: 'Atendimentos hoje',
-      value: '12',
-      change: '+2% vs ontem',
+      value: String(liveStats.attendancesToday.length),
+      change: 'Dados do banco',
       icon: Calendar,
       color: 'text-blue-600',
       bg: 'bg-blue-50',
@@ -58,8 +112,8 @@ export default function Dashboard() {
     },
     retorno: {
       title: 'Procedimentos',
-      value: '28',
-      change: '+5% vs ontem',
+      value: String(liveStats.procedureCount),
+      change: 'Dados do banco',
       icon: Activity,
       color: 'text-indigo-600',
       bg: 'bg-indigo-50',
@@ -67,8 +121,8 @@ export default function Dashboard() {
     },
     faturamento: {
       title: 'Receita',
-      value: 'R$ 8.500',
-      change: '+10% vs ontem',
+      value: liveStats.revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      change: 'Hoje',
       icon: DollarSign,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
@@ -76,8 +130,8 @@ export default function Dashboard() {
     },
     lucro: {
       title: 'Lucro',
-      value: 'R$ 6.400',
-      change: '+8% vs ontem',
+      value: liveStats.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      change: 'Hoje',
       icon: Calculator,
       color: 'text-teal-600',
       bg: 'bg-teal-50',
@@ -85,8 +139,8 @@ export default function Dashboard() {
     },
     ticket_medio: {
       title: 'Ticket médio',
-      value: 'R$ 708',
-      change: '+4% vs ontem',
+      value: liveStats.ticketAverage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      change: 'Hoje',
       icon: DollarSign,
       color: 'text-violet-600',
       bg: 'bg-violet-50',
@@ -94,7 +148,7 @@ export default function Dashboard() {
     },
     estoque_critico: {
       title: 'Estoque crítico',
-      value: '3 itens',
+      value: `${liveStats.lowStockCount} itens`,
       change: 'Exige reposição',
       icon: Box,
       color: 'text-amber-600',
@@ -114,7 +168,7 @@ export default function Dashboard() {
     const endRange = new Date(now)
     endRange.setDate(now.getDate() + 7)
 
-    const allAppointments = mockDB.getAppointments()
+    const allAppointments = (dashboardData?.appointments || [])
       .filter(appointment => {
         const start = new Date(appointment.start)
         return start >= new Date(now.getFullYear(), now.getMonth(), now.getDate()) && start <= endRange
@@ -157,11 +211,16 @@ export default function Dashboard() {
       nextAppointments: upcomingAppointments,
       alerts: notifications
     }
-  }, [user])
+  }, [user, dashboardData])
 
   return (
     <Layout>
       <div className="space-y-6">
+        {loadError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {loadError}
+          </div>
+        )}
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat, index) => (

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Autocomplete } from '../../shared/Autocomplete'
-import { mockDB } from '../../services/mockDatabase'
+import { supabaseDataService } from '../../services/supabaseDataService'
 import { InventoryItem } from '../../domain/types'
 
 const CATEGORY_OPTIONS = [
@@ -71,15 +71,23 @@ export const InventoryList: React.FC = () => {
   const [modalType, setModalType] = useState<'entry' | 'exit' | 'create' | 'edit' | null>(null)
   const [formData, setFormData] = useState<Partial<InventoryItem>>({})
   const [movementAmount, setMovementAmount] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const loadInventory = () => {
-    const loaded = [...mockDB.getInventory()]
-    setItems(loaded)
-    setSelectedItem(currentSelected => {
-      if (!loaded.length) return null
-      if (!currentSelected) return loaded[0]
-      return loaded.find(item => item.id === currentSelected.id) || loaded[0]
-    })
+  const loadInventory = async () => {
+    setError('')
+    try {
+      const loaded = await supabaseDataService.getInventory()
+      setItems(loaded)
+      setSelectedItem(currentSelected => {
+        if (!loaded.length) return null
+        if (!currentSelected) return loaded[0]
+        return loaded.find(item => item.id === currentSelected.id) || loaded[0]
+      })
+    } catch (err) {
+      console.error('Erro ao carregar estoque:', err)
+      setError('Nao foi possivel carregar o estoque do banco.')
+    }
   }
 
   useEffect(() => {
@@ -124,14 +132,17 @@ export const InventoryList: React.FC = () => {
     setIsModalOpen(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setIsLoading(true)
+    setError('')
+    try {
     if (modalType === 'create') {
         if (!formData.name || !formData.category || !formData.unit || Number(formData.costPrice) <= 0) {
           alert('Preencha nome, categoria, unidade e valor de compra para cadastrar o item.')
           return
         }
 
-        const createdItem = mockDB.createInventoryItem({
+        const createdItem = await supabaseDataService.createInventoryItem({
           name: formData.name,
           category: formData.category,
           quantity: Number(formData.quantity) || 0,
@@ -152,12 +163,12 @@ export const InventoryList: React.FC = () => {
           supplier: formData.supplier
         })
 
-        loadInventory()
+        await loadInventory()
         setSelectedItem(createdItem)
     } else if (modalType === 'edit') {
         if (!formData.id) return
 
-        const updatedItem = mockDB.updateInventoryItem(formData.id, {
+        const updatedItem = await supabaseDataService.updateInventoryItem(formData.id, {
           name: formData.name,
           category: formData.category,
           quantity: Number(formData.quantity) || 0,
@@ -178,22 +189,28 @@ export const InventoryList: React.FC = () => {
           supplier: formData.supplier
         })
 
-        loadInventory()
+        await loadInventory()
         if (updatedItem) setSelectedItem(updatedItem)
     } else if (modalType === 'entry') {
         const amount = Number(movementAmount) || 0
         if (formData.id) {
-            mockDB.updateStock(formData.id, amount)
-            loadInventory()
+            await supabaseDataService.updateStock(formData.id, amount)
+            await loadInventory()
         }
     } else if (modalType === 'exit') {
         const amount = Number(movementAmount) || 0
         if (formData.id) {
-            mockDB.updateStock(formData.id, -amount)
-            loadInventory()
+            await supabaseDataService.updateStock(formData.id, -amount)
+            await loadInventory()
         }
     }
     setIsModalOpen(false)
+    } catch (err) {
+      console.error('Erro ao salvar estoque:', err)
+      setError('Nao foi possivel salvar no banco. Verifique login, RLS e variaveis do Supabase.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleQuickEditChange = (field: keyof InventoryItem, value: any) => {
@@ -202,9 +219,12 @@ export const InventoryList: React.FC = () => {
     }
   }
 
-  const handleQuickEditSave = () => {
+  const handleQuickEditSave = async () => {
     if (selectedItem) {
-        const updatedItem = mockDB.updateInventoryItem(selectedItem.id, {
+        setIsLoading(true)
+        setError('')
+        try {
+        const updatedItem = await supabaseDataService.updateInventoryItem(selectedItem.id, {
           quantity: Number(selectedItem.quantity) || 0,
           minStock: Number(selectedItem.minStock) || 0,
           validity: selectedItem.validity || '',
@@ -214,15 +234,30 @@ export const InventoryList: React.FC = () => {
           batchNumber: selectedItem.batchNumber || '',
           supplier: selectedItem.supplier || ''
         })
-        loadInventory()
+        await loadInventory()
         if (updatedItem) setSelectedItem(updatedItem)
+        } catch (err) {
+          console.error('Erro ao salvar edicao rapida:', err)
+          setError('Nao foi possivel salvar a edicao no banco.')
+        } finally {
+          setIsLoading(false)
+        }
     }
   }
 
-  const handleDeleteItem = () => {
+  const handleDeleteItem = async () => {
     if (!selectedItem) return
-    mockDB.deleteInventoryItem(selectedItem.id)
-    loadInventory()
+    setIsLoading(true)
+    setError('')
+    try {
+      await supabaseDataService.deleteInventoryItem(selectedItem.id)
+      await loadInventory()
+    } catch (err) {
+      console.error('Erro ao excluir item:', err)
+      setError('Nao foi possivel excluir o item do banco.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const getStatusBadge = (status?: string) => {
@@ -270,6 +305,11 @@ export const InventoryList: React.FC = () => {
                 </Button>
               </div>
             </div>
+            {error && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {error}
+              </div>
+            )}
 
             <div className="flex gap-4">
               <div className="relative flex-1">
@@ -757,12 +797,13 @@ export const InventoryList: React.FC = () => {
             </Button>
             <Button 
               onClick={handleSave} 
+              disabled={isLoading}
               className={cn(
                 "text-white",
                 modalType === 'exit' ? "bg-red-600 hover:bg-red-700" : "bg-[#0B2C4D] hover:bg-[#0B2C4D]/90"
               )}
             >
-              {modalType === 'create' ? 'Cadastrar' : 
+              {isLoading ? 'Salvando...' : modalType === 'create' ? 'Cadastrar' : 
                modalType === 'edit' ? 'Salvar Alterações' : 'Confirmar'}
             </Button>
           </div>

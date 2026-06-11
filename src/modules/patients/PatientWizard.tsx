@@ -8,7 +8,7 @@ import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Autocomplete } from '../../shared/Autocomplete';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { Owner, Property, Patient } from '../../domain/types';
 import { getBreedsBySpecies } from '../../domain/breeds';
 import { CheckCircle, ChevronRight, ChevronLeft, User, Home, PawPrint, Plus, AlertCircle, Heart, Image as ImageIcon } from 'lucide-react';
@@ -63,19 +63,42 @@ export const PatientWizard: React.FC = () => {
   };
 
   useEffect(() => {
-    const loadedOwners = mockDB.getOwners();
-    setOwners(loadedOwners);
-    setProperties(mockDB.getAllProperties());
+    let mounted = true;
 
-    const params = new URLSearchParams(location.search);
-    const ownerIdParam = params.get('ownerId');
-    if (ownerIdParam) {
-        const foundOwner = loadedOwners.find(o => o.id === ownerIdParam);
-        if (foundOwner) {
-            setSelectedOwner(foundOwner);
-            // Optionally, we could jump to step 2 or keep it at 1. Better to keep it at 1 so user fills patient data first.
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      try {
+        const [loadedOwners, loadedProperties] = await Promise.all([
+          supabaseDataService.getOwners(),
+          supabaseDataService.getProperties()
+        ]);
+
+        if (!mounted) return;
+
+        setOwners(loadedOwners);
+        setProperties(loadedProperties);
+
+        const params = new URLSearchParams(location.search);
+        const ownerIdParam = params.get('ownerId');
+        if (ownerIdParam) {
+            const foundOwner = loadedOwners.find(o => o.id === ownerIdParam);
+            if (foundOwner) {
+                setSelectedOwner(foundOwner);
+            }
         }
-    }
+      } catch (error) {
+        console.error('Erro ao carregar dados do banco:', error);
+        alert('Nao foi possivel carregar tutores e propriedades do banco.');
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      mounted = false;
+    };
   }, [location.search]);
 
   const handleCepSearch = async (cep: string, type: 'owner' | 'property') => {
@@ -143,24 +166,28 @@ export const PatientWizard: React.FC = () => {
   };
 
   // --- Step 2: Owner Handlers ---
-  const handleCreateOwner = () => {
+  const handleCreateOwner = async () => {
     if (!newOwnerData.name || !newOwnerData.phone) {
       alert('Nome e Telefone são obrigatórios para o tutor.');
       return;
     }
     setIsLoading(true);
-    setTimeout(() => {
+    try {
       const finalAddress = [newOwnerData.street, newOwnerData.number ? `nº ${newOwnerData.number}` : '', newOwnerData.neighborhood].filter(Boolean).join(', ');
       
-      const created = mockDB.createOwner({
+      const created = await supabaseDataService.createOwner({
           ...newOwnerData,
           address: finalAddress || newOwnerData.address || ''
       } as Owner);
-      setOwners(mockDB.getOwners());
+      setOwners(await supabaseDataService.getOwners());
       setSelectedOwner(created);
       setIsCreatingOwner(false);
+    } catch (error) {
+      console.error('Erro ao salvar tutor:', error);
+      alert('Nao foi possivel salvar o tutor no banco.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   const handleStep2Next = () => {
@@ -177,27 +204,32 @@ export const PatientWizard: React.FC = () => {
   };
 
   // --- Step 3: Property Handlers ---
-  const handleCreateProperty = () => {
+  const handleCreateProperty = async () => {
     if (!newPropertyData.name || !newPropertyData.city || !newPropertyData.state) {
       alert('Nome, Cidade e Estado são obrigatórios.');
       return;
     }
     setIsLoading(true);
-    setTimeout(() => {
+    try {
       const finalAddress = [newPropertyData.street, newPropertyData.number ? `km/nº ${newPropertyData.number}` : '', newPropertyData.neighborhood].filter(Boolean).join(', ');
       
-      const created = mockDB.createProperty({
+      const created = await supabaseDataService.createProperty({
         ...newPropertyData,
+        ownerId: selectedOwner?.id,
         address: finalAddress || newPropertyData.address || ''
       } as Property);
-      setProperties(mockDB.getAllProperties());
+      setProperties(await supabaseDataService.getProperties());
       setSelectedProperty(created);
       setIsCreatingProperty(false);
+    } catch (error) {
+      console.error('Erro ao salvar propriedade:', error);
+      alert('Nao foi possivel salvar a propriedade no banco.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
-  const finishRegistration = () => {
+  const finishRegistration = async () => {
     if (!selectedOwner) {
         alert('Erro: Tutor não selecionado.');
         return;
@@ -206,7 +238,6 @@ export const PatientWizard: React.FC = () => {
     setIsLoading(true);
     
     try {
-      setTimeout(() => {
         let finalAgeYears = Number(patientData.age || 0);
         let finalAgeMonths = Number(patientData.ageMonths || 0);
 
@@ -221,8 +252,7 @@ export const PatientWizard: React.FC = () => {
             ? patientData.customSpecies 
             : patientData.species;
 
-        const newPatient: Patient = {
-          id: Math.random().toString(36).substr(2, 9),
+        const newPatient = await supabaseDataService.createPatient({
           ...patientData,
           species: finalSpecies,
           ownerId: selectedOwner.id,
@@ -234,10 +264,9 @@ export const PatientWizard: React.FC = () => {
           allergies: allergiesInput.split(',').map(s => s.trim()).filter(Boolean),
           chronicDiseases: chronicInput.split(',').map(s => s.trim()).filter(Boolean),
           healthPlan: patientData.healthPlan, // Ensures it's a string, not object
-        } as Patient;
+        } as Patient);
 
         console.log('Salvando paciente:', newPatient);
-        mockDB.createPatient(newPatient);
         
         setIsLoading(false);
         alert('Paciente cadastrado com sucesso!');
@@ -252,7 +281,6 @@ export const PatientWizard: React.FC = () => {
         }
 
         navigate('/clients');
-      }, 800);
     } catch (error) {
       console.error('Erro ao salvar:', error);
       setIsLoading(false);
