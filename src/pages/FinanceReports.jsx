@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -15,7 +15,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 const parseFlexibleDate = value => {
   if (!value) return new Date('')
@@ -54,10 +54,30 @@ const isInRange = (dateValue, start, end) => {
 
 export default function FinanceReports() {
   const [period, setPeriod] = useState('Mes')
-  const records = mockDB.getFinancialRecords()
-  const receivables = mockDB.getReceivables()
-  const inventory = mockDB.getInventory()
-  const cashFlow = mockDB.getCashFlow()
+  const [records, setRecords] = useState([])
+  const [receivables, setReceivables] = useState([])
+  const [inventory, setInventory] = useState([])
+  const [cashFlow, setCashFlow] = useState([])
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [recordsData, receivablesData, inventoryData, cashFlowData] = await Promise.all([
+          supabaseDataService.getFinancialRecords(),
+          supabaseDataService.getReceivables(),
+          supabaseDataService.getInventory(),
+          supabaseDataService.getCashFlow()
+        ])
+        setRecords(recordsData)
+        setReceivables(receivablesData)
+        setInventory(inventoryData)
+        setCashFlow(cashFlowData)
+      } catch (error) {
+        console.error('Error loading report data:', error)
+      }
+    }
+    loadData()
+  }, [])
 
   const report = useMemo(() => {
     const currentRange = getRange(period)

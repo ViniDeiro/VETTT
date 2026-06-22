@@ -18,7 +18,7 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { useAuth } from '../modules/auth/AuthContext'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 const LABELS = {
   'Home': { 'pt-BR': 'Home', 'en-US': 'Home', 'es-ES': 'Inicio' },
@@ -62,22 +62,32 @@ export default function Sidebar() {
   const [financeOpen, setFinanceOpen] = useState(false)
   const [patientsOpen, setPatientsOpen] = useState(false)
   const [clinicName, setClinicName] = useState('VETTOOTH')
+  const [clinicLogo, setClinicLogo] = useState(null)
   const [sidebarColor, setSidebarColor] = useState('var(--clinic-primary)')
   const [uiLanguage, setUiLanguage] = useState('pt-BR')
   const location = useLocation()
   const { logout, canAccess } = useAuth()
 
   useEffect(() => {
-    const syncSettings = () => {
-      const settings = mockDB.getSettings()
-      if (settings?.clinic?.fantasyName) {
-        setClinicName(settings.clinic.fantasyName)
-      }
-      if (settings?.appearance?.sidebarColor) {
-        setSidebarColor(settings.appearance.sidebarColor)
-      }
-      if (settings?.regional?.language) {
-        setUiLanguage(settings.regional.language)
+    const syncSettings = async () => {
+      try {
+        const settings = await supabaseDataService.getSettings()
+        if (settings?.clinic?.fantasyName) {
+          setClinicName(settings.clinic.fantasyName)
+        }
+        if (settings?.clinic?.logo) {
+          setClinicLogo(settings.clinic.logo)
+        } else {
+          setClinicLogo(null)
+        }
+        if (settings?.appearance?.sidebarColor) {
+          setSidebarColor(settings.appearance.sidebarColor)
+        }
+        if (settings?.regional?.language) {
+          setUiLanguage(settings.regional.language)
+        }
+      } catch (error) {
+        console.error('Error syncing settings in Sidebar:', error)
       }
     }
 
@@ -128,8 +138,8 @@ export default function Sidebar() {
             <div className="flex items-center gap-2">
               {/* Simple Logo Placeholder */}
               <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[var(--clinic-primary)] font-bold overflow-hidden shrink-0">
-                {mockDB.getSettings().clinic.logo ? (
-                  <img src={mockDB.getSettings().clinic.logo} alt="Logo" className="w-full h-full object-cover" />
+                {clinicLogo ? (
+                  <img src={clinicLogo} alt="Logo" className="w-full h-full object-cover" />
                 ) : (
                   <span>{clinicName.charAt(0)}</span>
                 )}

@@ -23,7 +23,7 @@ import {
   Edit2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 
 const DEFAULT_START_TIME = '09:00'
@@ -243,7 +243,7 @@ export default function Agenda() {
   // Dynamic Data from Settings
   const [vets, setVets] = useState([])
   const [locations, setLocations] = useState([])
-  const [uiLanguage, setUiLanguage] = useState(mockDB.getSettings()?.regional?.language || 'pt-BR')
+  const [uiLanguage, setUiLanguage] = useState('pt-BR')
 
   const resetAppointmentForm = () => {
     setNewAppointment(createEmptyAppointment())
@@ -298,61 +298,79 @@ export default function Agenda() {
     }
   }
 
+  const [settings, setSettings] = useState(null)
+
   const handleAppointmentClick = (appointment) => {
     const enriched = buildAppointmentDetails(appointment, {
-      settings: mockDB.getSettings()
+      settings: settings
     })
     setSelectedAppointment(enriched)
     setIsDetailsOpen(true)
   }
 
   useEffect(() => {
-    const loadData = () => {
-      const loadedPatients = mockDB.getPatients()
-      const loadedOwners = mockDB.getOwners()
-      const loadedProperties = mockDB.getAllProperties()
-      const loadedAppointments = mockDB.getAppointments()
-      const loadedTeam = mockDB.getTeamMembers()
-      const loadedUsers = mockDB.getUsers()
-      const loadedSettings = mockDB.getSettings()
+    const loadData = async () => {
+      try {
+        const [
+          loadedPatients,
+          loadedOwners,
+          loadedProperties,
+          loadedAppointments,
+          loadedTeam,
+          loadedUsers,
+          loadedSettings
+        ] = await Promise.all([
+          supabaseDataService.getPatients(),
+          supabaseDataService.getOwners(),
+          supabaseDataService.getProperties(),
+          supabaseDataService.getAppointments(),
+          supabaseDataService.getTeamMembers(),
+          supabaseDataService.getUsers(),
+          supabaseDataService.getSettings()
+        ])
 
-      setPatients(loadedPatients)
-      setOwners(loadedOwners)
-      setProperties(loadedProperties)
-      const teamVetNames = loadedTeam
-        .filter(member => (
-          member.status !== 'inactive' && (
-            member.functionTitle?.toLowerCase().includes('veterinario') ||
-            member.functionTitle?.toLowerCase().includes('veterinário') ||
-            member.specialty?.toLowerCase().includes('veterin')
+        setPatients(loadedPatients)
+        setOwners(loadedOwners)
+        setProperties(loadedProperties)
+        setSettings(loadedSettings)
+
+        const teamVetNames = loadedTeam
+          .filter(member => (
+            member.status !== 'inactive' && (
+              member.functionTitle?.toLowerCase().includes('veterinario') ||
+              member.functionTitle?.toLowerCase().includes('veterinário') ||
+              member.specialty?.toLowerCase().includes('veterin')
+            )
+          ))
+          .map(member => member.name)
+          .filter(Boolean)
+        const userVetNames = loadedUsers
+          .filter(user => user.status !== 'inactive' && user.role === 'vet')
+          .map(user => user.fullName || user.name)
+          .filter(Boolean)
+        const mergedVetNames = [...new Set([...teamVetNames, ...userVetNames])]
+        setVets(mergedVetNames.map((name, index) => ({
+          id: `vet-${index}-${name}`,
+          name,
+          displayName: formatVetDisplayName(name),
+          color: getVetColor(name)
+        })))
+        setLocations((loadedSettings?.units || []).filter(unit => unit.active !== false))
+        setUiLanguage(loadedSettings?.regional?.language || 'pt-BR')
+        
+        setAppointments(
+          loadedAppointments.map(appointment =>
+            buildAppointmentDetails(appointment, {
+              patients: loadedPatients,
+              owners: loadedOwners,
+              properties: loadedProperties,
+              settings: loadedSettings
+            })
           )
-        ))
-        .map(member => member.name)
-        .filter(Boolean)
-      const userVetNames = loadedUsers
-        .filter(user => user.status !== 'inactive' && user.role === 'vet')
-        .map(user => user.fullName || user.name)
-        .filter(Boolean)
-      const mergedVetNames = [...new Set([...teamVetNames, ...userVetNames])]
-      setVets(mergedVetNames.map((name, index) => ({
-        id: `vet-${index}-${name}`,
-        name,
-        displayName: formatVetDisplayName(name),
-        color: getVetColor(name)
-      })))
-      setLocations((loadedSettings.units || []).filter(unit => unit.active !== false))
-      setUiLanguage(loadedSettings?.regional?.language || 'pt-BR')
-      
-      setAppointments(
-        loadedAppointments.map(appointment =>
-          buildAppointmentDetails(appointment, {
-            patients: loadedPatients,
-            owners: loadedOwners,
-            properties: loadedProperties,
-            settings: loadedSettings
-          })
         )
-      )
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err)
+      }
     }
 
     loadData()
@@ -494,7 +512,7 @@ export default function Agenda() {
     })
   }
 
-  const handleConfirmAppointment = () => {
+  const handleConfirmAppointment = async () => {
     if (!selectedAppointment) return;
 
     if (!isAppointmentToday(selectedAppointment)) {
@@ -508,9 +526,9 @@ export default function Agenda() {
     }
 
     try {
-      const updated = mockDB.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
+      const updated = await supabaseDataService.updateAppointment(selectedAppointment.id, { status: 'confirmado' });
       if (updated) {
-          const enrichedUpdated = buildAppointmentDetails(updated);
+          const enrichedUpdated = buildAppointmentDetails(updated, { patients, owners, properties, settings });
           setAppointments(prev => prev.map(a => a.id === updated.id ? enrichedUpdated : a));
           setSelectedAppointment(enrichedUpdated);
           setIsDetailsOpen(false);
@@ -548,7 +566,7 @@ export default function Agenda() {
     alert(`Mensagem enviada para o tutor de ${selectedAppointment.patient}: "Olá, lembramos do seu agendamento para amanhã."`);
   };
 
-  const handleDeleteAppointment = () => {
+  const handleDeleteAppointment = async () => {
     if (!selectedAppointment) return
 
     const appointmentStatus = String(selectedAppointment.status || '').toLowerCase()
@@ -563,19 +581,19 @@ export default function Agenda() {
       return
     }
 
-    const deleted = mockDB.deleteAppointment(selectedAppointment.id)
-    if (!deleted) {
+    try {
+      await supabaseDataService.deleteAppointment(selectedAppointment.id)
+      setAppointments(prev => prev.filter(appointment => appointment.id !== selectedAppointment.id))
+      setIsDetailsOpen(false)
+      setSelectedAppointment(null)
+      alert('Agendamento excluído com sucesso.')
+    } catch (err) {
+      console.error('Erro ao excluir agendamento:', err)
       alert('Não foi possível excluir o agendamento.')
-      return
     }
-
-    setAppointments(prev => prev.filter(appointment => appointment.id !== selectedAppointment.id))
-    setIsDetailsOpen(false)
-    setSelectedAppointment(null)
-    alert('Agendamento excluído com sucesso.')
   }
 
-  const handleSaveAppointment = () => {
+  const handleSaveAppointment = async () => {
     const isPatientAppointment = newAppointment.appointmentMode === 'patient'
     const isOwnerAppointment = newAppointment.appointmentMode === 'owner'
     const appointmentLabel = isPatientAppointment
@@ -654,22 +672,27 @@ export default function Agenda() {
       color: selectedVet?.color || getVetColor(newAppointment.doctor)
     }
 
-    if (editingAppointmentId) {
-      const updated = mockDB.updateAppointment(editingAppointmentId, appointment)
+    try {
+        if (editingAppointmentId) {
+          const updated = await supabaseDataService.updateAppointment(editingAppointmentId, appointment)
 
-      if (!updated) {
-        alert('Não foi possível atualizar o agendamento.')
-        return
-      }
+          if (!updated) {
+            alert('Não foi possível atualizar o agendamento.')
+            return
+          }
 
-      setAppointments(prev => prev.map(item => item.id === updated.id ? buildAppointmentDetails(updated) : item))
-      handleCloseModal()
-      return
+          setAppointments(prev => prev.map(item => item.id === updated.id ? buildAppointmentDetails(updated, { patients, owners, properties, settings }) : item))
+          handleCloseModal()
+          return
+        }
+
+        const created = await supabaseDataService.createAppointment(appointment)
+        setAppointments(prev => [...prev, buildAppointmentDetails(created, { patients, owners, properties, settings })])
+        handleCloseModal()
+    } catch (err) {
+        console.error('Erro ao salvar agendamento:', err)
+        alert('Erro ao salvar agendamento no banco de dados.')
     }
-
-    const created = mockDB.createAppointment(appointment)
-    setAppointments(prev => [...prev, buildAppointmentDetails(created)])
-    handleCloseModal()
   }
 
   const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
@@ -1031,6 +1054,7 @@ export default function Agenda() {
         <div className="max-h-[80vh] overflow-y-auto p-1">
           <AppointmentDetails
             appointment={selectedAppointment}
+            uiLanguage={uiLanguage}
             onConfirm={handleConfirmAppointment}
             onReschedule={handleReschedule}
             onEdit={handleEditAppointment}
@@ -1230,7 +1254,7 @@ export default function Agenda() {
   )
 }
 
-function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDelete, onMessage, onOpenPatientRecord }) {
+function AppointmentDetails({ appointment, uiLanguage = 'pt-BR', onConfirm, onReschedule, onEdit, onDelete, onMessage, onOpenPatientRecord }) {
     if (!appointment) return (
         <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
@@ -1239,7 +1263,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
     );
 
     const canConfirmAppointment = isAppointmentToday(appointment) && !['confirmado', 'confirmed'].includes(normalizeAppointmentStatus(appointment.status))
-    const uiLanguage = mockDB.getSettings()?.regional?.language || 'pt-BR'
+    const uiLanguageVal = uiLanguage
 
     return (
         <>
@@ -1249,7 +1273,7 @@ function AppointmentDetails({ appointment, onConfirm, onReschedule, onEdit, onDe
                     icon={CalendarIcon}
                     color="bg-blue-50 text-blue-600"
                     label="Data e Horário"
-                    value={`${formatDate(appointment.start, uiLanguage)} - ${formatTime(appointment.start, uiLanguage)} às ${formatTime(appointment.end, uiLanguage)}`}
+                    value={`${formatDate(appointment.start, uiLanguageVal)} - ${formatTime(appointment.start, uiLanguageVal)} às ${formatTime(appointment.end, uiLanguageVal)}`}
                   />
                   <InfoItem
                     icon={CheckCircle}

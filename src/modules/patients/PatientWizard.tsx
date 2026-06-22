@@ -182,9 +182,10 @@ export const PatientWizard: React.FC = () => {
       setOwners(await supabaseDataService.getOwners());
       setSelectedOwner(created);
       setIsCreatingOwner(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar tutor:', error);
-      alert('Nao foi possivel salvar o tutor no banco.');
+      const msg = error?.message || error?.details || JSON.stringify(error);
+      alert(`Não foi possível salvar o tutor: ${msg}`);
     } finally {
       setIsLoading(false);
     }
@@ -281,10 +282,11 @@ export const PatientWizard: React.FC = () => {
         }
 
         navigate('/clients');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar:', error);
       setIsLoading(false);
-      alert('Erro ao salvar paciente. Tente novamente.');
+      const msg = error?.message || error?.details || JSON.stringify(error);
+      alert(`Erro ao salvar paciente: ${msg}`);
     }
   };
 

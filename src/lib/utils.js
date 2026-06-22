@@ -1,21 +1,32 @@
 import { clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { mockDB } from "../services/mockDatabase"
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs))
 }
 
-export function getRegionalSettings() {
-  const settings = mockDB.getSettings()
+let cachedRegionalSettings = {
+  dateFormat: 'DD/MM/AAAA',
+  timeFormat: '24h',
+  currency: 'BRL',
+  language: 'pt-BR',
+  decimalSeparator: ','
+}
 
-  return {
-    dateFormat: settings.regional.dateFormat || 'DD/MM/AAAA',
-    timeFormat: settings.regional.timeFormat || '24h',
-    currency: settings.regional.currency || 'BRL',
-    language: settings.regional.language || 'pt-BR',
-    decimalSeparator: settings.regional.decimalSeparator || ','
+export function syncCachedSettings(settings) {
+  if (settings?.regional) {
+    cachedRegionalSettings = {
+      dateFormat: settings.regional.dateFormat || 'DD/MM/AAAA',
+      timeFormat: settings.regional.timeFormat || '24h',
+      currency: settings.regional.currency || 'BRL',
+      language: settings.regional.language || 'pt-BR',
+      decimalSeparator: settings.regional.decimalSeparator || ','
+    }
   }
+}
+
+export function getRegionalSettings() {
+  return cachedRegionalSettings
 }
 
 function pad(value) {

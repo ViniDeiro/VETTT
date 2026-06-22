@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
 import { Prescription, PrescriptionItem, Patient, Attendance } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { pdfService } from '../../services/pdfService';
 import { Plus, Trash2, Printer, Save, FileText, Share2 } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -81,7 +81,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
     setItems(items.filter(i => i.id !== id));
   };
 
-  const handleSave = (print: boolean = false) => {
+  const handleSave = async (print: boolean = false) => {
     if (items.length === 0) {
       alert('Adicione pelo menos um item à prescrição.');
       return;
@@ -98,29 +98,36 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
 
     // Update Attendance
     const currentPrescriptions = attendance.prescriptions || [];
+    const updatedPrescriptions = [...currentPrescriptions, newPrescription];
     const updatedAttendance = {
       ...attendance,
-      prescriptions: [...currentPrescriptions, newPrescription]
+      prescriptions: updatedPrescriptions
     };
 
-    // Save to DB
-    mockDB.updateAttendance(attendance.id, { prescriptions: updatedAttendance.prescriptions });
-    
-    // Notify Parent
-    onSave(updatedAttendance);
+    try {
+      // Save to DB
+      await supabaseDataService.updateAttendance(attendance.id, { prescriptions: updatedPrescriptions });
+      
+      // Notify Parent
+      onSave(updatedAttendance);
 
-    if (print) {
-      const owner = mockDB.getOwners().find(item => item.id === patient.ownerId);
-      const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
-      pdfService.generatePrescriptionPdf(patient, newPrescription, ownerName);
-    } else {
-      alert('Prescrição salva com sucesso!');
+      if (print) {
+        const ownersList = await supabaseDataService.getOwners();
+        const owner = ownersList.find(item => item.id === patient.ownerId);
+        const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
+        await pdfService.generatePrescriptionPdf(patient, newPrescription, ownerName);
+      } else {
+        alert('Prescrição salva com sucesso!');
+      }
+      
+      // Clear and Close
+      setItems([]);
+      setControlledMedication(false);
+      onClose();
+    } catch (err) {
+      console.error('Erro ao salvar prescrição:', err);
+      alert('Erro ao salvar prescrição no banco de dados.');
     }
-    
-    // Clear and Close
-    setItems([]);
-    setControlledMedication(false);
-    onClose();
   };
 
   if (!isOpen) return null;

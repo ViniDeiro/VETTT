@@ -21,8 +21,69 @@ import {
   Workflow
 } from 'lucide-react'
 import { Modal } from '../components/ui/Modal'
-import { mockDB } from '../services/mockDatabase'
+import { cn } from '@/lib/utils'
+import { supabaseDataService } from '../services/supabaseDataService'
+import PatientDetailsModal from '../components/PatientDetailsModal'
 import { pdfService } from '../services/pdfService'
+
+const INITIAL_SETTINGS = {
+  clinic: {
+    fantasyName: '',
+    legalName: '',
+    cnpj: '',
+    stateRegistration: '',
+    municipalRegistration: '',
+    email: '',
+    phone: '',
+    zipCode: '',
+    address: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    logo: '',
+    documentLogo: ''
+  },
+  appearance: {
+    primaryColor: '#0B2C4D',
+    secondaryColor: '#60A5FA',
+    sidebarTheme: 'dark',
+    layoutStyle: 'modern'
+  },
+  documents: {
+    header: '',
+    footer: '',
+    logoPosition: 'left'
+  },
+  regional: {
+    language: 'pt-BR',
+    dateFormat: 'DD/MM/YYYY',
+    timeFormat: '24h',
+    decimalSeparator: ','
+  },
+  payment: {
+    enabledMethods: ['cash', 'pix'],
+    allowInstallments: false,
+    maxInstallments: 1
+  },
+  consultationTemplates: [],
+  documentTemplates: [],
+  automatedMessages: [],
+  whatsapp: {
+    connected: false
+  },
+  fiscal: {},
+  audit: {},
+  security: {
+    backupRetentionDays: 30
+  },
+  dashboard: {
+    enabledIndicators: ['faturamento']
+  },
+  units: [],
+  clinicalReminders: []
+}
 
 const MODULES = [
   ['settings', 'Configurações'],
@@ -367,12 +428,12 @@ const createBlankPermissions = () => (
 )
 
 export default function Settings() {
-  const [settings, setSettings] = useState(() => mockDB.getSettings())
-  const [profiles, setProfiles] = useState(() => mockDB.getProfiles())
-  const [users, setUsers] = useState(() => mockDB.getUsers())
-  const [teamMembers, setTeamMembers] = useState(() => mockDB.getTeamMembers())
-  const [auditLogs, setAuditLogs] = useState(() => mockDB.getAuditLogs())
-  const [backups, setBackups] = useState(() => mockDB.getBackups())
+  const [settings, setSettings] = useState(INITIAL_SETTINGS)
+  const [profiles, setProfiles] = useState([])
+  const [users, setUsers] = useState([])
+  const [teamMembers, setTeamMembers] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
+  const [backups, setBackups] = useState([])
   const [procedures, setProcedures] = useState([])
   const [inventoryItems, setInventoryItems] = useState([])
   const [selectedInventoryItemId, setSelectedInventoryItemId] = useState('')
@@ -471,12 +532,43 @@ export default function Settings() {
     [...settings.documentTemplates].sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault)))
   ), [settings.documentTemplates])
 
+  const loadData = async () => {
+    try {
+      const [
+        loadedSettings,
+        loadedProfiles,
+        loadedUsers,
+        loadedTeamMembers,
+        loadedProcedures,
+        loadedInventory,
+        loadedAuditLogs,
+        loadedBackups
+      ] = await Promise.all([
+        supabaseDataService.getSettings(),
+        supabaseDataService.getProfiles(),
+        supabaseDataService.getUsers(),
+        supabaseDataService.getTeamMembers(),
+        supabaseDataService.getProcedures(),
+        supabaseDataService.getInventory(),
+        supabaseDataService.getAuditLogs(),
+        supabaseDataService.getBackups()
+      ])
+
+      setSettings(loadedSettings)
+      setProfiles(loadedProfiles)
+      setUsers(loadedUsers)
+      setTeamMembers(loadedTeamMembers)
+      setProcedures(loadedProcedures)
+      setInventoryItems(loadedInventory)
+      setAuditLogs(loadedAuditLogs)
+      setBackups(loadedBackups)
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err)
+    }
+  }
+
   useEffect(() => {
-    mockDB.ensureMockProcedures()
-    setProcedures([...mockDB.getProcedures()])
-    setInventoryItems([...mockDB.getInventory()])
-    setAuditLogs([...mockDB.getAuditLogs()])
-    setBackups([...mockDB.getBackups()])
+    loadData()
   }, [])
 
   useEffect(() => {
@@ -713,27 +805,29 @@ export default function Settings() {
     }
   }
 
-  const updateProfileState = updatedProfile => {
+  const updateProfileState = async (updatedProfile) => {
     setProfiles(prev => prev.map(profile => profile.id === updatedProfile.id ? updatedProfile : profile))
-    mockDB.updateProfile(updatedProfile.id, updatedProfile)
-    setAuditLogs([...mockDB.getAuditLogs()])
+    try {
+      await supabaseDataService.updateProfile(updatedProfile.id, updatedProfile)
+      const logs = await supabaseDataService.getAuditLogs()
+      setAuditLogs(logs)
+    } catch (err) {
+      console.error('Erro ao atualizar perfil:', err)
+      alert('Não foi possível atualizar o perfil.')
+    }
   }
 
   const handleSaveSettings = async () => {
     setIsSaving(true)
 
     try {
-      const savedSettings = mockDB.saveSettings(settings)
+      const savedSettings = await supabaseDataService.saveSettings(settings)
       setSettings(savedSettings)
       window.dispatchEvent(new Event('vet-settings-updated'))
       alert('Configurações salvas com sucesso.')
     } catch (error) {
       console.error('Erro ao salvar configurações', error)
-      alert(
-        error?.name === 'QuotaExceededError'
-          ? 'Não foi possível salvar porque o armazenamento local ficou cheio. Reduza imagens muito grandes e tente novamente.'
-          : 'Não foi possível salvar as configurações agora.'
-      )
+      alert('Não foi possível salvar as configurações agora.')
     } finally {
       setIsSaving(false)
     }
@@ -831,7 +925,7 @@ export default function Settings() {
     }))
   }
 
-  const saveProcedure = () => {
+  const saveProcedure = async () => {
     const hasRequiredFields = (
       newProcedure.name &&
       newProcedure.category &&
@@ -857,28 +951,29 @@ export default function Settings() {
       items: newProcedure.items
     }
 
-    if (editingProcedureId) {
-      const updatedProcedure = mockDB.updateProcedure(editingProcedureId, procedurePayload)
-      if (!updatedProcedure) {
-        alert('Nao foi possivel atualizar o procedimento.')
-        return
+    try {
+      if (editingProcedureId) {
+        const updatedProcedure = await supabaseDataService.updateProcedure(editingProcedureId, procedurePayload)
+        setProcedures(prev => prev.map(item => item.id === editingProcedureId ? updatedProcedure : item))
+      } else {
+        const savedProcedure = await supabaseDataService.createProcedure(procedurePayload)
+        setProcedures(prev => [...prev, savedProcedure])
       }
-
-      setProcedures(prev => prev.map(item => item.id === editingProcedureId ? updatedProcedure : item))
-    } else {
-      const savedProcedure = mockDB.createProcedure({
-        id: '',
-        ...procedurePayload
-      })
-      setProcedures(prev => [...prev, savedProcedure])
+      resetProcedureForm()
+    } catch (err) {
+      console.error('Erro ao salvar procedimento:', err)
+      alert('Não foi possível salvar o procedimento.')
     }
-
-    resetProcedureForm()
   }
 
-  const removeProcedure = id => {
-    mockDB.deleteProcedure(id)
-    setProcedures(prev => prev.filter(item => item.id !== id))
+  const removeProcedure = async (id) => {
+    try {
+      await supabaseDataService.deleteProcedure(id)
+      setProcedures(prev => prev.filter(item => item.id !== id))
+    } catch (err) {
+      console.error('Erro ao remover procedimento:', err)
+      alert('Não foi possível excluir o procedimento.')
+    }
   }
 
   const resetSystemUserForm = () => {
@@ -922,7 +1017,7 @@ export default function Settings() {
     })
   }
 
-  const saveSystemUser = () => {
+  const saveSystemUser = async () => {
     if (!userForm.name || !userForm.email || !userForm.phone || !userForm.functionTitle || !userForm.accessProfileId) {
       alert('Preencha nome, email, telefone, funcao e perfil.')
       return
@@ -966,15 +1061,11 @@ export default function Settings() {
           status: userForm.status,
           password: normalizedPassword || existingUser.password || ''
         }
-        const updatedUser = mockDB.updateUser(existingUser.id, userUpdates)
-        if (!updatedUser) {
-          alert('Nao foi possivel atualizar o usuário.')
-          return
-        }
+        await supabaseDataService.updateUser(existingUser.id, userUpdates)
 
         const linkedTeamMember = teamMembers.find(member => member.id === existingUser.teamMemberId || member.userId === existingUser.id)
         if (linkedTeamMember) {
-          mockDB.updateTeamMember(linkedTeamMember.id, {
+          await supabaseDataService.updateTeamMember(linkedTeamMember.id, {
             name: normalizedName,
             functionTitle: userForm.functionTitle,
             phone: userForm.phone,
@@ -987,7 +1078,7 @@ export default function Settings() {
             photo: teamForm.photo
           })
         } else {
-          const newMember = mockDB.createTeamMember({
+          const newMember = await supabaseDataService.createTeamMember({
             name: normalizedName,
             functionTitle: userForm.functionTitle,
             specialty: teamForm.specialty,
@@ -1000,10 +1091,10 @@ export default function Settings() {
             status: userForm.status,
             userId: existingUser.id
           })
-          mockDB.updateUser(existingUser.id, { teamMemberId: newMember.id })
+          await supabaseDataService.updateUser(existingUser.id, { teamMemberId: newMember.id })
         }
       } else {
-        const newMember = mockDB.createTeamMember({
+        const newMember = await supabaseDataService.createTeamMember({
           name: normalizedName,
           functionTitle: userForm.functionTitle,
           specialty: teamForm.specialty,
@@ -1016,7 +1107,7 @@ export default function Settings() {
           status: userForm.status
         })
 
-        const newUser = mockDB.createUser({
+        const newUser = await supabaseDataService.createUser({
           name: normalizedName,
           fullName: normalizedName,
           role: resolvedRole,
@@ -1029,35 +1120,33 @@ export default function Settings() {
           teamMemberId: newMember.id
         })
 
-        mockDB.updateTeamMember(newMember.id, { userId: newUser.id })
+        await supabaseDataService.updateTeamMember(newMember.id, { userId: newUser.id })
       }
 
-      setUsers([...mockDB.getUsers()])
-      setTeamMembers([...mockDB.getTeamMembers()])
-      setAuditLogs([...mockDB.getAuditLogs()])
+      await loadData()
       resetSystemUserForm()
       alert('Usuário salvo com sucesso!')
     } catch (error) {
       console.error('Erro ao salvar usuário', error)
-      alert(
-        error?.name === 'QuotaExceededError'
-          ? 'Não foi possível salvar o usuário porque o armazenamento local ficou cheio. Reduza foto ou assinatura e tente novamente.'
-          : 'Não foi possível salvar o usuário agora.'
-      )
+      alert('Não foi possível salvar o usuário agora.')
     }
   }
 
-  const removeSystemUser = userId => {
+  const removeSystemUser = async (userId) => {
     const linkedTeamMember = teamMembers.find(member => member.id === users.find(user => user.id === userId)?.teamMemberId || member.userId === userId)
-    mockDB.deleteUser(userId)
-    if (linkedTeamMember) {
-      mockDB.deleteTeamMember(linkedTeamMember.id)
-    }
-    setUsers([...mockDB.getUsers()])
-    setTeamMembers([...mockDB.getTeamMembers()])
-    setAuditLogs([...mockDB.getAuditLogs()])
-    if (editingSystemUserId === userId) {
-      resetSystemUserForm()
+    try {
+      await supabaseDataService.deleteUser(userId)
+      if (linkedTeamMember) {
+        await supabaseDataService.deleteTeamMember(linkedTeamMember.id)
+      }
+      await loadData()
+      if (editingSystemUserId === userId) {
+        resetSystemUserForm()
+      }
+      alert('Usuário removido com sucesso.')
+    } catch (err) {
+      console.error('Erro ao remover usuário:', err)
+      alert('Não foi possível remover o usuário.')
     }
   }
 
@@ -1262,30 +1351,35 @@ export default function Settings() {
     }))
   }
 
-  const addProfile = () => {
+  const addProfile = async () => {
     if (!profileForm.name) {
       alert('Informe o nome do perfil personalizado.')
       return
     }
 
-    const newProfile = mockDB.createProfile({
-      name: profileForm.name,
-      description: profileForm.description,
-      type: 'custom',
-      baseRole: profileForm.baseRole,
-      permissions: createBlankPermissions(),
-      restrictions: {
-        editAgenda: false,
-        cancelAttendance: false,
-        viewValues: false,
-        sensitiveSettings: false
-      }
-    })
+    try {
+      const newProfile = await supabaseDataService.createProfile({
+        name: profileForm.name,
+        description: profileForm.description,
+        type: 'custom',
+        baseRole: profileForm.baseRole,
+        permissions: createBlankPermissions(),
+        restrictions: {
+          editAgenda: false,
+          cancelAttendance: false,
+          viewValues: false,
+          sensitiveSettings: false
+        }
+      })
 
-    setProfiles(prev => [...prev, newProfile])
-    setSelectedProfileId(newProfile.id)
-    setAuditLogs([...mockDB.getAuditLogs()])
-    setProfileForm(EMPTY_PROFILE_FORM)
+      await loadData()
+      setSelectedProfileId(newProfile.id)
+      setProfileForm(EMPTY_PROFILE_FORM)
+      alert('Perfil criado com sucesso.')
+    } catch (err) {
+      console.error('Erro ao criar perfil:', err)
+      alert('Não foi possível criar o perfil.')
+    }
   }
 
   const toggleProfilePermission = (moduleKey, action) => {
@@ -1353,7 +1447,7 @@ export default function Settings() {
     updateProfileState({ ...selectedProfile, permissions: newPermissions })
   }
 
-  const removeProfile = profileId => {
+  const removeProfile = async (profileId) => {
     const profile = profiles.find(item => item.id === profileId)
     if (!profile) return
 
@@ -1378,24 +1472,31 @@ export default function Settings() {
       )
       if (!shouldReassign) return
 
-      linkedUsers.forEach(user => {
-        mockDB.updateUser(user.id, {
-          accessProfileId: fallbackProfile.id,
-          role: fallbackProfile.baseRole || user.role
-        })
-      })
-      setUsers([...mockDB.getUsers()])
+      try {
+        for (const user of linkedUsers) {
+          await supabaseDataService.updateUser(user.id, {
+            accessProfileId: fallbackProfile.id,
+            role: fallbackProfile.baseRole || user.role
+          })
+        }
+      } catch (err) {
+        console.error('Erro ao transferir usuários do perfil:', err)
+        alert('Erro ao realocar usuários vinculados ao perfil.')
+        return
+      }
     }
 
-    const removed = mockDB.deleteProfile(profileId)
-    if (!removed) {
-      alert('Perfis padrao ou vinculados a usuarios nao podem ser removidos.')
-      return
+    try {
+      await supabaseDataService.deleteProfile(profileId)
+      const nextProfiles = profiles.filter(profile => profile.id !== profileId)
+      setProfiles(nextProfiles)
+      setSelectedProfileId(nextProfiles[0]?.id || '')
+      await loadData()
+      alert('Perfil removido com sucesso.')
+    } catch (err) {
+      console.error('Erro ao remover perfil:', err)
+      alert('Não foi possível remover o perfil.')
     }
-    const nextProfiles = profiles.filter(profile => profile.id !== profileId)
-    setProfiles(nextProfiles)
-    setSelectedProfileId(nextProfiles[0]?.id || '')
-    setAuditLogs([...mockDB.getAuditLogs()])
   }
 
   const toggleDashboardIndicator = indicator => {
@@ -1479,29 +1580,26 @@ export default function Settings() {
     alert('Modelos padrão restaurados. Clique em "Salvar Configurações" para persistir.')
   }
 
-  const createManualBackup = () => {
-    mockDB.createBackup('Backup manual criado em Configuracoes')
-    setBackups([...mockDB.getBackups()])
-    setSettings(mockDB.getSettings())
-    setAuditLogs([...mockDB.getAuditLogs()])
-    alert('Backup manual criado com sucesso.')
+  const createManualBackup = async () => {
+    try {
+      await supabaseDataService.createBackup('Backup manual criado em Configuracoes')
+      await loadData()
+      alert('Backup manual criado com sucesso.')
+    } catch (err) {
+      console.error('Erro ao criar backup:', err)
+      alert('Não foi possível criar o backup.')
+    }
   }
 
-  const restoreBackup = backupId => {
-    const restored = mockDB.restoreBackup(backupId)
-    if (!restored) {
-      alert('Nao foi possivel restaurar o backup.')
-      return
+  const restoreBackup = async (backupId) => {
+    try {
+      await supabaseDataService.restoreBackup(backupId)
+      await loadData()
+      alert('Backup restaurado com sucesso.')
+    } catch (err) {
+      console.error('Erro ao restaurar backup:', err)
+      alert('Não foi possível restaurar o backup.')
     }
-
-    setSettings(mockDB.getSettings())
-    setProfiles(mockDB.getProfiles())
-    setUsers(mockDB.getUsers())
-    setTeamMembers(mockDB.getTeamMembers())
-    setProcedures([...mockDB.getProcedures()])
-    setAuditLogs([...mockDB.getAuditLogs()])
-    setBackups([...mockDB.getBackups()])
-    alert('Backup restaurado com sucesso.')
   }
 
   const importBackupFile = event => {
@@ -1509,11 +1607,12 @@ export default function Settings() {
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed = JSON.parse(String(reader.result || '{}'))
         if (parsed?.settings) {
-          mockDB.saveSettings(parsed.settings)
+          await supabaseDataService.saveSettings(parsed.settings)
+          await loadData()
         }
         alert('Arquivo importado. Se quiser restaurar tudo, utilize os backups internos do sistema.')
       } catch (error) {

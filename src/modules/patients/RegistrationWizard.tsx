@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { Owner, Property, Patient } from '../../domain/types';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { getBreedsBySpecies } from '../../domain/breeds';
@@ -25,8 +25,19 @@ export const RegistrationWizard: React.FC = () => {
   const [birthDateInput, setBirthDateInput] = useState('');
 
   useEffect(() => {
-    setOwners(mockDB.getOwners());
-    setProperties(mockDB.getAllProperties());
+    const loadData = async () => {
+      try {
+        const [ownersData, propertiesData] = await Promise.all([
+          supabaseDataService.getOwners(),
+          supabaseDataService.getProperties()
+        ]);
+        setOwners(ownersData);
+        setProperties(propertiesData);
+      } catch (error) {
+        console.error('Error loading registration options:', error);
+      }
+    };
+    loadData();
   }, []);
 
   // --- Step 1: Owner ---
@@ -38,11 +49,16 @@ export const RegistrationWizard: React.FC = () => {
     }
   };
 
-  const handleCreateOwner = () => {
+  const handleCreateOwner = async () => {
     if (newOwner.name && newOwner.phone) {
-      const created = mockDB.createOwner(newOwner as Owner);
-      setSelectedOwner(created);
-      setStep(2);
+      try {
+        const created = await supabaseDataService.createOwner(newOwner as Owner);
+        setSelectedOwner(created);
+        setStep(2);
+      } catch (error) {
+        console.error('Error creating owner:', error);
+        alert('Erro ao cadastrar tutor.');
+      }
     }
   };
 
@@ -55,14 +71,19 @@ export const RegistrationWizard: React.FC = () => {
     }
   };
 
-  const handleCreateProperty = () => {
+  const handleCreateProperty = async () => {
     if (newProperty.name && newProperty.city && newProperty.state) {
-      const created = mockDB.createProperty({
-        ...newProperty,
-        address: newProperty.address || ''
-      } as Property);
-      setSelectedProperty(created);
-      setStep(3);
+      try {
+        const created = await supabaseDataService.createProperty({
+          ...newProperty,
+          address: newProperty.address || ''
+        } as Property);
+        setSelectedProperty(created);
+        setStep(3);
+      } catch (error) {
+        console.error('Error creating property:', error);
+        alert('Erro ao cadastrar propriedade.');
+      }
     } else {
         alert('Preencha Nome, Cidade e Estado da propriedade.');
     }
@@ -80,7 +101,7 @@ export const RegistrationWizard: React.FC = () => {
     return age;
   };
 
-  const handleCreatePatient = () => {
+  const handleCreatePatient = async () => {
     if (selectedOwner && newPatient.name) {
       // Validate Logic: If Equine, Property is required
       if (newPatient.species === 'Equine' && !selectedProperty) {
@@ -93,17 +114,22 @@ export const RegistrationWizard: React.FC = () => {
           finalAge = calculateAge(birthDateInput);
       }
 
-      mockDB.createPatient({
-        ...newPatient,
-        ownerId: selectedOwner.id,
-        propertyId: selectedProperty?.id,
-        age: finalAge,
-        birthDate: birthDateInput,
-        weight: Number(newPatient.weight)
-      } as Patient);
+      try {
+        await supabaseDataService.createPatient({
+          ...newPatient,
+          ownerId: selectedOwner.id,
+          propertyId: selectedProperty?.id,
+          age: finalAge,
+          birthDate: birthDateInput,
+          weight: Number(newPatient.weight)
+        } as Patient);
 
-      alert('Paciente cadastrado com sucesso!');
-      navigate('/attendance-new');
+        alert('Paciente cadastrado com sucesso!');
+        navigate('/attendance-new');
+      } catch (error) {
+        console.error('Error creating patient:', error);
+        alert('Erro ao cadastrar paciente.');
+      }
     }
   };
 

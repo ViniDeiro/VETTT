@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
+import { syncCachedSettings } from '../lib/utils'
 
 const normalizeHex = (hex, fallback) => {
   if (typeof hex !== 'string') return fallback
@@ -70,42 +71,47 @@ const getReadableForeground = (hex, fallback) => {
 
 export default function ThemeInjector() {
   useEffect(() => {
-    const applyTheme = () => {
-      const settings = mockDB.getSettings()
-      const root = document.documentElement
-      
-      if (settings?.appearance) {
-        const primaryColor = normalizeHex(settings.appearance.primaryColor, '#0B2C4D')
-        const buttonColor = normalizeHex(settings.appearance.buttonColor, '#00BFA5')
-        const sidebarColor = normalizeHex(settings.appearance.sidebarColor, '#0B2C4D')
+    const applyTheme = async () => {
+      try {
+        const settings = await supabaseDataService.getSettings()
+        syncCachedSettings(settings)
+        const root = document.documentElement
+        
+        if (settings?.appearance) {
+          const primaryColor = normalizeHex(settings.appearance.primaryColor, '#0B2C4D')
+          const buttonColor = normalizeHex(settings.appearance.buttonColor, '#00BFA5')
+          const sidebarColor = normalizeHex(settings.appearance.sidebarColor, '#0B2C4D')
 
-        root.style.setProperty('--clinic-primary', primaryColor)
-        root.style.setProperty('--clinic-button', buttonColor)
-        root.style.setProperty('--clinic-sidebar', sidebarColor)
-        root.style.setProperty('--clinic-primary-rgb', rgbChannels(primaryColor, '#0B2C4D'))
-        root.style.setProperty('--clinic-button-rgb', rgbChannels(buttonColor, '#00BFA5'))
-        root.style.setProperty('--clinic-primary-foreground', getReadableForeground(primaryColor, '#0B2C4D'))
-        root.style.setProperty('--clinic-button-foreground', getReadableForeground(buttonColor, '#00BFA5'))
-        root.style.setProperty('--primary', hexToHslChannels(primaryColor, '#0B2C4D'))
-        root.style.setProperty('--ring', hexToHslChannels(primaryColor, '#0B2C4D'))
+          root.style.setProperty('--clinic-primary', primaryColor)
+          root.style.setProperty('--clinic-button', buttonColor)
+          root.style.setProperty('--clinic-sidebar', sidebarColor)
+          root.style.setProperty('--clinic-primary-rgb', rgbChannels(primaryColor, '#0B2C4D'))
+          root.style.setProperty('--clinic-button-rgb', rgbChannels(buttonColor, '#00BFA5'))
+          root.style.setProperty('--clinic-primary-foreground', getReadableForeground(primaryColor, '#0B2C4D'))
+          root.style.setProperty('--clinic-button-foreground', getReadableForeground(buttonColor, '#00BFA5'))
+          root.style.setProperty('--primary', hexToHslChannels(primaryColor, '#0B2C4D'))
+          root.style.setProperty('--ring', hexToHslChannels(primaryColor, '#0B2C4D'))
 
-        if (settings.appearance.appIcon) {
-          let favicon = document.querySelector("link[rel='icon']")
-          if (!favicon) {
-            favicon = document.createElement('link')
-            favicon.setAttribute('rel', 'icon')
-            document.head.appendChild(favicon)
+          if (settings.appearance.appIcon) {
+            let favicon = document.querySelector("link[rel='icon']")
+            if (!favicon) {
+              favicon = document.createElement('link')
+              favicon.setAttribute('rel', 'icon')
+              document.head.appendChild(favicon)
+            }
+            favicon.setAttribute('href', settings.appearance.appIcon)
           }
-          favicon.setAttribute('href', settings.appearance.appIcon)
         }
-      }
 
-      if (settings?.regional?.language) {
-        root.setAttribute('lang', settings.regional.language)
-      }
+        if (settings?.regional?.language) {
+          root.setAttribute('lang', settings.regional.language)
+        }
 
-      if (settings?.clinic?.fantasyName) {
-        document.title = settings.clinic.fantasyName
+        if (settings?.clinic?.fantasyName) {
+          document.title = settings.clinic.fantasyName
+        }
+      } catch (err) {
+        console.error('Error applying theme:', err)
       }
     }
 

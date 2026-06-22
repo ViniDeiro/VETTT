@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../../components/Layout';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Autocomplete } from '../../shared/Autocomplete';
-import { mockDB } from '../../services/mockDatabase';
-import { Patient, Attendance, InventoryItem, ConsumptionItem, Vitals, ProcedureTemplate } from '../../domain/types';
+import { Patient, Attendance, InventoryItem, ConsumptionItem, Vitals, ProcedureTemplate, Owner, Property, GeneralSettings } from '../../domain/types';
 import { 
   Calendar, 
   Activity, 
@@ -40,10 +39,13 @@ import { ReturnVisitModal } from './ReturnVisitModal';
 import { CertificateModal } from './CertificateModal';
 import { SurgeryModal } from './SurgeryModal';
 import PatientDetailsModal from '../../components/PatientDetailsModal';
+import { supabaseDataService } from '../../services/supabaseDataService';
+import { useAuth } from '../auth/AuthContext';
 
 export const AttendancePage: React.FC = () => {
   const location = useLocation();
   const initialPatient = location.state?.patient as Patient | null;
+  const { user } = useAuth();
 
   const parseAttendanceDate = (dateValue?: string) => {
     if (!dateValue) return 0;
@@ -54,9 +56,16 @@ export const AttendancePage: React.FC = () => {
     return new Date(dateValue).getTime();
   };
 
-  const handlePrintRecord = () => {
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [settings, setSettings] = useState<GeneralSettings | null>(null);
+  const [patientAttendances, setPatientAttendances] = useState<Attendance[]>([]);
+
+  const handlePrintRecord = async () => {
     if (currentAttendance && selectedPatient) {
-      pdfService.generateMedicalRecord(selectedPatient, currentAttendance, 'Tutor (Demo)'); // Ideally get real owner name
+      const owner = owners.find(o => o.id === selectedPatient.ownerId);
+      const ownerName = owner?.name || currentAttendance.ownerName || selectedPatient.ownerName || 'Tutor não informado';
+      await pdfService.generateMedicalRecord(selectedPatient, currentAttendance, ownerName);
     } else {
       alert('Nenhum atendimento ativo para imprimir.');
     }
@@ -108,81 +117,122 @@ export const AttendancePage: React.FC = () => {
   // Vitals State
   const [vitals, setVitals] = useState<Vitals>({});
 
-  const allProperties = mockDB.getAllProperties();
-  const patientProperty = allProperties.find(p => p.id === selectedPatient?.propertyId);
+  const patientProperty = properties.find(p => p.id === selectedPatient?.propertyId);
 
   useEffect(() => {
-    const loadedPatients = mockDB.getPatients();
-    const loadedOwners = mockDB.getOwners();
-    const loadedAppointments = mockDB.getAppointments();
-    const loadedAttendances = mockDB.getAttendances();
-    setPatients(loadedPatients);
-    setInventory(mockDB.getInventory());
-    setProcedures(mockDB.getProcedures());
+    const loadAllData = async () => {
+      try {
+        const [
+          loadedPatients,
+          loadedOwners,
+          loadedAppointments,
+          loadedAttendances,
+          loadedInventory,
+          loadedProcedures,
+          loadedProperties,
+          loadedSettings
+        ] = await Promise.all([
+          supabaseDataService.getPatients(),
+          supabaseDataService.getOwners(),
+          supabaseDataService.getAppointments(),
+          supabaseDataService.getAttendances(),
+          supabaseDataService.getInventory(),
+          supabaseDataService.getProcedures(),
+          supabaseDataService.getProperties(),
+          supabaseDataService.getSettings()
+        ]);
 
-    const today = new Date().toDateString();
-    const todaysConfirmedAppointments = loadedAppointments
-      .filter(appt => {
-        const appointmentDate = new Date(appt.start).toDateString();
-        const status = String(appt.status || '').toLowerCase();
-        return appointmentDate === today && (status === 'confirmado' || status === 'confirmed');
-      })
-      .map(appt => {
-        const patient = loadedPatients.find(p => p.id === appt.patientId) || null;
-        const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
+        setPatients(loadedPatients);
+        setOwners(loadedOwners);
+        setInventory(loadedInventory);
+        setProcedures(loadedProcedures);
+        setProperties(loadedProperties);
+        setSettings(loadedSettings);
 
-        return {
-          ...appt,
-          patient,
-          patientName: patient?.name || appt.patientName || 'Paciente',
-          ownerName: owner?.name || appt.ownerName || 'Não informado',
-        };
-      })
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        const today = new Date().toDateString();
+        const todaysConfirmedAppointments = loadedAppointments
+          .filter(appt => {
+            const appointmentDate = new Date(appt.start).toDateString();
+            const status = String(appt.status || '').toLowerCase();
+            return appointmentDate === today && (status === 'confirmado' || status === 'confirmed');
+          })
+          .map(appt => {
+            const patient = loadedPatients.find(p => p.id === appt.patientId) || null;
+            const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
 
-    setConfirmedAppointments(todaysConfirmedAppointments);
+            return {
+              ...appt,
+              patient,
+              patientName: patient?.name || appt.patientName || 'Paciente',
+              ownerName: owner?.name || appt.ownerName || 'Não informado',
+            };
+          })
+          .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
-    const finishedAttendances = loadedAttendances
-      .filter(att => att.status === 'finished')
-      .map(att => {
-        const patient = loadedPatients.find(p => p.id === att.patientId) || null;
-        const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
+        setConfirmedAppointments(todaysConfirmedAppointments);
 
-        return {
-          ...att,
-          patient,
-          patientName: patient?.name || att.patientName || 'Paciente',
-          ownerName: owner?.name || patient?.ownerName || 'Não informado'
-        };
-      })
-      .sort((a, b) => {
-        const dateA = new Date(a.finishedAt || a.updatedAt || parseAttendanceDate(a.date)).getTime();
-        const dateB = new Date(b.finishedAt || b.updatedAt || parseAttendanceDate(b.date)).getTime();
-        return dateB - dateA;
-      });
+        const finishedAttendances = loadedAttendances
+          .filter(att => att.status === 'finished')
+          .map(att => {
+            const patient = loadedPatients.find(p => p.id === att.patientId) || null;
+            const owner = patient ? loadedOwners.find(o => o.id === patient.ownerId) || null : null;
 
-    setAttendanceHistory(finishedAttendances);
-    
-    let targetPatient = initialPatient;
+            return {
+              ...att,
+              patient,
+              patientName: patient?.name || att.patientName || 'Paciente',
+              ownerName: owner?.name || patient?.ownerName || 'Não informado'
+            };
+          })
+          .sort((a, b) => {
+            const dateA = new Date(a.finishedAt || a.updatedAt || parseAttendanceDate(a.date)).getTime();
+            const dateB = new Date(b.finishedAt || b.updatedAt || parseAttendanceDate(b.date)).getTime();
+            return dateB - dateA;
+          });
 
-    if (!targetPatient) {
-        const searchParams = new URLSearchParams(location.search);
-        const patientId = searchParams.get('patientId');
-        if (patientId) {
-            targetPatient = loadedPatients.find(p => p.id === patientId) || null;
+        setAttendanceHistory(finishedAttendances);
+        
+        let targetPatient = initialPatient;
+
+        if (!targetPatient) {
+            const searchParams = new URLSearchParams(location.search);
+            const patientId = searchParams.get('patientId');
+            if (patientId) {
+                targetPatient = loadedPatients.find(p => p.id === patientId) || null;
+            }
         }
-    }
 
-    if (targetPatient) {
-        // Find fresh patient data to get owner details properly
-        const freshPatient = loadedPatients.find(p => p.id === targetPatient?.id);
-        setSelectedPatient(freshPatient || targetPatient);
-    }
+        if (targetPatient) {
+            // Find fresh patient data to get owner details properly
+            const freshPatient = loadedPatients.find(p => p.id === targetPatient?.id);
+            setSelectedPatient(freshPatient || targetPatient);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados do atendimento:', err);
+      }
+    };
+
+    loadAllData();
   }, [initialPatient, location.search]);
+
+  useEffect(() => {
+    const loadPatientAttendances = async () => {
+      if (selectedPatient) {
+        try {
+          const list = await supabaseDataService.getAttendancesByPatientId(selectedPatient.id);
+          setPatientAttendances(list);
+        } catch (err) {
+          console.error('Erro ao carregar histórico do paciente:', err);
+        }
+      } else {
+        setPatientAttendances([]);
+      }
+    };
+    loadPatientAttendances();
+  }, [selectedPatient]);
 
   // Consultation Type State
   const [showConsultationTypes, setShowConsultationTypes] = useState(false);
-  const settings = mockDB.getSettings();
   const resolveConsultationIcon = (template: { name?: string; icon?: string }) => {
     if (template.icon) return template.icon;
 
@@ -192,12 +242,16 @@ export const AttendancePage: React.FC = () => {
     if (normalizedName.includes('clinica')) return '🩺';
     return '➕';
   };
-  const consultationTypes = settings.consultationTemplates.map(template => ({
-    id: template.id,
-    label: template.name,
-    icon: resolveConsultationIcon(template),
-    template: template
-  }));
+
+  const consultationTypes = useMemo(() => {
+    if (!settings) return [];
+    return settings.consultationTemplates.map(template => ({
+      id: template.id,
+      label: template.name,
+      icon: resolveConsultationIcon(template),
+      template: template
+    }));
+  }, [settings]);
 
   const handleStartAttendanceCheck = () => {
     setShowConsultationTypes(true);
@@ -215,52 +269,56 @@ export const AttendancePage: React.FC = () => {
     setVaccines(updatedAttendance.vaccines || []);
   };
 
-  const handleSelectConsultationType = (typeId: string, label: string) => {
+  const handleSelectConsultationType = async (typeId: string, label: string) => {
     setShowConsultationTypes(false);
     if (selectedPatient) {
       const typeData = consultationTypes.find(t => t.id === typeId);
       const template = typeData?.template;
-      const isRetorno = label.toLowerCase().includes('retorno');
       
-      const actualOwner = mockDB.getOwners().find(o => o.id === selectedPatient.ownerId);
+      const actualOwner = owners.find(o => o.id === selectedPatient.ownerId);
       const ownerName = actualOwner ? actualOwner.name : (selectedPatient.ownerName || 'Desconhecido');
       
-      const newAttendance = mockDB.createAttendance({
-        patientId: selectedPatient.id,
-        patientName: selectedPatient.name,
-        ownerId: selectedPatient.ownerId,
-        ownerName,
-        vetId: 'current-vet-id',
-        date: new Date().toLocaleDateString('pt-BR'),
-        reason: label,
-        consultationType: typeId,
-        consumedItems: [],
-        vitals: {}
-      });
+      try {
+        const newAttendance = await supabaseDataService.createAttendance({
+          patientId: selectedPatient.id,
+          patientName: selectedPatient.name,
+          ownerId: selectedPatient.ownerId,
+          ownerName,
+          vetUserId: user?.id || undefined,
+          date: new Date().toISOString(),
+          reason: label,
+          consultationType: typeId,
+          consumedItems: [],
+          vitals: {}
+        });
 
-      setCurrentAttendance(newAttendance);
-      setConsumedItems([]);
-      setVaccines([]);
-      resetProcedureForm();
-      
-      // Auto-fill from template
-      if (template) {
-        setAnamnesis(template.anamnesisText || '');
-        setPhysicalExam(template.physicalExamText || '');
-        setDiagnosis(template.diagnosisText || '');
-        setServiceFee(template.defaultValue || 0);
-      } else {
-        setAnamnesis('');
-        setPhysicalExam('');
-        setDiagnosis('');
-        setServiceFee(0);
+        setCurrentAttendance(newAttendance);
+        setConsumedItems([]);
+        setVaccines([]);
+        resetProcedureForm();
+        
+        // Auto-fill from template
+        if (template) {
+          setAnamnesis(template.anamnesisText || '');
+          setPhysicalExam(template.physicalExamText || '');
+          setDiagnosis(template.diagnosisText || '');
+          setServiceFee(template.defaultValue || 0);
+        } else {
+          setAnamnesis('');
+          setPhysicalExam('');
+          setDiagnosis('');
+          setServiceFee(0);
+        }
+        
+        setActiveTab('attendance_active');
+      } catch (err) {
+        console.error('Erro ao iniciar atendimento:', err);
+        alert('Erro ao iniciar atendimento no banco de dados.');
       }
-      
-      setActiveTab('attendance_active');
     }
   };
 
-  const handleAddProcedure = () => {
+  const handleAddProcedure = async () => {
       if (!currentAttendance || !selectedProcedureId) return;
 
       const template = procedures.find(proc => proc.id === selectedProcedureId);
@@ -311,17 +369,21 @@ export const AttendancePage: React.FC = () => {
           consumedItems: updatedConsumedItems
       };
 
-      mockDB.updateAttendance(currentAttendance.id, {
-          procedures: updatedProcedures,
-          consumedItems: updatedConsumedItems
-      });
-
-      syncAttendanceState(updatedAttendance);
-      resetProcedureForm();
-      alert(`Procedimento "${template.name}" adicionado com sucesso.`);
+      try {
+          await supabaseDataService.updateAttendance(currentAttendance.id, {
+              procedures: updatedProcedures,
+              consumedItems: updatedConsumedItems
+          });
+          syncAttendanceState(updatedAttendance);
+          resetProcedureForm();
+          alert(`Procedimento "${template.name}" adicionado com sucesso.`);
+      } catch (err) {
+          console.error('Erro ao adicionar procedimento:', err);
+          alert('Erro ao salvar o procedimento no banco de dados.');
+      }
   };
 
-  const handleRemoveProcedure = (procedureId: string) => {
+  const handleRemoveProcedure = async (procedureId: string) => {
       if (!currentAttendance) return;
 
       const removedProcedure = (currentAttendance.procedures || []).find(proc => proc.id === procedureId);
@@ -350,11 +412,16 @@ export const AttendancePage: React.FC = () => {
           consumedItems: updatedConsumedItems
       };
 
-      mockDB.updateAttendance(currentAttendance.id, {
-          procedures: updatedProcedures,
-          consumedItems: updatedConsumedItems
-      });
-      syncAttendanceState(updatedAttendance);
+      try {
+          await supabaseDataService.updateAttendance(currentAttendance.id, {
+              procedures: updatedProcedures,
+              consumedItems: updatedConsumedItems
+          });
+          syncAttendanceState(updatedAttendance);
+      } catch (err) {
+          console.error('Erro ao remover procedimento:', err);
+          alert('Erro ao atualizar o atendimento no banco de dados.');
+      }
   };
 
 
@@ -407,29 +474,29 @@ export const AttendancePage: React.FC = () => {
       }
   };
 
-  const handleDeleteConfirmedAppointment = (appointmentId: string, patientName: string) => {
+  const handleDeleteConfirmedAppointment = async (appointmentId: string, patientName: string) => {
     if (!confirm(`Tem certeza que deseja excluir o agendamento de ${patientName}?`)) {
       return;
     }
 
-    const deleted = mockDB.deleteAppointment(appointmentId);
-    if (!deleted) {
+    try {
+      await supabaseDataService.deleteAppointment(appointmentId);
+      setConfirmedAppointments(prev => prev.filter(appt => appt.id !== appointmentId));
+      alert('Agendamento excluido com sucesso. Ele tambem saiu da Agenda.');
+    } catch (err) {
+      console.error('Erro ao excluir agendamento:', err);
       alert('Nao foi possivel excluir o agendamento.');
-      return;
     }
-
-    setConfirmedAppointments(prev => prev.filter(appt => appt.id !== appointmentId));
-    alert('Agendamento excluido com sucesso. Ele tambem saiu da Agenda.');
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     if (currentAttendance) {
       try {
         currentAttendance.vitals = vitals; // Attach vitals before finishing
         currentAttendance.anamnesis = anamnesis; // Attach anamnesis
         currentAttendance.diagnosis = diagnosis; // Attach diagnosis
         
-        mockDB.finishAttendance(
+        await supabaseDataService.finishAttendance(
             currentAttendance.id, 
             serviceFee, 
             consumedItems, 
@@ -454,7 +521,7 @@ export const AttendancePage: React.FC = () => {
         }
 
         if (hasPatientUpdates) {
-            mockDB.updatePatient(selectedPatient.id, { 
+            await supabaseDataService.updatePatient(selectedPatient.id, { 
                 weight: updatedPatient.weight,
                 anestheticRisk: updatedPatient.anestheticRisk
             });
@@ -463,14 +530,14 @@ export const AttendancePage: React.FC = () => {
         }
 
         // Also update the local state record of the attendance directly so the UI sees it immediately
-        mockDB.updateAttendance(currentAttendance.id, {
+        await supabaseDataService.updateAttendance(currentAttendance.id, {
             vitals: vitals,
             anamnesis: anamnesis,
             diagnosis: diagnosis
         });
 
         alert('Atendimento finalizado com sucesso!');
-        const owner = mockDB.getOwners().find(o => o.id === selectedPatient.ownerId);
+        const owner = owners.find(o => o.id === selectedPatient.ownerId);
         setAttendanceHistory(prev => [
           {
             ...currentAttendance,
@@ -485,6 +552,11 @@ export const AttendancePage: React.FC = () => {
           },
           ...prev
         ]);
+
+        // Reload patient attendances
+        const list = await supabaseDataService.getAttendancesByPatientId(selectedPatient.id);
+        setPatientAttendances(list);
+
         setCurrentAttendance(null);
         setConsumedItems([]);
         setVaccines([]);
@@ -500,28 +572,38 @@ export const AttendancePage: React.FC = () => {
     }
   };
 
-  const handleActionClick = (actionId: string) => {
+  const handleActionClick = async (actionId: string) => {
       let activeAttendance = currentAttendance;
       if (!activeAttendance) {
           // Create a quick attendance if none exists
           if (confirm('Nenhum atendimento em andamento. Deseja iniciar um novo atendimento rápido para esta ação?')) {
-              activeAttendance = mockDB.createAttendance({
-                  patientId: selectedPatient!.id,
-                  patientName: selectedPatient!.name,
-                  ownerName: selectedPatient!.ownerName,
-                  vetId: 'current-vet-id',
-                  date: new Date().toLocaleDateString('pt-BR'),
-                  reason: 'Atendimento Rápido',
-                  consultationType: 'outras',
-                  consumedItems: [],
-                  vitals: {}
-              });
-              setCurrentAttendance(activeAttendance);
-              setConsumedItems([]);
-              setVaccines([]);
-              setServiceFee(0);
-              resetProcedureForm();
-              setActiveTab('attendance_active');
+              try {
+                  const actualOwner = owners.find(o => o.id === selectedPatient!.ownerId);
+                  const ownerName = actualOwner ? actualOwner.name : (selectedPatient!.ownerName || 'Desconhecido');
+                  
+                  activeAttendance = await supabaseDataService.createAttendance({
+                      patientId: selectedPatient!.id,
+                      patientName: selectedPatient!.name,
+                      ownerId: selectedPatient!.ownerId,
+                      ownerName,
+                      vetUserId: user?.id || undefined,
+                      date: new Date().toISOString(),
+                      reason: 'Atendimento Rápido',
+                      consultationType: 'outras',
+                      consumedItems: [],
+                      vitals: {}
+                  });
+                  setCurrentAttendance(activeAttendance);
+                  setConsumedItems([]);
+                  setVaccines([]);
+                  setServiceFee(0);
+                  resetProcedureForm();
+                  setActiveTab('attendance_active');
+              } catch (err) {
+                  console.error('Erro ao iniciar atendimento rápido:', err);
+                  alert('Não foi possível iniciar um atendimento rápido no banco de dados.');
+                  return;
+              }
           } else {
               return;
           }
@@ -531,6 +613,16 @@ export const AttendancePage: React.FC = () => {
       activeAttendance.vitals = vitals;
       activeAttendance.anamnesis = anamnesis;
       activeAttendance.diagnosis = diagnosis;
+      
+      try {
+          await supabaseDataService.updateAttendance(activeAttendance.id, {
+              vitals,
+              anamnesis,
+              diagnosis
+          });
+      } catch (err) {
+          console.error('Erro ao salvar estado do atendimento:', err);
+      }
       
       if (actionId === 'prescricao') setIsPrescriptionModalOpen(true);
       else if (actionId === 'exames') setIsExamRequestModalOpen(true);
@@ -930,7 +1022,7 @@ export const AttendancePage: React.FC = () => {
                                 </div>
                             </div>
                             {(() => {
-                                const lastAttendanceWithVitals = mockDB.getAttendancesByPatientId(selectedPatient.id)
+                                const lastAttendanceWithVitals = patientAttendances
                                     .filter(a => a.vitals && Object.keys(a.vitals).length > 0)
                                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                                 
@@ -970,7 +1062,7 @@ export const AttendancePage: React.FC = () => {
                                 <h3 className="font-bold text-gray-900">Última Anamnese</h3>
                             </div>
                             {(() => {
-                                const lastAttendanceWithAnamnesis = mockDB.getAttendancesByPatientId(selectedPatient.id)
+                                const lastAttendanceWithAnamnesis = patientAttendances
                                     .filter(a => a.anamnesis)
                                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                                 
@@ -1254,7 +1346,7 @@ export const AttendancePage: React.FC = () => {
                                 </div>
                                 {historySubTab === 'Procedimentos' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => (a.procedures || []).map(p => ({...p, date: a.date}))).map((proc: any, i) => (
+                                        {patientAttendances.flatMap(a => (a.procedures || []).map(p => ({...p, date: a.date}))).map((proc: any, i) => (
                                             <div key={i} className="p-4 border rounded-lg bg-orange-50">
                                                 <div className="flex justify-between mb-2">
                                                     <span className="font-bold text-orange-900">{proc.name}</span>
@@ -1283,7 +1375,11 @@ export const AttendancePage: React.FC = () => {
                                             <span className="font-semibold text-gray-700">Receita #{idx + 1}</span>
                                             <span className="text-xs text-gray-500 ml-2">({p.items.length} itens)</span>
                                         </div>
-                                        <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => pdfService.generatePrescriptionPdf(selectedPatient, p, 'Tutor (Demo)')}>
+                                        <Button variant="ghost" size="sm" className="text-blue-600" onClick={async () => {
+                                            const owner = owners.find(o => o.id === selectedPatient.ownerId);
+                                            const ownerName = owner?.name || selectedPatient.ownerName || 'Não informado';
+                                            await pdfService.generatePrescriptionPdf(selectedPatient, p, ownerName);
+                                        }}>
                                             <Printer className="h-4 w-4 mr-1" /> Re-imprimir
                                         </Button>
                                     </div>
@@ -1306,7 +1402,11 @@ export const AttendancePage: React.FC = () => {
                                             <span className="font-semibold text-gray-700">Solicitação #{idx + 1}</span>
                                             <span className="text-xs text-gray-500 ml-2">({req.items.length} exames) - {req.priority === 'urgent' ? 'URGENTE' : 'Rotina'}</span>
                                         </div>
-                                        <Button variant="ghost" size="sm" className="text-teal-600" onClick={() => pdfService.generateExamRequestPdf(selectedPatient, req, 'Tutor (Demo)')}>
+                                        <Button variant="ghost" size="sm" className="text-teal-600" onClick={async () => {
+                                            const owner = owners.find(o => o.id === selectedPatient.ownerId);
+                                            const ownerName = owner?.name || selectedPatient.ownerName || 'Não informado';
+                                            await pdfService.generateExamRequestPdf(selectedPatient, req, ownerName);
+                                        }}>
                                             <Printer className="h-4 w-4 mr-1" /> Re-imprimir
                                         </Button>
                                     </div>
@@ -1634,7 +1734,7 @@ export const AttendancePage: React.FC = () => {
                             <div className="py-4">
                                 {historySubTab === 'Geral' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).map(att => (
+                                        {patientAttendances.map(att => (
                                             <div key={att.id} className="flex gap-4 items-center p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                                 <div className="w-24 shrink-0 text-sm font-bold text-gray-500">{att.date}</div>
                                                 <div className="flex-1">
@@ -1650,7 +1750,7 @@ export const AttendancePage: React.FC = () => {
                                                 </Button>
                                             </div>
                                         ))}
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).length === 0 && (
+                                        {patientAttendances.length === 0 && (
                                             <div className="text-center py-8 text-gray-500">
                                                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
                                                 <p>Nenhum registro encontrado para este paciente.</p>
@@ -1660,7 +1760,7 @@ export const AttendancePage: React.FC = () => {
                                 )}
                                 {historySubTab === 'Consultas' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).map(att => (
+                                        {patientAttendances.map(att => (
                                             <div 
                                                 key={att.id} 
                                                 className="p-4 border rounded-lg bg-gray-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
@@ -1686,7 +1786,7 @@ export const AttendancePage: React.FC = () => {
                                 )}
                                 {historySubTab === 'Peso e Sinais Vitais' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).filter(a => a.vitals && Object.keys(a.vitals).length > 0).map(att => (
+                                        {patientAttendances.filter(a => a.vitals && Object.keys(a.vitals).length > 0).map(att => (
                                             <div key={att.id} className="p-4 border rounded-lg bg-gray-50 flex flex-col md:flex-row gap-4 md:gap-6">
                                                 <span className="font-bold text-gray-600 w-24 shrink-0">{att.date}</span>
                                                 <div className="flex flex-wrap gap-4 text-sm">
@@ -1703,7 +1803,7 @@ export const AttendancePage: React.FC = () => {
                                 )}
                                 {historySubTab === 'Vacinas' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => a.vaccines || []).map((vac, i) => (
+                                        {patientAttendances.flatMap(a => a.vaccines || []).map((vac, i) => (
                                             <div key={i} className="p-4 border rounded-lg bg-purple-50">
                                                 <div className="flex justify-between">
                                                     <span className="font-bold text-purple-900">{vac.name}</span>
@@ -1716,7 +1816,7 @@ export const AttendancePage: React.FC = () => {
                                 )}
                                 {historySubTab === 'Exames' && (
                                     <div className="space-y-4">
-                                        {mockDB.getAttendancesByPatientId(selectedPatient.id).flatMap(a => a.examRequests || []).map((req, i) => (
+                                        {patientAttendances.flatMap(a => a.examRequests || []).map((req, i) => (
                                             <div key={i} className="p-4 border rounded-lg bg-teal-50">
                                                 <div className="flex justify-between mb-2">
                                                     <span className="font-bold text-teal-900">Solicitação em {req.date}</span>

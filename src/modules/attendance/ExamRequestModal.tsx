@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { ExamRequest, ExamItem, Patient, Attendance } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { pdfService } from '../../services/pdfService';
 import { Plus, Trash2, Printer, Save, FileText, Activity } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -72,7 +72,7 @@ export const ExamRequestModal: React.FC<ExamRequestModalProps> = ({
     setItems(items.filter(i => i.id !== id));
   };
 
-  const handleSave = (print: boolean = false) => {
+  const handleSave = async (print: boolean = false) => {
     if (items.length === 0) {
       alert('Adicione pelo menos um exame à solicitação.');
       return;
@@ -89,29 +89,36 @@ export const ExamRequestModal: React.FC<ExamRequestModalProps> = ({
 
     // Update Attendance
     const currentRequests = attendance.examRequests || [];
+    const updatedRequests = [...currentRequests, newRequest];
     const updatedAttendance = {
       ...attendance,
-      examRequests: [...currentRequests, newRequest]
+      examRequests: updatedRequests
     };
 
-    // Save to DB
-    mockDB.updateAttendance(attendance.id, { examRequests: updatedAttendance.examRequests });
-    
-    // Notify Parent
-    onSave(updatedAttendance);
+    try {
+      // Save to DB
+      await supabaseDataService.updateAttendance(attendance.id, { examRequests: updatedRequests });
+      
+      // Notify Parent
+      onSave(updatedAttendance);
 
-    if (print) {
-      const owner = mockDB.getOwners().find(item => item.id === patient.ownerId);
-      const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
-      pdfService.generateExamRequestPdf(patient, newRequest, ownerName);
-    } else {
-      alert('Solicitação de exames salva com sucesso!');
+      if (print) {
+        const ownersList = await supabaseDataService.getOwners();
+        const owner = ownersList.find(item => item.id === patient.ownerId);
+        const ownerName = owner?.name || attendance.ownerName || patient.ownerName || 'Tutor não informado';
+        await pdfService.generateExamRequestPdf(patient, newRequest, ownerName);
+      } else {
+        alert('Solicitação de exames salva com sucesso!');
+      }
+      
+      // Clear and Close
+      setItems([]);
+      setClinicalIndication('');
+      onClose();
+    } catch (err) {
+      console.error('Erro ao salvar solicitação de exames:', err);
+      alert('Erro ao salvar solicitação de exames no banco de dados.');
     }
-    
-    // Clear and Close
-    setItems([]);
-    setClinicalIndication('');
-    onClose();
   };
 
   if (!isOpen) return null;

@@ -16,7 +16,7 @@ import {
   TrendingDown
 } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 const FILTERS = ['Hoje', 'Semana', 'Mes', 'Ano', 'Todos']
 
@@ -71,12 +71,17 @@ export default function FinanceExpenses() {
     method: 'pix',
   })
 
-  const loadExpensesData = () => {
-    const flows = mockDB.getCashFlow()
-      .filter(entry => entry.type === 'expense')
-      .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
+  const loadExpensesData = async () => {
+    try {
+      const flows = await supabaseDataService.getCashFlow()
+      const expenses = flows
+        .filter(entry => entry.type === 'expense')
+        .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
 
-    setExpensesHistory(flows)
+      setExpensesHistory(expenses)
+    } catch (error) {
+      console.error('Error loading expenses:', error)
+    }
   }
 
   useEffect(() => {
@@ -88,35 +93,40 @@ export default function FinanceExpenses() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSaveExpense = () => {
+  const handleSaveExpense = async () => {
     const amount = Number(formData.value)
     if (!formData.date || !formData.desc || !Number.isFinite(amount) || amount <= 0) {
       alert('Preencha os campos obrigatorios do custo.')
       return
     }
 
-    mockDB.createCashFlowEntry({
-      date: formData.date,
-      businessDate: formData.date,
-      type: 'expense',
-      category: formData.category || 'Outros',
-      amount,
-      description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc}`,
-      paymentMethod: formData.method,
-      paymentStatus: 'paid',
-      sourceType: 'operational_cost'
-    })
+    try {
+      await supabaseDataService.createCashFlowEntry({
+        date: formData.date,
+        businessDate: formData.date,
+        type: 'expense',
+        category: formData.category || 'Outros',
+        amount,
+        description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc}`,
+        paymentMethod: formData.method,
+        paymentStatus: 'paid',
+        sourceType: 'operational_cost'
+      })
 
-    loadExpensesData()
-    setFormData({
-      date: new Date().toISOString().slice(0, 10),
-      category: '',
-      center: '',
-      desc: '',
-      value: '',
-      method: 'pix',
-    })
-    alert('Custo registrado com sucesso.')
+      await loadExpensesData()
+      setFormData({
+        date: new Date().toISOString().slice(0, 10),
+        category: '',
+        center: '',
+        desc: '',
+        value: '',
+        method: 'pix',
+      })
+      alert('Custo registrado com sucesso.')
+    } catch (error) {
+      console.error('Error creating expense:', error)
+      alert('Erro ao registrar custo.')
+    }
   }
 
   const filteredHistory = useMemo(() => {
@@ -343,10 +353,15 @@ export default function FinanceExpenses() {
                         <td className="py-4 text-gray-500">{paymentMethodLabel[item.paymentMethod] || item.paymentMethod || '-'}</td>
                         <td className="py-4 text-center">
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm('Excluir este custo?')) {
-                                mockDB.deleteCashFlowEntry(item.id)
-                                loadExpensesData()
+                                try {
+                                  await supabaseDataService.deleteCashFlowEntry(item.id)
+                                  await loadExpensesData()
+                                } catch (error) {
+                                  console.error('Error deleting expense:', error)
+                                  alert('Erro ao excluir custo.')
+                                }
                               }
                             }}
                             className="text-red-400 hover:text-red-600"

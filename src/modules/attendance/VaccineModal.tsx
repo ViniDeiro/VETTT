@@ -4,7 +4,7 @@ import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Autocomplete } from '../../shared/Autocomplete';
 import { VaccineApplication, Patient, Attendance, InventoryItem } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { Calendar, Clock, Plus, Syringe, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 
@@ -41,26 +41,29 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-        setInventory(mockDB.getInventory().filter(i => i.category === 'Vaccine'));
-        
-        // Load History
-        const allAttendances = mockDB.getAttendancesByPatientId(patient.id);
-        const allVaccines: VaccineApplication[] = [];
-        allAttendances.forEach(att => {
-            if (att.vaccines && Array.isArray(att.vaccines)) {
-                allVaccines.push(...att.vaccines);
+        const loadData = async () => {
+            try {
+                const [invList, allAttendances] = await Promise.all([
+                    supabaseDataService.getInventory(),
+                    supabaseDataService.getAttendancesByPatientId(patient.id)
+                ]);
+                
+                setInventory(invList.filter(i => i.category === 'Vaccine'));
+                
+                const allVaccines: VaccineApplication[] = [];
+                allAttendances.forEach(att => {
+                    if (att.vaccines && Array.isArray(att.vaccines)) {
+                        allVaccines.push(...att.vaccines);
+                    }
+                });
+                
+                allVaccines.sort((a, b) => new Date(b.applicationDate).getTime() - new Date(a.applicationDate).getTime());
+                setHistory(allVaccines);
+            } catch (err) {
+                console.error('Erro ao carregar vacinas/histórico:', err);
             }
-        });
-        // Add current session vaccines too if not saved yet (though they are in attendance state)
-        if (attendance.vaccines) {
-            // Avoid duplicates if attendance is already in history list (it shouldn't be if we just created it or it's in progress)
-            // Actually getAttendancesByPatientId includes current one if it's saved.
-            // Let's just use what we found.
-        }
-        
-        // Sort by date desc
-        allVaccines.sort((a, b) => new Date(b.applicationDate).getTime() - new Date(a.applicationDate).getTime());
-        setHistory(allVaccines);
+        };
+        loadData();
     }
   }, [isOpen, patient.id]);
 
@@ -78,7 +81,7 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
     setVaccineExpiry(current => current || stockMatch.expiryDate || stockMatch.validity || '');
   }, [vaccineNameInput, inventory]);
 
-  const handleAddVaccine = () => {
+  const handleAddVaccine = async () => {
       const finalName = selectedVaccineToAdd ? selectedVaccineToAdd.name : vaccineNameInput;
 
       if (finalName && vaccineBatch && vaccineExpiry) {
@@ -118,26 +121,31 @@ export const VaccineModal: React.FC<VaccineModalProps> = ({
               updatedAttendance.returnVisit = returnVisit;
           }
 
-          mockDB.updateAttendance(attendance.id, { 
-              vaccines: updatedAttendance.vaccines,
-              returnVisit: updatedAttendance.returnVisit 
-          });
-          onSave(updatedAttendance);
-          
-          // Add to local history view immediately
-          setHistory([newVaccine, ...history]);
+          try {
+              await supabaseDataService.updateAttendance(attendance.id, { 
+                  vaccines: updatedAttendance.vaccines,
+                  returnVisit: updatedAttendance.returnVisit 
+              });
+              onSave(updatedAttendance);
+              
+              // Add to local history view immediately
+              setHistory([newVaccine, ...history]);
 
-          // Reset Form
-          setSelectedVaccineToAdd(null);
-          setVaccineNameInput('');
-          setVaccineManufacturer('');
-          setVaccineBatch('');
-          setVaccineManufacturingDate('');
-          setVaccineExpiry('');
-          setVaccineNotes('');
-          setNextDoseDate('');
-          
-          alert(`Vacina ${newVaccine.name} registrada com sucesso!${nextDoseDate ? '\nAgendamento de revacina criado automaticamente.' : ''}`);
+              // Reset Form
+              setSelectedVaccineToAdd(null);
+              setVaccineNameInput('');
+              setVaccineManufacturer('');
+              setVaccineBatch('');
+              setVaccineManufacturingDate('');
+              setVaccineExpiry('');
+              setVaccineNotes('');
+              setNextDoseDate('');
+              
+              alert(`Vacina ${newVaccine.name} registrada com sucesso!${nextDoseDate ? '\nAgendamento de revacina criado automaticamente.' : ''}`);
+          } catch (err) {
+              console.error('Erro ao registrar vacina:', err);
+              alert('Erro ao salvar vacina no banco de dados.');
+          }
       } else {
           alert('Preencha a vacina (nome), lote e validade.');
       }

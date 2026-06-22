@@ -13,7 +13,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 const parseFlexibleDate = (value) => {
   if (!value) return new Date('')
@@ -39,10 +39,23 @@ export default function Finance() {
   const [cashFlow, setCashFlow] = useState([])
 
   useEffect(() => {
-    setRecords(mockDB.getFinancialRecords())
-    setReceivables(mockDB.getReceivables())
-    setCashFlow(mockDB.getCashFlow())
-    setAnimate(true)
+    const loadData = async () => {
+      try {
+        const [recordsData, receivablesData, cashFlowData] = await Promise.all([
+          supabaseDataService.getFinancialRecords(),
+          supabaseDataService.getReceivables(),
+          supabaseDataService.getCashFlow()
+        ])
+        setRecords(recordsData)
+        setReceivables(receivablesData)
+        setCashFlow(cashFlowData)
+      } catch (err) {
+        console.error('Error loading financial data:', err)
+      } finally {
+        setAnimate(true)
+      }
+    }
+    loadData()
   }, [])
 
   const dashboard = useMemo(() => {

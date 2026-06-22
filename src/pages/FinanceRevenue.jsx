@@ -16,7 +16,7 @@ import {
   ArrowDownCircle,
 } from 'lucide-react'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 const FILTERS = ['Hoje', 'Semana', 'Mes', 'Ano', 'Todos']
 
@@ -72,13 +72,17 @@ export default function FinanceRevenue() {
     entryType: 'income',
   })
 
-  const loadRevenueData = () => {
-    const flows = mockDB
-      .getCashFlow()
-      .filter(entry => entry.type === 'income')
-      .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
+  const loadRevenueData = async () => {
+    try {
+      const flows = await supabaseDataService.getCashFlow()
+      const revenue = flows
+        .filter(entry => entry.type === 'income')
+        .sort((a, b) => parseFlexibleDate(b.date).getTime() - parseFlexibleDate(a.date).getTime())
 
-    setRevenueHistory(flows)
+      setRevenueHistory(revenue)
+    } catch (error) {
+      console.error('Error loading revenue:', error)
+    }
   }
 
   useEffect(() => {
@@ -90,7 +94,7 @@ export default function FinanceRevenue() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSaveRevenue = () => {
+  const handleSaveRevenue = async () => {
     const amount = Number(formData.value)
 
     if (!formData.date || !formData.desc || !Number.isFinite(amount) || amount <= 0) {
@@ -99,34 +103,39 @@ export default function FinanceRevenue() {
     }
 
     const normalizedAmount = formData.entryType === 'reversal' ? -amount : amount
-    mockDB.createCashFlowEntry({
-      date: formData.date,
-      businessDate: formData.date,
-      type: 'income',
-      category: formData.category || 'Receita avulsa',
-      amount: normalizedAmount,
-      grossAmount: normalizedAmount,
-      totalCost: 0,
-      grossProfit: normalizedAmount,
-      marginPercent: 100,
-      paymentStatus: 'paid',
-      paymentMethod: formData.method,
-      description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc}`,
-      sourceType: formData.entryType === 'reversal' ? 'revenue_adjustment' : 'manual_revenue',
-    })
+    try {
+      await supabaseDataService.createCashFlowEntry({
+        date: formData.date,
+        businessDate: formData.date,
+        type: 'income',
+        category: formData.category || 'Receita avulsa',
+        amount: normalizedAmount,
+        grossAmount: normalizedAmount,
+        totalCost: 0,
+        grossProfit: normalizedAmount,
+        marginPercent: 100,
+        paymentStatus: 'paid',
+        paymentMethod: formData.method,
+        description: `${formData.center ? `[${formData.center}] ` : ''}${formData.desc}`,
+        sourceType: formData.entryType === 'reversal' ? 'revenue_adjustment' : 'manual_revenue',
+      })
 
-    loadRevenueData()
-    setFormData({
-      date: new Date().toISOString().slice(0, 10),
-      category: '',
-      center: '',
-      desc: '',
-      value: '',
-      method: 'pix',
-      entryType: 'income',
-    })
+      await loadRevenueData()
+      setFormData({
+        date: new Date().toISOString().slice(0, 10),
+        category: '',
+        center: '',
+        desc: '',
+        value: '',
+        method: 'pix',
+        entryType: 'income',
+      })
 
-    alert(formData.entryType === 'reversal' ? 'Baixa registrada com sucesso.' : 'Receita registrada com sucesso.')
+      alert(formData.entryType === 'reversal' ? 'Baixa registrada com sucesso.' : 'Receita registrada com sucesso.')
+    } catch (error) {
+      console.error('Error creating revenue:', error)
+      alert('Erro ao registrar receita.')
+    }
   }
 
   const filteredHistory = useMemo(() => {

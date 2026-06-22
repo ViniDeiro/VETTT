@@ -4,7 +4,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 import { Autocomplete } from '../shared/Autocomplete'
 import { EmailInput } from './ui/EmailInput'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 import { getBreedsBySpecies } from '../domain/breeds'
 import { formatPhone, formatDocument, formatCEP } from '../lib/formatters'
 import { 
@@ -26,7 +26,8 @@ import {
   Edit2,
   Home,
   Trash2,
-  Wallet
+  Wallet,
+  Syringe
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -161,21 +162,30 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
 
   useEffect(() => {
     if (isOpen) {
-        setOwners(mockDB.getOwners())
-        setProperties(mockDB.getAllProperties())
-        // Initialize edit form
-        if (patient) {
-            const owner = mockDB.getOwners().find(o => o.id === patient.ownerId);
-            const prop = mockDB.getAllProperties().find(p => p.id === patient.propertyId);
-            setEditFormData({
-                ...patient,
-                ownerData: owner || {},
-                propertyData: prop || {}
-            });
-            
-            // Load Attendances
-            setAttendances(mockDB.getAttendancesByPatientId(patient.id));
+        const loadData = async () => {
+            try {
+                const [loadedOwners, loadedProperties] = await Promise.all([
+                    supabaseDataService.getOwners(),
+                    supabaseDataService.getProperties()
+                ])
+                setOwners(loadedOwners)
+                setProperties(loadedProperties)
+                if (patient) {
+                    const owner = loadedOwners.find(o => o.id === patient.ownerId);
+                    const prop = loadedProperties.find(p => p.id === patient.propertyId);
+                    setEditFormData({
+                        ...patient,
+                        ownerData: owner || {},
+                        propertyData: prop || {}
+                    });
+                    // Attendances - will be loaded from Supabase when service method is ready
+                    setAttendances([]);
+                }
+            } catch (error) {
+                console.error('Erro ao carregar dados do modal:', error)
+            }
         }
+        loadData()
     }
   }, [isOpen, patient])
 
@@ -183,30 +193,41 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
       const file = e.target.files[0];
       if (file) {
           const reader = new FileReader();
-          reader.onloadend = () => {
+          reader.onloadend = async () => {
               const base64 = reader.result;
-              mockDB.updatePatient(patient.id, { photoUrl: base64 });
-              // Force update UI (hacky since patient is prop, better if parent updates)
-              // But for now we assume parent might re-render or we update local
-              patient.photoUrl = base64; 
-              // Trigger re-render
-              setEditFormData({...editFormData, photoUrl: base64}); 
+              try {
+                  await supabaseDataService.updatePatient(patient.id, { photoUrl: base64 });
+                  patient.photoUrl = base64; 
+                  setEditFormData({...editFormData, photoUrl: base64}); 
+              } catch (error) {
+                  console.error('Erro ao atualizar foto:', error)
+              }
           };
           reader.readAsDataURL(file);
       }
   };
 
-  const handleSaveEdit = () => {
-    // Save Patient
+  const handleSaveEdit = async () => {
     const { ownerData, propertyData, ...patientUpdates } = editFormData;
-    const normalizedOwnerData = ownerData
-      ? { ...ownerData, address: buildStructuredAddress(ownerData) || ownerData.address || '' }
-      : ownerData
+    let normalizedOwnerData = ownerData;
+    if (ownerData) {
+      const originalOwner = owners.find(o => o.id === patient.ownerId);
+      const addressChanged = !originalOwner || ownerData.address !== originalOwner.address;
+      
+      normalizedOwnerData = { ...ownerData };
+      if (addressChanged) {
+        normalizedOwnerData.street = null;
+        normalizedOwnerData.number = null;
+        normalizedOwnerData.neighborhood = null;
+        normalizedOwnerData.address = ownerData.address || '';
+      } else {
+        normalizedOwnerData.address = buildStructuredAddress(ownerData) || ownerData.address || '';
+      }
+    }
     const normalizedPropertyData = propertyData
       ? { ...propertyData, address: buildStructuredAddress(propertyData) || propertyData.address || '' }
       : propertyData
     
-    // Convert allergies/chronicDiseases back to array if they are strings
     if (typeof patientUpdates.allergies === 'string') {
         patientUpdates.allergies = patientUpdates.allergies.split(',').map(s => s.trim()).filter(Boolean);
     }
@@ -214,46 +235,59 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
         patientUpdates.chronicDiseases = patientUpdates.chronicDiseases.split(',').map(s => s.trim()).filter(Boolean);
     }
 
-    mockDB.updatePatient(patient.id, patientUpdates);
-    
-    // Save Owner
-    if (patient.ownerId && normalizedOwnerData) {
-        mockDB.updateOwner(patient.ownerId, normalizedOwnerData);
+    try {
+      await supabaseDataService.updatePatient(patient.id, patientUpdates);
+      
+      if (patient.ownerId && normalizedOwnerData) {
+          await supabaseDataService.updateOwner(patient.ownerId, normalizedOwnerData);
+      }
+
+      if (patient.propertyId && normalizedPropertyData && patient.species === 'Equine') {
+          await supabaseDataService.updateProperty(patient.propertyId, normalizedPropertyData);
+      }
+
+      Object.assign(patient, patientUpdates);
+      if(ownerData) patient.ownerName = ownerData.name;
+      onPatientUpdated?.({ ...patient });
+
+      setIsEditing(false);
+      alert('Dados atualizados com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar:', error)
+      alert(`Erro ao salvar: ${error?.message || error}`)
     }
-
-    // Save Property
-    if (patient.propertyId && normalizedPropertyData && patient.species === 'Equine') {
-        mockDB.updateProperty(patient.propertyId, normalizedPropertyData);
-    }
-
-    // Update local 'patient' prop reference for immediate UI feedback (React won't re-render parent automatically here without callback)
-    Object.assign(patient, patientUpdates);
-    if(ownerData) patient.ownerName = ownerData.name; // Sync name
-
-    setIsEditing(false);
-    alert('Dados atualizados com sucesso!');
   };
 
   if (!patient) return null
 
-  const handleSaveOwnerChange = () => {
+  const handleSaveOwnerChange = async () => {
       if (newOwner) {
-          patient.ownerId = newOwner.id;
-          patient.ownerName = newOwner.name;
-          mockDB.updatePatient(patient.id, { ownerId: newOwner.id, ownerName: newOwner.name });
-          onPatientUpdated?.({ ...patient, ownerId: newOwner.id, ownerName: newOwner.name });
-          alert(`Tutor alterado para: ${newOwner.name}`);
+          try {
+              await supabaseDataService.updatePatient(patient.id, { ownerId: newOwner.id });
+              patient.ownerId = newOwner.id;
+              patient.ownerName = newOwner.name;
+              onPatientUpdated?.({ ...patient, ownerId: newOwner.id, ownerName: newOwner.name });
+              alert(`Tutor alterado para: ${newOwner.name}`);
+          } catch (error) {
+              console.error('Erro ao alterar tutor:', error)
+              alert(`Erro: ${error?.message || error}`)
+          }
           setIsChangingOwner(false);
           setNewOwner(null);
       }
   }
 
-  const handleSavePropertyChange = () => {
+  const handleSavePropertyChange = async () => {
       if (newProperty) {
-          patient.propertyId = newProperty.id;
-          mockDB.updatePatient(patient.id, { propertyId: newProperty.id });
-          onPatientUpdated?.({ ...patient, propertyId: newProperty.id });
-          alert(`Propriedade alterada para: ${newProperty.name}`);
+          try {
+              await supabaseDataService.updatePatient(patient.id, { propertyId: newProperty.id });
+              patient.propertyId = newProperty.id;
+              onPatientUpdated?.({ ...patient, propertyId: newProperty.id });
+              alert(`Propriedade alterada para: ${newProperty.name}`);
+          } catch (error) {
+              console.error('Erro ao alterar propriedade:', error)
+              alert(`Erro: ${error?.message || error}`)
+          }
           setIsChangingProperty(false);
           setNewProperty(null);
       }
@@ -345,16 +379,9 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
     )
   }
 
-  const patientFinancialRecords = mockDB
-    .getFinancialRecordsByPatientId(patient.id)
-    .slice()
-    .sort((a, b) => parseTimelineDate(b.date).getTime() - parseTimelineDate(a.date).getTime())
+  const patientFinancialRecords = []
 
-  const patientReceivables = mockDB
-    .getReceivables()
-    .filter(receivable => receivable.patientId === patient.id)
-    .slice()
-    .sort((a, b) => parseTimelineDate(b.dueDate).getTime() - parseTimelineDate(a.dueDate).getTime())
+  const patientReceivables = []
 
   const totalGrossRevenue = patientFinancialRecords.reduce((total, record) => total + (record.grossAmount || 0), 0)
   const totalOperationalCost = patientFinancialRecords.reduce((total, record) => total + (record.totalCost || 0), 0)
@@ -439,7 +466,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Clock className="h-4 w-4" />
                   {(() => {
-                      const nextAppt = mockDB.appointments.find(a => a.patientId === patient.id && new Date(a.start) > new Date());
+                      const nextAppt = null; // TODO: load from supabaseDataService.getAppointments()
                       if (nextAppt) {
                           return <span>Próxima Consulta: {new Date(nextAppt.start).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
                       }
@@ -688,7 +715,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       <h3 className="font-bold text-gray-900">Sinais Vitais</h3>
                     </div>
                     {(() => {
-                        const lastAttendance = mockDB.getAttendancesByPatientId(patient.id)
+                        const lastAttendance = attendances
                             .filter(a => a.vitals && Object.keys(a.vitals).length > 0)
                             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                             
@@ -762,7 +789,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       <h3 className="font-bold">Anamnese</h3>
                     </div>
                     {(() => {
-                        const lastAnamnesis = mockDB.getAttendancesByPatientId(patient.id)
+                        const lastAnamnesis = attendances
                             .filter(a => a.anamnesis)
                             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                             
@@ -788,7 +815,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       <h3 className="font-bold text-gray-900">Procedimentos Recentes</h3>
                     </div>
                     {(() => {
-                        const allProcedures = mockDB.getAttendancesByPatientId(patient.id)
+                        const allProcedures = attendances
                             .flatMap(a => (a.procedures || []).map(p => ({...p, date: a.date, vet: a.vetId})))
                             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                             .slice(0, 3); // Take last 3
@@ -834,7 +861,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       <h3 className="font-bold text-gray-900">Últimos Exames Solicitados</h3>
                     </div>
                     {(() => {
-                        const allExams = mockDB.getAttendancesByPatientId(patient.id)
+                        const allExams = attendances
                             .flatMap(a => (a.examRequests || []).map(e => ({...e, date: a.date})))
                             .slice(0, 3); // Take last 3
                             
@@ -1205,7 +1232,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                     const patientAlerts = [];
                     
                     // Vaccine Expiry Alerts
-                    const vaccines = mockDB.getAttendancesByPatientId(patient.id)
+                    const vaccines = attendances
                         .flatMap(a => a.vaccines || [])
                         .filter(v => v.nextDoseDate);
                         
@@ -1229,7 +1256,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                     });
 
                     // Return Visit Alerts
-                    const scheduledReturns = mockDB.appointments.filter(a => a.patientId === patient.id && new Date(a.start) >= new Date());
+                    const scheduledReturns = []; // TODO: load from supabaseDataService.getAppointments()
                     scheduledReturns.forEach(r => {
                          patientAlerts.push({
                             date: new Date(r.start).toLocaleDateString('pt-BR'),
@@ -1881,7 +1908,7 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                       {isEditingAttendance ? (
                           <>
                               <Button variant="outline" onClick={() => setIsEditingAttendance(false)}>Cancelar Edição</Button>
-                              <Button onClick={() => {
+                              <Button onClick={async () => {
                                   // Collect data and save
                                   const updates = {
                                       anamnesis: document.getElementById('edit-anamnesis').value,
@@ -1897,13 +1924,14 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
                                           pressureDiastolic: Number(document.getElementById('edit-bp-dia').value),
                                       }
                                   };
-                                  mockDB.updateAttendance(selectedAttendance.id, updates, 'Current Vet');
+                                  // TODO: updateAttendance via supabaseDataService when method is ready
                                   
                                   // Update Patient Weight History if weight changed
                                   if (updates.vitals.weight && updates.vitals.weight !== selectedAttendance.vitals?.weight) {
-                                      mockDB.updatePatient(selectedAttendance.patientId, { weight: updates.vitals.weight });
-                                      // Update local patient prop for immediate feedback
-                                      patient.weight = updates.vitals.weight;
+                                      try {
+                                          await supabaseDataService.updatePatient(selectedAttendance.patientId, { weight: updates.vitals.weight });
+                                          patient.weight = updates.vitals.weight;
+                                      } catch (err) { console.error('Erro ao atualizar peso:', err) }
                                   }
 
                                   // Update local list
@@ -2025,24 +2053,29 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
 
               <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setIsChangingOwner(false)}>Cancelar</Button>
-                  <Button onClick={() => {
+                  <Button onClick={async () => {
                       if (newOwner?.isNew) {
                           if (!newOwner.name || !newOwner.phone) {
                               alert('Preencha nome e telefone do novo tutor.');
                               return;
                           }
-                          const finalAddress = [newOwner.street || newOwner.address, newOwner.number ? `nº ${newOwner.number}` : '', newOwner.neighborhood].filter(Boolean).join(', ')
-                          const created = mockDB.createOwner({ ...newOwner, address: finalAddress || newOwner.address || '' });
-                          setOwners(mockDB.getOwners());
-                          setNewOwner(created);
-                          
-                          patient.ownerId = created.id;
-                          patient.ownerName = created.name;
-                          mockDB.updatePatient(patient.id, { ownerId: created.id, ownerName: created.name });
-                          onPatientUpdated?.({ ...patient, ownerId: created.id, ownerName: created.name });
-                          alert(`Tutor cadastrado e alterado para: ${created.name}`);
+                          try {
+                              const finalAddress = [newOwner.street || newOwner.address, newOwner.number ? `nº ${newOwner.number}` : '', newOwner.neighborhood].filter(Boolean).join(', ')
+                              const created = await supabaseDataService.createOwner({ ...newOwner, address: finalAddress || newOwner.address || '' });
+                              const updatedOwners = await supabaseDataService.getOwners();
+                              setOwners(updatedOwners);
+                              
+                              await supabaseDataService.updatePatient(patient.id, { ownerId: created.id });
+                              patient.ownerId = created.id;
+                              patient.ownerName = created.name;
+                              onPatientUpdated?.({ ...patient, ownerId: created.id, ownerName: created.name });
+                              alert(`Tutor cadastrado e alterado para: ${created.name}`);
+                          } catch (error) {
+                              console.error('Erro ao criar tutor:', error)
+                              alert(`Erro: ${error?.message || error}`)
+                          }
                       } else {
-                          handleSaveOwnerChange();
+                          await handleSaveOwnerChange();
                       }
                       setIsChangingOwner(false);
                       setNewOwner(null);
@@ -2157,23 +2190,28 @@ export default function PatientDetailsModal({ isOpen, onClose, patient, onPatien
 
               <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setIsChangingProperty(false)}>Cancelar</Button>
-                  <Button onClick={() => {
+                  <Button onClick={async () => {
                       if (newProperty?.isNew) {
                           if (!newProperty.name || !newProperty.city || !newProperty.state) {
                               alert('Preencha nome, cidade e estado da nova propriedade.');
                               return;
                           }
-                          const finalAddress = [newProperty.street || newProperty.address, newProperty.number ? `nº ${newProperty.number}` : '', newProperty.neighborhood].filter(Boolean).join(', ')
-                          const created = mockDB.createProperty({ ...newProperty, address: finalAddress || newProperty.address || '' });
-                          setProperties(mockDB.getAllProperties());
-                          setNewProperty(created);
-                          
-                          patient.propertyId = created.id;
-                          mockDB.updatePatient(patient.id, { propertyId: created.id });
-                          onPatientUpdated?.({ ...patient, propertyId: created.id });
-                          alert(`Propriedade cadastrada e alterada para: ${created.name}`);
+                          try {
+                              const finalAddress = [newProperty.street || newProperty.address, newProperty.number ? `nº ${newProperty.number}` : '', newProperty.neighborhood].filter(Boolean).join(', ')
+                              const created = await supabaseDataService.createProperty({ ...newProperty, address: finalAddress || newProperty.address || '' });
+                              const updatedProperties = await supabaseDataService.getProperties();
+                              setProperties(updatedProperties);
+                              
+                              await supabaseDataService.updatePatient(patient.id, { propertyId: created.id });
+                              patient.propertyId = created.id;
+                              onPatientUpdated?.({ ...patient, propertyId: created.id });
+                              alert(`Propriedade cadastrada e alterada para: ${created.name}`);
+                          } catch (error) {
+                              console.error('Erro ao criar propriedade:', error)
+                              alert(`Erro: ${error?.message || error}`)
+                          }
                       } else {
-                          handleSavePropertyChange();
+                          await handleSavePropertyChange();
                       }
                       setIsChangingProperty(false);
                       setNewProperty(null);

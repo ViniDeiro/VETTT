@@ -11,7 +11,7 @@ import ClientDetailsSidebar from '../components/ClientDetailsSidebar'
 import PatientDetailsModal from '../components/PatientDetailsModal'
 import { cn } from '@/lib/utils'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 import { Autocomplete } from '../shared/Autocomplete'
 
 export default function Clients() {
@@ -48,6 +48,24 @@ export default function Clients() {
   const [selectedOwner, setSelectedOwner] = useState(null)
   const [selectedProperty, setSelectedProperty] = useState(null)
   
+  const [newProperty, setNewProperty] = useState({})
+
+  const reloadData = async () => {
+    try {
+      const [ownersData, patientsData, propertiesData] = await Promise.all([
+        supabaseDataService.getOwners(),
+        supabaseDataService.getPatients(),
+        supabaseDataService.getProperties()
+      ])
+      setOwners(ownersData)
+      setClients(ownersData)
+      setPatients(patientsData)
+      setProperties(propertiesData)
+    } catch (error) {
+      console.error('Erro ao recarregar dados:', error)
+    }
+  }
+
   // --- Property Registration Logic ---
   const handleCepSearch = async (cep, type) => {
     const cleanCep = cep.replace(/\D/g, '');
@@ -72,16 +90,21 @@ export default function Clients() {
     }
   };
 
-  const handleCreateProperty = () => {
+  const handleCreateProperty = async () => {
     if (newProperty.name && newProperty.city && newProperty.state) {
-      const created = mockDB.createProperty({
-        ...newProperty,
-        address: newProperty.address || ''
-      })
-      setProperties([...properties, created])
-      alert('Propriedade cadastrada com sucesso!')
-      setOpenPropertyCreateModal(false)
-      setNewProperty({})
+      try {
+        await supabaseDataService.createProperty({
+          ...newProperty,
+          address: newProperty.address || ''
+        })
+        await reloadData()
+        alert('Propriedade cadastrada com sucesso!')
+        setOpenPropertyCreateModal(false)
+        setNewProperty({})
+      } catch (error) {
+        console.error('Erro ao criar propriedade:', error)
+        alert(`Erro ao criar propriedade: ${error?.message || error}`)
+      }
     } else {
       alert('Preencha Nome, Cidade e Estado.')
     }
@@ -92,15 +115,23 @@ export default function Clients() {
   const [birthDateInput, setBirthDateInput] = useState('')
 
   useEffect(() => {
-    // Load data
-    const ownersData = mockDB.getOwners()
-    setOwners(ownersData)
-    setClients(ownersData) // In this mock, clients list is owners list
-    
-    const patientsData = mockDB.getPatients()
-    setPatients(patientsData)
+    const loadData = async () => {
+      try {
+        const [ownersData, patientsData, propertiesData] = await Promise.all([
+          supabaseDataService.getOwners(),
+          supabaseDataService.getPatients(),
+          supabaseDataService.getProperties()
+        ])
+        setOwners(ownersData)
+        setClients(ownersData)
+        setPatients(patientsData)
+        setProperties(propertiesData)
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error)
+      }
+    }
 
-    setProperties(mockDB.getAllProperties()) // Updated method name
+    loadData()
 
     // Check query params for auto-open
     const params = new URLSearchParams(location.search)
@@ -110,7 +141,7 @@ export default function Clients() {
   }, [location.search])
 
   // --- Registration Logic ---
-  const handleCreatePatient = () => {
+  const handleCreatePatient = async () => {
     if (selectedOwner && newPatient.name) {
        // Validate Equine Property
        if (newPatient.species === 'Equine' && !selectedProperty) {
@@ -130,21 +161,24 @@ export default function Clients() {
            finalAge = age
        }
 
-       mockDB.createPatient({
-         ...newPatient,
-         ownerId: selectedOwner.id,
-         propertyId: selectedProperty?.id,
-         age: finalAge,
-         birthDate: birthDateInput,
-         weight: Number(newPatient.weight)
-       })
+       try {
+         await supabaseDataService.createPatient({
+           ...newPatient,
+           ownerId: selectedOwner.id,
+           propertyId: selectedProperty?.id,
+           age: finalAge,
+           birthDate: birthDateInput,
+           weight: Number(newPatient.weight)
+         })
 
-       alert('Paciente cadastrado com sucesso!')
-       setOpenPatientModal(false)
-       
-       // Reload patients
-       setPatients(mockDB.getPatients())
-       navigate('/attendance-new')
+         alert('Paciente cadastrado com sucesso!')
+         setOpenPatientModal(false)
+         await reloadData()
+         navigate('/attendance-new')
+       } catch (error) {
+         console.error('Erro ao criar paciente:', error)
+         alert(`Erro ao criar paciente: ${error?.message || error}`)
+       }
     } else {
       alert('Selecione um tutor e preencha o nome do paciente.')
     }
@@ -198,8 +232,8 @@ export default function Clients() {
       setIsPatientDetailsOpen(true)
   }
 
-  const handleDeletePropertyFromList = (property) => {
-    const linkedPatients = mockDB.getPatients().filter(patient => patient.propertyId === property.id)
+  const handleDeletePropertyFromList = async (property) => {
+    const linkedPatients = patients.filter(patient => patient.propertyId === property.id)
     if (linkedPatients.length > 0) {
       alert(`A propriedade "${property.name}" não pode ser excluída porque existem ${linkedPatients.length} paciente(s) vinculados.`)
       return
@@ -211,28 +245,19 @@ export default function Clients() {
 
     if (!confirmed) return
 
-    const deleted = mockDB.deleteProperty(property.id)
-    if (!deleted) {
-      alert(`A propriedade "${property.name}" não pode ser excluída porque possui pacientes vinculados.`)
-      return
+    try {
+      await supabaseDataService.deleteProperty(property.id)
+      await reloadData()
+
+      if (propertyFilter === property.id) {
+        setPropertyFilter('all')
+      }
+
+      alert('Propriedade excluída com sucesso!')
+    } catch (error) {
+      console.error('Erro ao excluir propriedade:', error)
+      alert(`Erro ao excluir propriedade: ${error?.message || error}`)
     }
-
-    const updatedProperties = mockDB.getAllProperties()
-    const updatedPatients = mockDB.getPatients()
-
-    setProperties(updatedProperties)
-    setPatients(updatedPatients)
-
-    if (propertyFilter === property.id) {
-      setPropertyFilter('all')
-    }
-
-    if (selectedPatient?.propertyId === property.id) {
-      const refreshedSelectedPatient = updatedPatients.find(patient => patient.id === selectedPatient.id) || null
-      setSelectedPatient(refreshedSelectedPatient)
-    }
-
-    alert('Propriedade excluída com sucesso!')
   }
 
   return (
@@ -500,14 +525,19 @@ export default function Clients() {
                   </div>
                   <div className="flex justify-end gap-2 mt-6 border-t pt-4">
                       <Button variant="outline" onClick={() => setOpenOwnerModal(false)}>Cancelar</Button>
-                      <Button onClick={() => {
-                          const updated = {
-                              ...selectedClient,
-                              address: [selectedClient.street, selectedClient.number ? `nº ${selectedClient.number}` : '', selectedClient.neighborhood].filter(Boolean).join(', ')
-                          };
-                          mockDB.updateOwner(selectedClient.id, updated);
-                          setOwners(mockDB.getOwners());
-                          setOpenOwnerModal(false);
+                      <Button onClick={async () => {
+                          try {
+                              const updated = {
+                                  ...selectedClient,
+                                  address: [selectedClient.street, selectedClient.number ? `nº ${selectedClient.number}` : '', selectedClient.neighborhood].filter(Boolean).join(', ')
+                              };
+                              await supabaseDataService.updateOwner(selectedClient.id, updated);
+                              await reloadData();
+                              setOpenOwnerModal(false);
+                          } catch (error) {
+                              console.error('Erro ao atualizar tutor:', error)
+                              alert(`Erro ao atualizar tutor: ${error?.message || error}`)
+                          }
                       }} className="bg-blue-600 text-white">Salvar Alterações</Button>
                   </div>
               </div>
@@ -524,13 +554,9 @@ export default function Clients() {
             isOpen={isPatientDetailsOpen}
             onClose={() => setIsPatientDetailsOpen(false)}
             patient={selectedPatient}
-            onPatientUpdated={(updatedPatient) => {
+            onPatientUpdated={async (updatedPatient) => {
               setSelectedPatient(updatedPatient)
-              setPatients(mockDB.getPatients())
-              setProperties(mockDB.getAllProperties())
-              const updatedOwners = mockDB.getOwners()
-              setOwners(updatedOwners)
-              setClients(updatedOwners)
+              await reloadData()
             }}
         />
 
@@ -629,12 +655,17 @@ export default function Clients() {
                           <td className="p-4">
                               <div className="flex gap-2">
                                   <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedClient(client); setOpenOwnerModal(true); }} className="text-blue-600 p-1 h-auto"><Edit2 className="w-4 h-4"/></Button>
-                                  <Button variant="ghost" size="sm" onClick={(e) => { 
+                                  <Button variant="ghost" size="sm" onClick={async (e) => { 
                                       e.stopPropagation(); 
                                       if(confirm('Tem certeza que deseja excluir este tutor?')) {
-                                          mockDB.deleteOwner(client.id);
-                                          setClients(mockDB.getOwners());
-                                          if(selectedClient?.id === client.id) setSelectedClient(null);
+                                          try {
+                                              await supabaseDataService.deleteOwner(client.id);
+                                              await reloadData();
+                                              if(selectedClient?.id === client.id) setSelectedClient(null);
+                                          } catch (error) {
+                                              console.error('Erro ao excluir tutor:', error)
+                                              alert(`Erro ao excluir tutor: ${error?.message || error}`)
+                                          }
                                       }
                                   }} className="text-red-600 p-1 h-auto hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
                               </div>
@@ -664,11 +695,16 @@ export default function Clients() {
                               <td className="p-4">
                                   <div className="flex items-center gap-2">
                                       <Button variant="ghost" size="sm" className="text-blue-600">Ver Prontuário</Button>
-                                      <Button variant="ghost" size="sm" onClick={(e) => { 
+                                      <Button variant="ghost" size="sm" onClick={async (e) => { 
                                           e.stopPropagation(); 
                                           if(confirm('Tem certeza que deseja excluir este paciente?')) {
-                                              mockDB.deletePatient(patient.id);
-                                              setPatients(mockDB.getPatients());
+                                              try {
+                                                  await supabaseDataService.deletePatient(patient.id);
+                                                  await reloadData();
+                                              } catch (error) {
+                                                  console.error('Erro ao excluir paciente:', error)
+                                                  alert(`Erro ao excluir paciente: ${error?.message || error}`)
+                                              }
                                           }
                                       }} className="text-red-600 p-1 h-auto hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
                                   </div>

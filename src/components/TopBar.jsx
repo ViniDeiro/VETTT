@@ -3,7 +3,7 @@ import { Bell, ChevronDown, User, LogOut, Settings } from 'lucide-react'
 import { Button } from './ui/Button'
 import { useAuth } from '../modules/auth/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
-import { mockDB } from '../services/mockDatabase'
+import { supabaseDataService } from '../services/supabaseDataService'
 
 export default function TopBar() {
     const { logout, user, profile, teamMember } = useAuth()
@@ -24,9 +24,13 @@ export default function TopBar() {
     }
 
     React.useEffect(() => {
-        const syncSettings = () => {
-            const settings = mockDB.getSettings()
-            setUiLanguage(settings?.regional?.language || 'pt-BR')
+        const syncSettings = async () => {
+            try {
+                const settings = await supabaseDataService.getSettings()
+                setUiLanguage(settings?.regional?.language || 'pt-BR')
+            } catch (error) {
+                console.error('Error syncing settings in TopBar:', error)
+            }
         }
 
         syncSettings()

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { Patient, Attendance, Receivable, Owner, Prescription, ExamRequest, GeneralSettings } from '../domain/types';
-import { mockDB } from './mockDatabase';
+import { supabaseDataService } from './supabaseDataService';
+import { supabase } from '../lib/supabase';
 
 class PdfService {
   private readonly examRequestCatalog: Array<{ title: string; items: string[] }> = [
@@ -171,8 +172,11 @@ class PdfService {
     return labels[species] || species;
   }
 
-  private resolveOwner(patient: Patient, ownerNameFallback?: string) {
-    const owner = mockDB.getOwners().find(item => item.id === patient.ownerId) || null;
+  private async resolveOwner(patient: Patient, ownerNameFallback?: string) {
+    let owner = null;
+    if (patient.ownerId) {
+      owner = (await supabaseDataService.getOwners()).find(item => item.id === patient.ownerId) || null;
+    }
     return {
       owner,
       ownerName: owner?.name || ownerNameFallback || patient.ownerName || 'Tutor não informado'
@@ -189,17 +193,17 @@ class PdfService {
       .trim();
   }
 
-  private addPatientOwnerBlock(doc: jsPDF, patient: Patient, ownerNameFallback?: string, startY: number = 70) {
-    const { owner, ownerName } = this.resolveOwner(patient, ownerNameFallback);
+  private async addPatientOwnerBlock(doc: jsPDF, patient: Patient, ownerNameFallback?: string, startY: number = 70) {
+    const { owner, ownerName } = await this.resolveOwner(patient, ownerNameFallback);
     const ownerAddress = this.formatOwnerAddress(owner);
     const ageLabel = patient.age ? `${patient.age} anos` : 'Não informado';
     const weightLabel = patient.weight ? `${patient.weight} kg` : 'Não informado';
 
     doc.setFontSize(11);
     doc.setTextColor(60);
-    this.setPdfFont(doc, 'bold');
+    await this.setPdfFont(doc, 'bold');
     doc.text('Dados do Paciente', 20, startY);
-    this.setPdfFont(doc, 'normal');
+    await this.setPdfFont(doc, 'normal');
     doc.setFontSize(10);
 
     const line1 = `Nome: ${patient.name} | Espécie: ${this.formatSpeciesLabel(patient.species)} | Raça: ${patient.breed || 'Não informado'}`;
@@ -223,8 +227,9 @@ class PdfService {
     return startY + 32;
   }
 
-  private getPdfFontFamily() {
-    const selectedFont = (mockDB.getSettings().documents.fontFamily || 'helvetica').toLowerCase();
+  private async getPdfFontFamily() {
+    const settings = await supabaseDataService.getSettings();
+    const selectedFont = (settings.documents?.fontFamily || 'helvetica').toLowerCase();
 
     const fontAliases: Record<string, string> = {
       helvetica: 'helvetica',
@@ -242,8 +247,8 @@ class PdfService {
     return fontAliases[selectedFont] || 'helvetica';
   }
 
-  private setPdfFont(doc: jsPDF, style: 'normal' | 'bold' | 'italic' | 'bolditalic' = 'normal') {
-    doc.setFont(this.getPdfFontFamily(), style);
+  private async setPdfFont(doc: jsPDF, style: 'normal' | 'bold' | 'italic' | 'bolditalic' = 'normal') {
+    doc.setFont(await this.getPdfFontFamily(), style);
   }
 
   private hexToRgb(hex: string) {
@@ -260,11 +265,41 @@ class PdfService {
     };
   }
 
-  private getDocumentContext() {
-    const settings = mockDB.getSettings();
-    const currentUser = mockDB.getCurrentUser();
-    const teamMember = mockDB.getLinkedTeamMember(currentUser);
-    const primary = this.hexToRgb(settings.appearance.primaryColor || '#0B2C4D');
+  private async getDocumentContext() {
+    const settings = await supabaseDataService.getSettings();
+    let currentUser = null;
+    let teamMember = null;
+    if (supabase) {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData?.user;
+      if (authUser) {
+        const { data: userProfile } = await supabase.from('user_profiles').select('*').eq('id', authUser.id).maybeSingle();
+        if (userProfile) {
+          currentUser = {
+            id: userProfile.id,
+            name: userProfile.name,
+            fullName: userProfile.full_name,
+            role: userProfile.role,
+            email: userProfile.email,
+            teamMemberId: userProfile.team_member_id
+          };
+          if (userProfile.team_member_id) {
+            const { data: tm } = await supabase.from('team_members').select('*').eq('id', userProfile.team_member_id).maybeSingle();
+            if (tm) {
+              teamMember = {
+                id: tm.id,
+                name: tm.name,
+                crmv: tm.crmv,
+                phone: tm.phone,
+                email: tm.email,
+                signature: tm.signature
+              };
+            }
+          }
+        }
+      }
+    }
+    const primary = this.hexToRgb(settings.appearance?.primaryColor || '#0B2C4D');
 
     return { settings, currentUser, teamMember, primary };
   }
@@ -295,8 +330,8 @@ class PdfService {
     }
   }
 
-  private addHeader(doc: jsPDF, title: string) {
-    const { settings, primary } = this.getDocumentContext();
+  private async addHeader(doc: jsPDF, title: string) {
+    const { settings, primary } = await this.getDocumentContext();
     const model = settings.documents.selectedModel || 'classic';
     const logoUrl = this.getDocumentLogo(settings);
     const logoPos = settings.documents.logoPosition || 'left';
@@ -313,11 +348,11 @@ class PdfService {
 
       doc.setTextColor(primary.r, primary.g, primary.b);
       doc.setFontSize(18);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', logoPos === 'center' ? 105 : 20, logoUrl ? 58 : 30, { align: logoPos === 'center' ? 'center' : 'left' });
       
       doc.setFontSize(10);
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       doc.text(settings.documents.header || settings.clinic.legalName || '', logoPos === 'center' ? 105 : 20, logoUrl ? 63 : 35, { align: logoPos === 'center' ? 'center' : 'left' });
 
       doc.setTextColor(0, 0, 0);
@@ -334,11 +369,11 @@ class PdfService {
 
       doc.setTextColor(50, 50, 50);
       doc.setFontSize(24);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', 105, logoUrl ? 55 : 30, { align: 'center' });
       
       doc.setFontSize(11);
-      this.setPdfFont(doc, 'italic');
+      await this.setPdfFont(doc, 'italic');
       doc.text(settings.documents.header || settings.clinic.legalName || '', 105, logoUrl ? 62 : 37, { align: 'center' });
 
       doc.setDrawColor(primary.r, primary.g, primary.b);
@@ -347,7 +382,7 @@ class PdfService {
 
       doc.setTextColor(primary.r, primary.g, primary.b);
       doc.setFontSize(18);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text(title.toUpperCase(), 105, 85, { align: 'center' });
     } else {
       // Classic Model: (Current) Solid header
@@ -361,24 +396,24 @@ class PdfService {
 
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(22);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       
       const textX = logoPos === 'left' && logoUrl ? 50 : 20;
       doc.text(settings.clinic.fantasyName || 'Vet Tooth', textX, 25);
       
       doc.setFontSize(12);
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       doc.text(settings.documents.header || settings.clinic.legalName || 'Odontologia Veterinaria Especializada', textX, 32);
       
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text(title, 105, 55, { align: 'center' });
     }
   }
 
-  private addFooter(doc: jsPDF, signature: boolean = false) {
-    const { settings, teamMember } = this.getDocumentContext();
+  private async addFooter(doc: jsPDF, signature: boolean = false) {
+    const { settings, teamMember } = await this.getDocumentContext();
     const pageHeight = doc.internal.pageSize.height;
     const qrCodeUrl = settings.documents.showQrCode ? settings.clinic.qrCodeUrl : null;
 
@@ -437,32 +472,33 @@ class PdfService {
     if (line3) doc.text(line3, 105, pageHeight - 8, { align: 'center' });
   }
 
-  generatePrescriptionPdf(patient: Patient, prescription: Prescription, ownerName: string) {
+  async generatePrescriptionPdf(patient: Patient, prescription: Prescription, ownerName: string) {
     const doc = new jsPDF();
-    const renderPrescriptionPage = (copyLabel?: string) => {
-      const { settings, currentUser, teamMember } = this.getDocumentContext();
-      this.addHeader(doc, 'Receituário Médico Veterinário');
+    const renderPrescriptionPage = async (copyLabel?: string) => {
+      const { settings, currentUser, teamMember } = await this.getDocumentContext();
+      await this.addHeader(doc, 'Receituário Médico Veterinário');
 
-      let y = this.addPatientOwnerBlock(doc, patient, ownerName, 70);
+      let y = await this.addPatientOwnerBlock(doc, patient, ownerName, 70);
       doc.setFontSize(10);
       doc.setTextColor(100);
       doc.text(`Data: ${prescription.date}`, 160, y - 4);
 
       if (copyLabel) {
         doc.setTextColor(160, 80, 0);
-        this.setPdfFont(doc, 'bold');
+        await this.setPdfFont(doc, 'bold');
         doc.text(copyLabel, 20, y - 4);
       }
 
       doc.setTextColor(0);
-      prescription.items.forEach((item, index) => {
+      for (let i = 0; i < prescription.items.length; i++) {
+        const item = prescription.items[i];
         doc.setFontSize(12);
-        this.setPdfFont(doc, 'bold');
-        const title = `${index + 1}. ${item.name} ${item.concentration ? item.concentration : ''}`;
+        await this.setPdfFont(doc, 'bold');
+        const title = `${i + 1}. ${item.name} ${item.concentration ? item.concentration : ''}`;
         doc.text(title, 20, y);
 
         doc.setFontSize(9);
-        this.setPdfFont(doc, 'normal');
+        await this.setPdfFont(doc, 'normal');
         doc.setTextColor(100);
         const typeLabel = item.type === 'industrialized' ? '[Industrializado]' : '[Manipulado]';
         doc.text(typeLabel, 160, y, { align: 'right' });
@@ -479,7 +515,7 @@ class PdfService {
 
         if (item.instructions) {
           doc.setFontSize(10);
-          this.setPdfFont(doc, 'italic');
+          await this.setPdfFont(doc, 'italic');
           const splitNotes = doc.splitTextToSize(`Obs: ${item.instructions}`, 160);
           doc.text(splitNotes, 25, y);
           y += (splitNotes.length * 5) + 2;
@@ -490,10 +526,10 @@ class PdfService {
         doc.setFontSize(8);
         doc.text('Quantidade:', 162, y - 16);
         doc.setFontSize(10);
-        this.setPdfFont(doc, 'bold');
+        await this.setPdfFont(doc, 'bold');
         doc.text(item.quantity, 175, y - 9, { align: 'center' });
         y += 10;
-      });
+      }
 
       const professionalName = teamMember?.name || currentUser?.fullName || currentUser?.name || settings.clinic.legalName;
       const professionalCredential = teamMember?.crmv ? `CRMV: ${teamMember.crmv}` : '';
@@ -501,7 +537,7 @@ class PdfService {
 
       doc.setTextColor(80);
       doc.setFontSize(9);
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       const professionalLine = [
         professionalName,
         professionalCredential
@@ -520,28 +556,28 @@ class PdfService {
         doc.text('Documento assinado digitalmente.', 105, 271, { align: 'center' });
       }
 
-      this.addFooter(doc, true);
+      await this.addFooter(doc, true);
     };
 
-    renderPrescriptionPage(prescription.controlledMedication ? '1ª via - Farmácia' : undefined);
+    await renderPrescriptionPage(prescription.controlledMedication ? '1ª via - Farmácia' : undefined);
     if (prescription.controlledMedication) {
       doc.addPage();
-      renderPrescriptionPage('2ª via - Tutor');
+      await renderPrescriptionPage('2ª via - Tutor');
     }
 
     doc.save(`receita_${patient.name}_${prescription.date.replace(/\//g, '-')}.pdf`);
   }
 
-  generateExamRequestPdf(patient: Patient, request: ExamRequest, ownerName: string) {
+  async generateExamRequestPdf(patient: Patient, request: ExamRequest, ownerName: string) {
     const doc = new jsPDF();
-    this.addHeader(doc, 'Solicitação de Exames');
+    await this.addHeader(doc, 'Solicitação de Exames');
 
-    let y = this.addPatientOwnerBlock(doc, patient, ownerName, 70);
+    let y = await this.addPatientOwnerBlock(doc, patient, ownerName, 70);
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Data: ${request.date}`, 160, y - 4);
 
-    const { teamMember } = this.getDocumentContext();
+    const { teamMember } = await this.getDocumentContext();
     const vetName = teamMember?.name || 'Médico veterinário não informado';
     doc.setFontSize(10);
     doc.setTextColor(80);
@@ -552,10 +588,10 @@ class PdfService {
     if (request.clinicalIndication) {
       doc.setFontSize(12);
       doc.setTextColor(0);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('Suspeita Clínica / Motivo:', 20, y);
       y += 7;
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       doc.setFontSize(11);
       const splitIndication = doc.splitTextToSize(request.clinicalIndication, 170);
       doc.text(splitIndication, 20, y);
@@ -568,7 +604,7 @@ class PdfService {
       doc.rect(160, 65, 30, 10, 'F');
       doc.setTextColor(200, 0, 0);
       doc.setFontSize(10);
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('URGENTE', 175, 71, { align: 'center' });
     }
 
@@ -580,28 +616,28 @@ class PdfService {
     for (const section of this.examRequestCatalog) {
       if (y > 260) {
         doc.addPage();
-        this.addHeader(doc, 'Solicitação de Exames (continuação)');
+        await this.addHeader(doc, 'Solicitação de Exames (continuação)');
         y = 70;
       }
 
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.setFontSize(11);
       doc.setTextColor(0);
       doc.text(section.title.toUpperCase(), 20, y);
       y += 6;
 
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       doc.setFontSize(10);
       for (const sectionItem of section.items) {
         if (y > 275) {
           doc.addPage();
-          this.addHeader(doc, 'Solicitação de Exames (continuação)');
+          await this.addHeader(doc, 'Solicitação de Exames (continuação)');
           y = 70;
-          this.setPdfFont(doc, 'bold');
+          await this.setPdfFont(doc, 'bold');
           doc.setFontSize(11);
           doc.text(section.title.toUpperCase(), 20, y);
           y += 6;
-          this.setPdfFont(doc, 'normal');
+          await this.setPdfFont(doc, 'normal');
           doc.setFontSize(10);
         }
 
@@ -622,14 +658,14 @@ class PdfService {
     if (otherRequested.length > 0) {
       if (y > 255) {
         doc.addPage();
-        this.addHeader(doc, 'Solicitação de Exames (continuação)');
+        await this.addHeader(doc, 'Solicitação de Exames (continuação)');
         y = 70;
       }
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.setFontSize(11);
       doc.text('OUTROS EXAMES SOLICITADOS', 20, y);
       y += 6;
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       doc.setFontSize(10);
       const splitOther = doc.splitTextToSize(otherRequested.join(' | '), 170);
       doc.text(splitOther, 24, y);
@@ -638,19 +674,19 @@ class PdfService {
 
     if (y > 265) {
       doc.addPage();
-      this.addHeader(doc, 'Solicitação de Exames (continuação)');
+      await this.addHeader(doc, 'Solicitação de Exames (continuação)');
       y = 70;
     }
-    this.setPdfFont(doc, 'normal');
+    await this.setPdfFont(doc, 'normal');
     doc.setFontSize(10);
     doc.setTextColor(60);
     doc.text('Assinatura do Méd. Vet. Requisitante: _______________________________________', 20, y + 8);
     
-    this.addFooter(doc, true);
+    await this.addFooter(doc, true);
     doc.save(`exames_${patient.name}_${request.date.replace(/\//g, '-')}.pdf`);
   }
 
-  generateCertificatePdf(
+  async generateCertificatePdf(
     patient: Patient,
     ownerName: string,
     type: 'health' | 'surgery' | 'euthanasia' | 'travel',
@@ -658,7 +694,7 @@ class PdfService {
     titleOverride?: string
   ) {
     const doc = new jsPDF();
-    const { teamMember } = this.getDocumentContext();
+    const { teamMember } = await this.getDocumentContext();
     
     let title = 'Atestado de Saúde';
     if (type === 'surgery') title = 'Termo de Consentimento Cirúrgico';
@@ -666,13 +702,13 @@ class PdfService {
     if (type === 'travel') title = 'Atestado para Viagem';
     if (titleOverride) title = titleOverride;
 
-    this.addHeader(doc, title);
+    await this.addHeader(doc, title);
 
     let y = 70;
     const date = new Date().toLocaleDateString('pt-BR');
 
     doc.setFontSize(12);
-    this.setPdfFont(doc, 'normal');
+    await this.setPdfFont(doc, 'normal');
     doc.setTextColor(0);
 
     doc.text(`Eu, ${ownerName}, responsável pelo paciente ${patient.name}, declaro...`, 20, y);
@@ -705,24 +741,24 @@ class PdfService {
     doc.setFontSize(10);
     doc.text(`Local e Data: Sorocaba, ${date}`, 20, y + 25);
 
-    this.addFooter(doc);
+    await this.addFooter(doc);
     doc.save(`${title.toLowerCase().replace(/ /g, '_')}_${patient.name}.pdf`);
   }
 
-  generateMedicalRecord(patient: Patient, attendance: Attendance, ownerName: string) {
+  async generateMedicalRecord(patient: Patient, attendance: Attendance, ownerName: string) {
     const doc = new jsPDF();
     
-    this.addHeader(doc, 'Prontuário de Atendimento');
+    await this.addHeader(doc, 'Prontuário de Atendimento');
 
     let y = 70;
 
     // Patient Info
     doc.setFontSize(12);
-    this.setPdfFont(doc, 'bold');
+    await this.setPdfFont(doc, 'bold');
     doc.text('Dados do Paciente', 20, y);
     y += 10;
     
-    this.setPdfFont(doc, 'normal');
+    await this.setPdfFont(doc, 'normal');
     doc.text(`Nome: ${patient.name}`, 20, y);
     doc.text(`Espécie: ${patient.species}`, 120, y);
     y += 8;
@@ -737,30 +773,30 @@ class PdfService {
     y += 15;
 
     // Attendance Info
-    this.setPdfFont(doc, 'bold');
+    await this.setPdfFont(doc, 'bold');
     doc.text('Detalhes do Atendimento', 20, y);
     y += 10;
 
-    this.setPdfFont(doc, 'normal');
+    await this.setPdfFont(doc, 'normal');
     doc.text(`Data: ${attendance.date}`, 20, y);
     doc.text(`Motivo: ${attendance.reason}`, 120, y);
     y += 15;
 
     if (attendance.anamnesis) {
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('Anamnese:', 20, y);
       y += 7;
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       const splitAnamnesis = doc.splitTextToSize(attendance.anamnesis, 170);
       doc.text(splitAnamnesis, 20, y);
       y += (splitAnamnesis.length * 7) + 5;
     }
 
     if (attendance.diagnosis) {
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('Diagnóstico / Procedimentos:', 20, y);
       y += 7;
-      this.setPdfFont(doc, 'normal');
+      await this.setPdfFont(doc, 'normal');
       const splitDiagnosis = doc.splitTextToSize(attendance.diagnosis, 170);
       doc.text(splitDiagnosis, 20, y);
       y += (splitDiagnosis.length * 7) + 5;
@@ -769,7 +805,7 @@ class PdfService {
     // Prescriptions (if any)
     if (attendance.prescriptions && attendance.prescriptions.length > 0) {
       y += 10;
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('Prescrições Emitidas:', 20, y);
       y += 7;
       
@@ -787,7 +823,7 @@ class PdfService {
     // Exam Requests (if any)
     if (attendance.examRequests && attendance.examRequests.length > 0) {
       y += 10;
-      this.setPdfFont(doc, 'bold');
+      await this.setPdfFont(doc, 'bold');
       doc.text('Exames Solicitados:', 20, y);
       y += 7;
       
@@ -802,15 +838,15 @@ class PdfService {
       });
     }
 
-    this.addFooter(doc);
+    await this.addFooter(doc);
     doc.save(`prontuario_${patient.name}_${attendance.date.replace(/\//g, '-')}.pdf`);
   }
 
-  generateReceipt(receivable: Receivable) {
+  async generateReceipt(receivable: Receivable) {
     const doc = new jsPDF();
-    const { settings } = this.getDocumentContext();
+    const { settings } = await this.getDocumentContext();
     
-    this.addHeader(doc, 'Recibo de Pagamento');
+    await this.addHeader(doc, 'Recibo de Pagamento');
 
     let y = 70;
 
@@ -837,11 +873,11 @@ class PdfService {
     doc.setFontSize(10);
     doc.text('Assinatura do Responsável', 20, y + 5);
 
-    this.addFooter(doc);
+    await this.addFooter(doc);
     doc.save(`recibo_${receivable.id}.pdf`);
   }
 
-  generateFiscalInvoice(data: {
+  async generateFiscalInvoice(data: {
     ownerName: string;
     patientName?: string;
     description: string;
@@ -850,11 +886,11 @@ class PdfService {
     serviceCode?: string;
   }) {
     const doc = new jsPDF();
-    const { settings } = this.getDocumentContext();
+    const { settings } = await this.getDocumentContext();
     const issueDate = new Date().toLocaleDateString(settings.regional.language || 'pt-BR');
     const invoiceNumber = String(settings.fiscal.nextInvoiceNumber || 1).padStart(6, '0');
 
-    this.addHeader(doc, 'Nota Fiscal de Servico');
+    await this.addHeader(doc, 'Nota Fiscal de Servico');
 
     let y = 70;
     doc.setFontSize(12);
@@ -890,11 +926,11 @@ class PdfService {
       : 'Integracao municipal pendente de credenciais. Documento emitido em modo interno.';
     doc.text(doc.splitTextToSize(fiscalNote, 170), 20, y);
 
-    this.addFooter(doc, true);
+    await this.addFooter(doc, true);
     doc.save(`nfse_${invoiceNumber}.pdf`);
   }
 
-  generatePaymentProof(data: {
+  async generatePaymentProof(data: {
     ownerName: string;
     patientName?: string;
     description: string;
@@ -903,9 +939,9 @@ class PdfService {
     transactionId?: string;
   }) {
     const doc = new jsPDF();
-    const { settings } = this.getDocumentContext();
+    const { settings } = await this.getDocumentContext();
 
-    this.addHeader(doc, 'Comprovante de Pagamento');
+    await this.addHeader(doc, 'Comprovante de Pagamento');
 
     let y = 70;
     doc.setFontSize(12);
@@ -926,7 +962,7 @@ class PdfService {
     doc.setFontSize(16);
     doc.text(`Valor pago: R$ ${Number(data.amount || 0).toFixed(2)}`, 20, y);
 
-    this.addFooter(doc, true);
+    await this.addFooter(doc, true);
     doc.save(`comprovante_pagamento_${Date.now()}.pdf`);
   }
 }

@@ -6,7 +6,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Select } from '../../components/ui/Select';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { CashFlowEntry, Receivable } from '../../domain/types';
 import {
   Wallet,
@@ -96,7 +96,13 @@ export const ReceivablesList: React.FC = () => {
   const [animate, setAnimate] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue'>('all');
-  const [settings, setSettings] = useState(() => mockDB.getSettings());
+  const [settings, setSettings] = useState<any>({
+    payment: {
+      enabledMethods: ['cash', 'pix', 'debit', 'credit'],
+      maxInstallments: 6,
+      installmentRates: {}
+    }
+  });
 
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isOpenCashModalOpen, setIsOpenCashModalOpen] = useState(false);
@@ -116,14 +122,24 @@ export const ReceivablesList: React.FC = () => {
     paymentMethod: 'cash'
   });
 
-  const loadData = () => {
-    const session = mockDB.getCurrentCashSession();
-    setReceivables([...mockDB.getReceivables()]);
-    setCashSessions(mockDB.getCashSessions());
-    setCurrentSession(session);
-    setSessionEntries(session ? mockDB.getCashSessionEntries(session.id) : []);
-    setSettings(mockDB.getSettings());
-    setAnimate(true);
+  const loadData = async () => {
+    try {
+      const [session, recs, sessions, settingsData] = await Promise.all([
+        supabaseDataService.getCurrentCashSession(),
+        supabaseDataService.getReceivables(),
+        supabaseDataService.getCashSessions(),
+        supabaseDataService.getSettings()
+      ]);
+      setReceivables([...recs]);
+      setCashSessions(sessions);
+      setCurrentSession(session);
+      setSettings(settingsData);
+      setSessionEntries(session ? await supabaseDataService.getCashSessionEntries(session.id) : []);
+    } catch (error) {
+      console.error('Error loading receivables:', error);
+    } finally {
+      setAnimate(true);
+    }
   };
 
   useEffect(() => {
@@ -220,7 +236,7 @@ export const ReceivablesList: React.FC = () => {
     setTaxRate(settings.payment?.installmentRates?.[value] || 0);
   };
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     if (!selectedReceivable || !currentSession) return;
 
     const amount = Number(paymentAmount);
@@ -229,45 +245,60 @@ export const ReceivablesList: React.FC = () => {
       return;
     }
 
-    mockDB.payReceivable(selectedReceivable.id, {
-      method: paymentMethod,
-      installments: paymentMethod === 'credit_card' ? installments : 1,
-      taxRate: paymentMethod === 'credit_card' ? taxRate : 0,
-      amount,
-      cashSessionId: currentSession.id,
-      businessDate: currentSession.businessDate
-    });
+    try {
+      await supabaseDataService.payReceivable(selectedReceivable.id, {
+        method: paymentMethod,
+        installments: paymentMethod === 'credit_card' ? installments : 1,
+        taxRate: paymentMethod === 'credit_card' ? taxRate : 0,
+        amount,
+        cashSessionId: currentSession.id,
+        businessDate: currentSession.businessDate
+      });
 
-    setIsPayModalOpen(false);
-    setSelectedReceivable(null);
-    loadData();
+      setIsPayModalOpen(false);
+      setSelectedReceivable(null);
+      await loadData();
+    } catch (error) {
+      console.error('Error paying receivable:', error);
+      alert('Erro ao registrar recebimento.');
+    }
   };
 
-  const handleOpenCashSession = () => {
+  const handleOpenCashSession = async () => {
     const openingBalance = Number(openCashForm.openingBalance || 0);
-    mockDB.openCashSession({
-      openingBalance: Number.isFinite(openingBalance) ? openingBalance : 0,
-      notes: openCashForm.notes
-    });
-    setOpenCashForm({ openingBalance: '', notes: '' });
-    setIsOpenCashModalOpen(false);
-    loadData();
+    try {
+      await supabaseDataService.openCashSession({
+        openingBalance: Number.isFinite(openingBalance) ? openingBalance : 0,
+        notes: openCashForm.notes
+      });
+      setOpenCashForm({ openingBalance: '', notes: '' });
+      setIsOpenCashModalOpen(false);
+      await loadData();
+    } catch (error) {
+      console.error('Error opening cash session:', error);
+      alert('Erro ao abrir caixa.');
+    }
   };
 
-  const handleCloseCashSession = () => {
+  const handleCloseCashSession = async () => {
     if (!currentSession) return;
 
     const closingBalance = Number(closeCashForm.closingBalance || expectedClosing);
-    mockDB.closeCashSession(currentSession.id, {
-      closingBalance: Number.isFinite(closingBalance) ? closingBalance : expectedClosing,
-      notes: closeCashForm.notes
-    });
-    setCloseCashForm({ closingBalance: '', notes: '' });
-    setIsCloseCashModalOpen(false);
-    loadData();
+    try {
+      await supabaseDataService.closeCashSession(currentSession.id, {
+        closingBalance: Number.isFinite(closingBalance) ? closingBalance : expectedClosing,
+        notes: closeCashForm.notes
+      });
+      setCloseCashForm({ closingBalance: '', notes: '' });
+      setIsCloseCashModalOpen(false);
+      await loadData();
+    } catch (error) {
+      console.error('Error closing cash session:', error);
+      alert('Erro ao fechar caixa.');
+    }
   };
 
-  const handleCreateManualEntry = () => {
+  const handleCreateManualEntry = async () => {
     if (!currentSession) {
       alert('Abra o caixa do dia antes de adicionar valores.');
       return;
@@ -279,31 +310,36 @@ export const ReceivablesList: React.FC = () => {
       return;
     }
 
-    mockDB.createCashFlowEntry({
-      date: currentSession.businessDate,
-      businessDate: currentSession.businessDate,
-      type: 'income',
-      category: manualEntryForm.category,
-      amount,
-      grossAmount: amount,
-      totalCost: 0,
-      grossProfit: amount,
-      marginPercent: 100,
-      paymentStatus: 'paid',
-      description: manualEntryForm.description,
-      paymentMethod: manualEntryForm.paymentMethod,
-      cashSessionId: currentSession.id,
-      sourceType: 'manual_revenue'
-    });
+    try {
+      await supabaseDataService.createCashFlowEntry({
+        date: currentSession.businessDate,
+        businessDate: currentSession.businessDate,
+        type: 'income',
+        category: manualEntryForm.category,
+        amount,
+        grossAmount: amount,
+        totalCost: 0,
+        grossProfit: amount,
+        marginPercent: 100,
+        paymentStatus: 'paid',
+        description: manualEntryForm.description,
+        paymentMethod: manualEntryForm.paymentMethod,
+        cashSessionId: currentSession.id,
+        sourceType: 'manual_revenue'
+      });
 
-    setManualEntryForm({
-      description: '',
-      category: 'Venda avulsa',
-      amount: '',
-      paymentMethod: enabledPaymentMethods[0] || 'cash'
-    });
-    setIsManualEntryModalOpen(false);
-    loadData();
+      setManualEntryForm({
+        description: '',
+        category: 'Venda avulsa',
+        amount: '',
+        paymentMethod: enabledPaymentMethods[0] || 'cash'
+      });
+      setIsManualEntryModalOpen(false);
+      await loadData();
+    } catch (error) {
+      console.error('Error creating manual entry:', error);
+      alert('Erro ao registrar valor no caixa.');
+    }
   };
 
   const handleExport = async () => {

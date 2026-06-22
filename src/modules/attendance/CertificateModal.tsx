@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
-import { Patient, Attendance, DocumentTemplateDefinition, Owner, TeamMember } from '../../domain/types';
+import { Patient, Attendance, DocumentTemplateDefinition, Owner, TeamMember, GeneralSettings } from '../../domain/types';
 import { pdfService } from '../../services/pdfService';
 import { FileText, Printer } from 'lucide-react';
-import { mockDB } from '../../services/mockDatabase';
+import { useAuth } from '../auth/AuthContext';
+import { supabaseDataService } from '../../services/supabaseDataService';
 
 interface CertificateModalProps {
   isOpen: boolean;
@@ -20,16 +21,42 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   attendance: _attendance,
   patient
 }) => {
+  const { user, teamMember: authTeamMember } = useAuth();
+  const [settings, setSettings] = useState<GeneralSettings | null>(null);
+  const [owner, setOwner] = useState<Owner | null>(null);
   const [type, setType] = useState<'health' | 'surgery' | 'euthanasia' | 'travel'>('health');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [customText, setCustomText] = useState('');
-  const settings = mockDB.getSettings();
-  const currentUser = mockDB.getCurrentUser();
-  const vetMember = mockDB.getLinkedTeamMember(currentUser) || null;
-  const owner = mockDB.getOwners().find(item => item.id === patient.ownerId) || null;
+
+  useEffect(() => {
+    let active = true;
+    const loadData = async () => {
+      try {
+        const [settingsData, ownersList] = await Promise.all([
+          supabaseDataService.getSettings(),
+          supabaseDataService.getOwners()
+        ]);
+        if (!active) return;
+        setSettings(settingsData);
+        if (patient.ownerId) {
+          const matchedOwner = ownersList.find(o => o.id === patient.ownerId) || null;
+          setOwner(matchedOwner);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados do documento:', err);
+      }
+    };
+    if (isOpen) {
+      loadData();
+    }
+    return () => {
+      active = false;
+    };
+  }, [isOpen, patient.ownerId]);
+
   const availableTemplates = useMemo(
-    () => settings.documentTemplates.filter(template => template.useInAttendance !== false),
-    [settings.documentTemplates]
+    () => settings?.documentTemplates?.filter(template => template.useInAttendance !== false) || [],
+    [settings?.documentTemplates]
   );
   const selectedTemplate = availableTemplates.find(template => template.id === selectedTemplateId) || null;
 
@@ -66,7 +93,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
       nome_tutor: selectedOwner?.name || selectedPatient.ownerName || 'Não informado',
       telefone_tutor: selectedOwner?.phone || 'Não informado',
       endereco_tutor: ownerAddress || selectedOwner?.address || 'Não informado',
-      nome_vet: selectedVet?.name || currentUser?.fullName || currentUser?.name || 'Médico Veterinário',
+      nome_vet: selectedVet?.name || user?.fullName || user?.name || 'Médico Veterinário',
       crmv_vet: selectedVet?.crmv || 'Não informado',
       cpf_vet: selectedVet?.cpf || 'Não informado',
       assinatura_vet: selectedVet?.signature || '____________________________',
@@ -105,18 +132,18 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     return cleanedText || extras || contentValue;
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     const ownerName = owner?.name || patient.ownerName || 'Desconhecido';
 
     if (selectedTemplate) {
-      const renderedText = buildTextFromTemplate(selectedTemplate, patient, owner, vetMember, customText);
+      const renderedText = buildTextFromTemplate(selectedTemplate, patient, owner, authTeamMember, customText);
       const resolvedType = mapTemplateTypeToCertificateType(selectedTemplate.type);
-      pdfService.generateCertificatePdf(patient, ownerName, resolvedType, renderedText, selectedTemplate.title);
+      await pdfService.generateCertificatePdf(patient, ownerName, resolvedType, renderedText, selectedTemplate.title);
       onClose();
       return;
     }
 
-    pdfService.generateCertificatePdf(patient, ownerName, type, customText);
+    await pdfService.generateCertificatePdf(patient, ownerName, type, customText);
     onClose();
   };
 

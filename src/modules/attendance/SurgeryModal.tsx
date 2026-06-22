@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { AppliedProcedure, Patient, Attendance, ProcedureTemplate } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { Activity, Plus, Trash2, Calendar, FileText } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 
@@ -23,7 +23,7 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
   onSave
 }) => {
   const [activeTab, setActiveTab] = useState<'realizadas' | 'agendar'>('realizadas');
-  const [proceduresList, setProceduresList] = useState<ProcedureTemplate[]>(mockDB.getProcedures().filter(p => p.name.toLowerCase().includes('cirurgia') || p.name.toLowerCase().includes('castração') || p.baseCost > 500)); // Simulating filtering for surgeries
+  const [proceduresList, setProceduresList] = useState<ProcedureTemplate[]>([]); // Will load asynchronously
   const [selectedProcedureId, setSelectedProcedureId] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [notes, setNotes] = useState('');
@@ -31,8 +31,27 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
   // Agendamento State
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('08:00');
+  const [appointments, setAppointments] = useState<any[]>([]);
 
-  const handleAddSurgery = () => {
+  useEffect(() => {
+    if (isOpen) {
+      const loadData = async () => {
+        try {
+          const [pList, appts] = await Promise.all([
+            supabaseDataService.getProcedures(),
+            supabaseDataService.getAppointments()
+          ]);
+          setProceduresList(pList.filter(p => p.name.toLowerCase().includes('cirurgia') || p.name.toLowerCase().includes('castração') || p.baseCost > 500));
+          setAppointments(appts);
+        } catch (err) {
+          console.error('Erro ao carregar dados do módulo cirúrgico:', err);
+        }
+      };
+      loadData();
+    }
+  }, [isOpen]);
+
+  const handleAddSurgery = async () => {
     if (!selectedProcedureId) return;
 
     const template = proceduresList.find(p => p.id === selectedProcedureId);
@@ -62,17 +81,22 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
       procedures: [...currentProcedures, newSurgery]
     };
 
-    mockDB.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
-    onSave(updatedAttendance);
+    try {
+        await supabaseDataService.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
+        onSave(updatedAttendance);
 
-    setSelectedProcedureId('');
-    setCustomPrice('');
-    setNotes('');
-    
-    alert(`Cirurgia ${template.name} registrada com sucesso!`);
+        setSelectedProcedureId('');
+        setCustomPrice('');
+        setNotes('');
+        
+        alert(`Cirurgia ${template.name} registrada com sucesso!`);
+    } catch (err) {
+        console.error('Erro ao registrar cirurgia:', err);
+        alert('Erro ao salvar cirurgia no banco de dados.');
+    }
   };
 
-  const handleScheduleSurgery = () => {
+  const handleScheduleSurgery = async () => {
       if (!selectedProcedureId || !scheduleDate || !scheduleTime) {
           alert('Preencha a cirurgia, data e horário.');
           return;
@@ -85,35 +109,46 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
       const endTime = `${endHour}:${m}`;
 
       const surgeryAppt = {
-          id: Math.random().toString(36).substr(2, 9),
           title: `Cirurgia: ${patient.name} (${template?.name})`,
           start: new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString(),
           end: new Date(`${scheduleDate}T${endTime}:00`).toISOString(),
           patientId: patient.id,
           doctor: attendance.vetId || 'Equipe Cirúrgica',
+          doctorUserId: attendance.vetUserId || undefined,
           type: 'cirurgia',
           status: 'confirmed'
       };
       
-      mockDB.appointments.push(surgeryAppt as any);
-      mockDB.save('vet_appointments', mockDB.appointments);
-      
-      alert('Cirurgia agendada com sucesso na agenda geral!');
-      
-      // Reset
-      setSelectedProcedureId('');
-      setScheduleDate('');
-      setNotes('');
+      try {
+          await supabaseDataService.createAppointment(surgeryAppt);
+          const appts = await supabaseDataService.getAppointments();
+          setAppointments(appts);
+          
+          alert('Cirurgia agendada com sucesso na agenda geral!');
+          
+          // Reset
+          setSelectedProcedureId('');
+          setScheduleDate('');
+          setNotes('');
+      } catch (err) {
+          console.error('Erro ao agendar cirurgia:', err);
+          alert('Erro ao salvar agendamento no banco de dados.');
+      }
   };
 
-  const handleRemoveSurgery = (id: string) => {
+  const handleRemoveSurgery = async (id: string) => {
     const currentProcedures = attendance.procedures || [];
     const updatedAttendance = {
       ...attendance,
       procedures: currentProcedures.filter(p => p.id !== id)
     };
-    mockDB.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
-    onSave(updatedAttendance);
+    try {
+        await supabaseDataService.updateAttendance(attendance.id, { procedures: updatedAttendance.procedures });
+        onSave(updatedAttendance);
+    } catch (err) {
+        console.error('Erro ao remover cirurgia:', err);
+        alert('Erro ao atualizar o atendimento no banco de dados.');
+    }
   };
 
   if (!isOpen) return null;
@@ -280,13 +315,13 @@ export const SurgeryModal: React.FC<SurgeryModalProps> = ({
                   )
               ) : (
                   // Show scheduled surgeries from the main agenda
-                  mockDB.appointments.filter(a => a.patientId === patient.id && a.type === 'cirurgia').length === 0 ? (
+                  appointments.filter(a => a.patientId === patient.id && a.type === 'cirurgia').length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
                         <Calendar className="h-16 w-16 mb-4" />
                         <p>Nenhuma cirurgia agendada para este paciente.</p>
                       </div>
                   ) : (
-                      mockDB.appointments.filter(a => a.patientId === patient.id && a.type === 'cirurgia').map(appt => (
+                      appointments.filter(a => a.patientId === patient.id && a.type === 'cirurgia').map(appt => (
                           <Card key={appt.id} className="border border-blue-100 shadow-sm">
                               <CardContent className="p-4 flex justify-between items-center">
                                   <div>

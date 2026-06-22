@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { AppliedProcedure, Patient, Attendance, ProcedureTemplate } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
+import { supabaseDataService } from '../../services/supabaseDataService';
 import { Package, Plus, Trash2, Save, Scissors } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 
@@ -22,12 +22,31 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
   patient,
   onSave
 }) => {
-  const [proceduresList, setProceduresList] = useState<ProcedureTemplate[]>(mockDB.getProcedures());
+  const [proceduresList, setProceduresList] = useState<ProcedureTemplate[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [selectedProcedureId, setSelectedProcedureId] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [notes, setNotes] = useState('');
 
-  const handleAddProcedure = () => {
+  useEffect(() => {
+    if (isOpen) {
+      const loadData = async () => {
+        try {
+          const [pList, inv] = await Promise.all([
+            supabaseDataService.getProcedures(),
+            supabaseDataService.getInventory()
+          ]);
+          setProceduresList(pList);
+          setInventory(inv);
+        } catch (err) {
+          console.error('Erro ao carregar dados:', err);
+        }
+      };
+      loadData();
+    }
+  }, [isOpen]);
+
+  const handleAddProcedure = async () => {
     if (!selectedProcedureId) return;
 
     const template = proceduresList.find(p => p.id === selectedProcedureId);
@@ -36,7 +55,7 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
     const price = customPrice ? Number(customPrice) : (template.chargePrice ?? template.baseCost);
 
     const newItems = template.items.map(pItem => {
-        const invItem = mockDB.getInventory().find(i => i.id === pItem.inventoryItemId);
+        const invItem = inventory.find(i => i.id === pItem.inventoryItemId);
         if (invItem) {
             return {
                 inventoryItemId: invItem.id,
@@ -79,21 +98,26 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
       consumedItems: [...currentConsumedItems, ...newItems]
     };
 
-    mockDB.updateAttendance(attendance.id, { 
-        procedures: updatedAttendance.procedures,
-        consumedItems: updatedAttendance.consumedItems 
-    });
-    onSave(updatedAttendance);
+    try {
+        await supabaseDataService.updateAttendance(attendance.id, { 
+            procedures: updatedAttendance.procedures,
+            consumedItems: updatedAttendance.consumedItems 
+        });
+        onSave(updatedAttendance);
 
-    // Reset
-    setSelectedProcedureId('');
-    setCustomPrice('');
-    setNotes('');
-    
-    alert(`Procedimento ${newProcedure.name} adicionado!`);
+        // Reset
+        setSelectedProcedureId('');
+        setCustomPrice('');
+        setNotes('');
+        
+        alert(`Procedimento ${newProcedure.name} adicionado!`);
+    } catch (err) {
+        console.error('Erro ao adicionar procedimento:', err);
+        alert('Erro ao salvar procedimento no banco de dados.');
+    }
   };
 
-  const handleRemoveProcedure = (id: string) => {
+  const handleRemoveProcedure = async (id: string) => {
     const currentProcedures = attendance.procedures || [];
     const removedProcedure = currentProcedures.find(p => p.id === id);
     const updatedConsumedItems = [...(attendance.consumedItems || [])];
@@ -119,11 +143,16 @@ export const ProceduresModal: React.FC<ProceduresModalProps> = ({
       procedures: currentProcedures.filter(p => p.id !== id),
       consumedItems: updatedConsumedItems
     };
-    mockDB.updateAttendance(attendance.id, {
-      procedures: updatedAttendance.procedures,
-      consumedItems: updatedAttendance.consumedItems
-    });
-    onSave(updatedAttendance);
+    try {
+        await supabaseDataService.updateAttendance(attendance.id, {
+          procedures: updatedAttendance.procedures,
+          consumedItems: updatedAttendance.consumedItems
+        });
+        onSave(updatedAttendance);
+    } catch (err) {
+        console.error('Erro ao remover procedimento:', err);
+        alert('Erro ao atualizar o atendimento no banco de dados.');
+    }
   };
 
   if (!isOpen) return null;

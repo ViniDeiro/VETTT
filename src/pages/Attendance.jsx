@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Autocomplete } from '@/shared/Autocomplete'
-import { mockDB } from '@/services/mockDatabase'
+import { supabaseDataService } from '@/services/supabaseDataService'
 import { 
   Calendar, 
   Activity, 
@@ -33,34 +33,45 @@ export default function Attendance() {
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [patients, setPatients] = useState([])
+  const [owners, setOwners] = useState([])
 
   useEffect(() => {
-    // Load appointments
-    const allAppts = mockDB.getAppointments()
-    const allPatients = mockDB.getPatients()
-    const owners = mockDB.getOwners()
-    
-    // Filter for today (mock logic)
-    const today = new Date().toDateString()
-    const todaysAppts = allAppts.filter(a => new Date(a.start).toDateString() === today).map(appt => {
-        const patient = allPatients.find(p => p.id === appt.patientId)
-        const owner = owners.find(o => o.id === patient?.ownerId)
-        return {
-            ...appt,
-            patientName: patient?.name || 'Unknown',
-            ownerName: owner?.name || 'Unknown',
-            species: patient?.species,
-            patient: patient // Keep full patient ref
-        }
-    })
-    
-    setAppointments(todaysAppts)
-    setPatients(allPatients)
+    const loadAllData = async () => {
+      try {
+        const [allAppts, allPatients, loadedOwners] = await Promise.all([
+          supabaseDataService.getAppointments(),
+          supabaseDataService.getPatients(),
+          supabaseDataService.getOwners()
+        ])
+
+        setOwners(loadedOwners)
+        setPatients(allPatients)
+
+        const today = new Date().toDateString()
+        const todaysAppts = allAppts
+          .filter(a => new Date(a.start).toDateString() === today)
+          .map(appt => {
+              const patient = allPatients.find(p => p.id === appt.patientId)
+              const owner = loadedOwners.find(o => o.id === patient?.ownerId)
+              return {
+                  ...appt,
+                  patientName: patient?.name || appt.patientName || 'Unknown',
+                  ownerName: owner?.name || appt.ownerName || 'Unknown',
+                  species: patient?.species || appt.species || '',
+                  patient: patient
+              }
+          })
+        setAppointments(todaysAppts)
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err)
+      }
+    }
+    loadAllData()
   }, [])
 
   const handlePatientSelect = (patient) => {
-      // Find full patient details including owner name
-      const owner = mockDB.getOwners().find(o => o.id === patient.ownerId)
+      if (!patient) return
+      const owner = owners.find(o => o.id === patient.ownerId)
       setSelectedPatient({
           ...patient,
           ownerName: owner?.name || 'Desconhecido'

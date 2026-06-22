@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Role, AppModuleKey, ModulePermission, AccessProfile, TeamMember } from '../../domain/types';
-import { mockDB } from '../../services/mockDatabase';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 interface AuthContextType {
@@ -83,13 +82,85 @@ const mapUser = (row: any): User | null => {
   };
 };
 
-const syncMockCurrentUser = (user: User | null) => {
-  if (!user) {
-    mockDB.logout();
-    return;
+const getDefaultProfileForRole = (role: string): AccessProfile => {
+  const basePermissions = {
+    view: false, create: false, edit: false, delete: false, exportPdf: false, accessFinancial: false, accessStock: false
+  };
+
+  const createSet = (overrides: Record<string, Partial<ModulePermission>>): any => {
+    const modules = [
+      'settings', 'users', 'branding', 'finance', 'inventory', 'attendance', 'medicalRecords', 'agenda', 'reports', 'documents', 'invoices', 'whatsapp', 'audit', 'patients', 'team'
+    ];
+    return modules.reduce((acc, key) => {
+      acc[key] = { ...basePermissions, ...(overrides[key] || {}) };
+      return acc;
+    }, {} as any);
+  };
+
+  if (role === 'admin') {
+    return {
+      id: 'profile-admin',
+      name: 'Administrador (ADM)',
+      description: 'Acesso total ao sistema.',
+      type: 'standard',
+      baseRole: 'admin',
+      permissions: createSet({
+        settings: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        users: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        branding: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        finance: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        inventory: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        attendance: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        medicalRecords: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        agenda: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        reports: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        documents: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        invoices: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        whatsapp: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        audit: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        patients: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true },
+        team: { view: true, create: true, edit: true, delete: true, exportPdf: true, accessFinancial: true, accessStock: true }
+      }),
+      restrictions: { editAgenda: true, cancelAttendance: true, viewValues: true, sensitiveSettings: true }
+    };
   }
 
-  mockDB.syncAuthenticatedUser(user);
+  if (role === 'vet') {
+    return {
+      id: 'profile-vet',
+      name: 'Medico Veterinario',
+      description: 'Permissoes clinicas.',
+      type: 'standard',
+      baseRole: 'vet',
+      permissions: createSet({
+        attendance: { view: true, create: true, edit: true, exportPdf: true } as any,
+        medicalRecords: { view: true, create: true, edit: true, exportPdf: true } as any,
+        agenda: { view: true, create: true, edit: true } as any,
+        patients: { view: true, create: true, edit: true } as any,
+        documents: { view: true, create: true, edit: true, exportPdf: true } as any,
+        inventory: { view: true, accessStock: true } as any,
+        finance: { view: true, accessFinancial: true } as any
+      }),
+      restrictions: { editAgenda: true, cancelAttendance: false, viewValues: true, sensitiveSettings: false }
+    };
+  }
+
+  return {
+    id: 'profile-secretary',
+    name: 'Secretaria / Recepcao',
+    description: 'Permissoes administrativas restritas.',
+    type: 'standard',
+    baseRole: 'secretary',
+    permissions: createSet({
+      agenda: { view: true, create: true, edit: true } as any,
+      patients: { view: true, create: true, edit: true } as any,
+      attendance: { view: true } as any,
+      inventory: { view: true, create: true, edit: true, accessStock: true } as any,
+      finance: { view: true, create: true, accessFinancial: true } as any,
+      documents: { view: true, exportPdf: true } as any
+    }),
+    restrictions: { editAgenda: true, cancelAttendance: false, viewValues: true, sensitiveSettings: false }
+  };
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -103,7 +174,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(null);
       setProfile(null);
       setTeamMember(null);
-      syncMockCurrentUser(null);
       return null;
     }
 
@@ -125,15 +195,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ]);
 
         const mappedUser = mapUser(profileRow);
-        const mappedProfile = mapProfile(accessProfileResult.data) || mockDB.getProfileById(
-          mappedUser?.role === 'admin' ? 'profile-admin' : mappedUser?.role === 'vet' ? 'profile-vet' : 'profile-secretary'
-        );
+        const mappedProfile = mapProfile(accessProfileResult.data) || getDefaultProfileForRole(mappedUser?.role || 'secretary');
         const mappedTeamMember = mapTeamMember(teamMemberResult.data);
 
         setUser(mappedUser);
         setProfile(mappedProfile);
         setTeamMember(mappedTeamMember);
-        syncMockCurrentUser(mappedUser);
         return mappedUser;
       }
 
@@ -259,7 +326,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     await supabase?.auth.signOut();
-    syncMockCurrentUser(null);
     setUser(null);
     setProfile(null);
     setTeamMember(null);
@@ -270,7 +336,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (user.role === 'admin') return true;
 
     const permission = profile?.permissions?.[moduleKey];
-    if (!permission) return mockDB.canUserAccess(user, moduleKey, action);
+    if (!permission) {
+      if (user.role === 'vet') {
+        const vetAllowed = ['attendance', 'medicalRecords', 'agenda', 'patients', 'documents', 'inventory', 'finance'];
+        if (vetAllowed.includes(moduleKey)) {
+          if (moduleKey === 'inventory') return action === 'view' || action === 'accessStock';
+          if (moduleKey === 'finance') return action === 'view' || action === 'accessFinancial';
+          return action === 'view' || action === 'create' || action === 'edit' || action === 'exportPdf';
+        }
+      }
+      if (user.role === 'secretary') {
+        const secAllowed = ['agenda', 'patients', 'attendance', 'inventory', 'finance', 'documents'];
+        if (secAllowed.includes(moduleKey)) {
+          if (moduleKey === 'attendance') return action === 'view';
+          if (moduleKey === 'documents') return action === 'view' || action === 'exportPdf';
+          if (moduleKey === 'inventory') return action === 'view' || action === 'create' || action === 'edit' || action === 'accessStock';
+          if (moduleKey === 'finance') return action === 'view' || action === 'create' || action === 'accessFinancial';
+          return action === 'view' || action === 'create' || action === 'edit';
+        }
+      }
+      return false;
+    }
     return Boolean(permission[action] ?? permission.view);
   };
 
